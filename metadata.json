@@ -1,0 +1,6 @@
+{
+  "name": "Tower Defense",
+  "description": "Native Android 2D Tower Defense game MVP with tactical canvas battlefield, wave progression, tower placement, and projectiles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

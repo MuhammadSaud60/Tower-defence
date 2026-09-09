@@ -1,0 +1,60 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Defensive Base Platform -->
+    <path
+        android:pathData="M32,74 L76,74 L70,82 L38,82 Z"
+        android:fillColor="#3A506B" />
+    <path
+        android:pathData="M38,82 L70,82 L66,86 L42,86 Z"
+        android:fillColor="#1C2541" />
+
+    <!-- Tower Core Body -->
+    <path
+        android:pathData="M38,54 L70,54 L74,72 L34,72 Z"
+        android:fillColor="#48CAE4" />
+
+    <!-- Shield / Armor plates -->
+    <path
+        android:pathData="M34,56 L42,56 L40,70 L32,70 Z"
+        android:fillColor="#0096C7" />
+    <path
+        android:pathData="M66,56 L74,56 L76,70 L68,70 Z"
+        android:fillColor="#0096C7" />
+
+    <!-- Central Energy Core -->
+    <path
+        android:pathData="M48,60 L60,60 L58,68 L50,68 Z"
+        android:fillColor="#FFD166" />
+
+    <!-- Turret Head / Rotating Swivel -->
+    <path
+        android:pathData="M42,42 L66,42 L68,52 L40,52 Z"
+        android:fillColor="#0077B6" />
+
+    <!-- Twin Cannons pointing upward/forward -->
+    <path
+        android:pathData="M44,24 L48,24 L48,42 L44,42 Z"
+        android:fillColor="#00F5D4" />
+    <path
+        android:pathData="M60,24 L64,24 L64,42 L60,42 Z"
+        android:fillColor="#00F5D4" />
+    <!-- Muzzle flash / Cannon Tips -->
+    <path
+        android:pathData="M43,21 L49,21 L49,24 L43,24 Z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M59,21 L65,21 L65,24 L59,24 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Tactical Radar Dome -->
+    <path
+        android:pathData="M54,34 A8,8 0 1 0 54,50 A8,8 0 1 0 54,34 Z"
+        android:fillColor="#03045E" />
+    <path
+        android:pathData="M54,38 A4,4 0 1 0 54,46 A4,4 0 1 0 54,38 Z"
+        android:fillColor="#00F5D4" />
+</vector>

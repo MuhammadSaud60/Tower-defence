@@ -20,6 +20,7 @@ data class Projectile(
     val targetLastKnownPosition: Point2D,
     val damage: Float,
     val splashRadius: Float = 0f,
+    val armorPiercing: Float = 0f,
     val speed: Float = GameConfig.BULLET_SPEED,
     val isHit: Boolean = false,
     val isExpired: Boolean = false,

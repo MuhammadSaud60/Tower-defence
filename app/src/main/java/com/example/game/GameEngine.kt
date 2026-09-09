@@ -30,7 +30,7 @@ class GameEngine(
     val audioPlayer: AudioPlayer = AndroidAudioPlayer()
 ) {
     private var currentMap: GameMap = GameMap.createGreenValleyMap()
-    private var waveManager = WaveManager(path = currentMap.path)
+    private var waveManager = WaveManager(maxWaves = GameConfig.TOTAL_WAVES, paths = currentMap.paths)
     private val combatSystem = CombatSystem()
     private val economySystem = EconomySystem()
 
@@ -40,67 +40,142 @@ class GameEngine(
     private val projectiles = mutableListOf<Projectile>()
     private val visualEffects = mutableListOf<VisualEffect>()
 
-    private var gameStatus = GameStatus.WAVE_COMPLETE
+    private var gameStatus = GameStatus.PREPARATION
+    private var preparationCountdown = 5.0f
+    private var stateBeforePause: GameStatus = GameStatus.PREPARATION
+    private var selectedBuildPos: Point2D? = null
     private var isBuildingTower = false
     private var selectedTowerSpec: TowerSpec? = null
     private var previewPlacementPos: Point2D? = null
     private var isValidPlacement = false
     private var selectedExistingTower: Tower? = null
-    private var placementNotice: String? = "Prepare your defenses • Tap Start Wave"
-    private var placementNoticeTimer = 4.0f
+    private var placementNotice: String? = null
+    private var placementNoticeTimer = 0f
+    private var waveTransitionTimer = 0f
     private var enemiesKilledTotal = 0
     private var gameSpeedMultiplier = 1.0f
     private var gameTime = 0f
     private var lastWaveRewarded = 0
 
+    init {
+        // Wave starts after preparation countdown reaches 0
+    }
+
     private val _gameState = MutableStateFlow(buildState())
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
 
+    fun changeGameState(newStatus: GameStatus) {
+        if (gameStatus == newStatus) return
+        gameStatus = newStatus
+        publishState()
+    }
+
+    @Synchronized
     fun update(dt: Float) {
-        if (gameStatus != GameStatus.PLAYING) {
+        if (gameStatus == GameStatus.PAUSED || gameStatus == GameStatus.GAME_OVER || gameStatus == GameStatus.VICTORY) {
             return
         }
 
         val clampedDt = min(dt, 0.05f) * gameSpeedMultiplier
         gameTime += clampedDt
 
-        // Update notice banner timer
+        // 1. Game Over Check
+        if (base.isDestroyed) {
+            changeGameState(GameStatus.GAME_OVER)
+            audioPlayer.playSound(GameSound.GAME_OVER)
+            return
+        }
+
+        // 2. PREPARATION Phase (Exactly 5 seconds countdown before wave starts)
+        if (gameStatus == GameStatus.PREPARATION) {
+            preparationCountdown -= clampedDt
+            // Advance visual effects if any
+            val updatedEffects = visualEffects
+                .map { it.advance(clampedDt) }
+                .filter { !it.isFinished }
+            visualEffects.clear()
+            visualEffects.addAll(updatedEffects)
+
+            if (preparationCountdown <= 0f) {
+                preparationCountdown = 0f
+                gameStatus = GameStatus.PLAYING
+                waveManager.startCurrentWave()
+                audioPlayer.playSound(GameSound.WAVE_START)
+            }
+            publishState()
+            return
+        }
+
+        // 3. Handle WAVE_COMPLETE state (automatic delay between waves, no pause)
+        if (gameStatus == GameStatus.WAVE_COMPLETE) {
+            waveTransitionTimer -= clampedDt
+            val nextWaveNum = waveManager.currentWave + 1
+            if (waveTransitionTimer > 1.2f) {
+                placementNotice = "WAVE ${waveManager.currentWave} COMPLETE! +${GameConfig.WAVE_CLEAR_BONUS_COINS}🪙"
+            } else {
+                placementNotice = "WAVE $nextWaveNum INCOMING..."
+            }
+
+            // Keep visual effects updating smoothly
+            val updatedEffects = visualEffects
+                .map { it.advance(clampedDt) }
+                .filter { !it.isFinished }
+            visualEffects.clear()
+            visualEffects.addAll(updatedEffects)
+
+            if (waveTransitionTimer <= 0f) {
+                val advanced = waveManager.advanceToNextWave()
+                if (advanced) {
+                    gameStatus = GameStatus.PLAYING
+                    placementNotice = null
+                    audioPlayer.playSound(GameSound.WAVE_START)
+                } else {
+                    gameStatus = GameStatus.VICTORY
+                    audioPlayer.playSound(GameSound.VICTORY)
+                }
+            }
+            publishState()
+            return
+        }
+
+        // Update notice banner timer for other notices (e.g. boss warning)
         if (placementNoticeTimer > 0f) {
             placementNoticeTimer -= dt
-            if (placementNoticeTimer <= 0f) {
+            if (placementNoticeTimer <= 0f && gameStatus != GameStatus.WAVE_COMPLETE) {
                 placementNotice = null
             }
         }
 
-        // 1. Game Over Check
-        if (base.isDestroyed) {
-            gameStatus = GameStatus.GAME_OVER
-            audioPlayer.playSound(GameSound.GAME_OVER)
-            publishState()
-            return
-        }
-
-        // 2. Victory Check
+        // 4. Victory Check
         if (waveManager.status == WaveStatus.ALL_WAVES_CLEARED && enemies.isEmpty()) {
-            gameStatus = GameStatus.VICTORY
+            changeGameState(GameStatus.VICTORY)
             audioPlayer.playSound(GameSound.VICTORY)
-            publishState()
             return
         }
 
-        // 3. Wave completion check
-        if (waveManager.status == WaveStatus.WAVE_CLEARED && enemies.isEmpty()) {
+        // 5. Wave completion check -> Enter WAVE_COMPLETE automatically!
+        if ((waveManager.status == WaveStatus.WAVE_CLEARED ||
+                (waveManager.currentQueueIndex >= waveManager.totalEnemiesThisWave && waveManager.totalEnemiesThisWave > 0)) &&
+            enemies.isEmpty()
+        ) {
+            if (waveManager.currentWave >= waveManager.maxWaves) {
+                changeGameState(GameStatus.VICTORY)
+                audioPlayer.playSound(GameSound.VICTORY)
+                return
+            }
             if (waveManager.currentWave > lastWaveRewarded) {
                 lastWaveRewarded = waveManager.currentWave
                 economySystem.addCoins(GameConfig.WAVE_CLEAR_BONUS_COINS)
             }
             gameStatus = GameStatus.WAVE_COMPLETE
-            showNotice("Wave ${waveManager.currentWave} Complete! +${GameConfig.WAVE_CLEAR_BONUS_COINS} Coins")
+            waveTransitionTimer = 2.5f
+            placementNotice = "WAVE ${waveManager.currentWave} COMPLETE! +${GameConfig.WAVE_CLEAR_BONUS_COINS}🪙"
+            audioPlayer.playSound(GameSound.WAVE_CLEAR)
             publishState()
             return
         }
 
-        // 4. Wave progression: spawn enemy if ready
+        // 6. Wave progression: spawn enemy if ready
         val prevEnemyCount = enemies.size
         val newEnemy = waveManager.update(clampedDt, prevEnemyCount, autoStartNextWave = false)
         if (newEnemy != null) {
@@ -111,15 +186,19 @@ class GameEngine(
             }
         }
 
-        // 5. Advance enemies along path
+        // 7. Advance enemies along path
         val activeEnemies = mutableListOf<Enemy>()
         for (enemy in enemies) {
-            val updated = enemy.advance(clampedDt, currentMap.path)
+            val assignedPath = currentMap.getPath(enemy.pathIndex)
+            val advanced = enemy.advance(clampedDt, assignedPath)
+            val inTunnel = currentMap.isPointInTunnel(advanced.position)
+            val updated = if (advanced.isInTunnel != inTunnel) advanced.copy(isInTunnel = inTunnel) else advanced
+
             if (updated.reachedBase) {
                 base = base.takeDamage(updated.spec.baseDamage)
                 audioPlayer.playSound(GameSound.ENEMY_HIT)
                 if (base.isDestroyed) {
-                    gameStatus = GameStatus.GAME_OVER
+                    changeGameState(GameStatus.GAME_OVER)
                     audioPlayer.playSound(GameSound.GAME_OVER)
                     break
                 }
@@ -130,7 +209,7 @@ class GameEngine(
         enemies.clear()
         enemies.addAll(activeEnemies)
 
-        // 6. Combat Update
+        // 8. Combat Update
         val combatResult = combatSystem.update(
             clampedDt,
             towers,
@@ -157,12 +236,36 @@ class GameEngine(
 
         if (combatResult.coinsEarned > 0) {
             economySystem.addCoins(combatResult.coinsEarned)
+        }
+        if (combatResult.enemiesKilled > 0) {
             enemiesKilledTotal += combatResult.enemiesKilled
             audioPlayer.playSound(GameSound.ENEMY_DEATH)
         }
 
         if (combatResult.bossDefeated) {
             showNotice("BOSS DEFEATED! Massive Coin Reward!")
+        }
+
+        // Instant check if last enemy was eliminated during this combat tick
+        if (waveManager.currentQueueIndex >= waveManager.totalEnemiesThisWave &&
+            waveManager.totalEnemiesThisWave > 0 &&
+            enemies.isEmpty()
+        ) {
+            if (waveManager.currentWave >= waveManager.maxWaves) {
+                changeGameState(GameStatus.VICTORY)
+                audioPlayer.playSound(GameSound.VICTORY)
+                return
+            }
+            if (waveManager.currentWave > lastWaveRewarded) {
+                lastWaveRewarded = waveManager.currentWave
+                economySystem.addCoins(GameConfig.WAVE_CLEAR_BONUS_COINS)
+            }
+            gameStatus = GameStatus.WAVE_COMPLETE
+            waveTransitionTimer = 2.5f
+            placementNotice = "WAVE ${waveManager.currentWave} COMPLETE! +${GameConfig.WAVE_CLEAR_BONUS_COINS}🪙"
+            audioPlayer.playSound(GameSound.WAVE_CLEAR)
+            publishState()
+            return
         }
 
         // Keep selected tower reference updated with latest stats
@@ -174,21 +277,27 @@ class GameEngine(
     }
 
     fun startWave() {
-        if (gameStatus == GameStatus.WAVE_COMPLETE || gameStatus == GameStatus.MENU || gameStatus == GameStatus.PLAYING) {
-            if (waveManager.status == WaveStatus.READY_TO_START) {
-                waveManager.startCurrentWave()
+        if (gameStatus == GameStatus.PAUSED) {
+            gameStatus = GameStatus.PLAYING
+            publishState()
+        } else if (gameStatus == GameStatus.WAVE_TRANSITION) {
+            waveManager.advanceToNextWave()
+            gameStatus = GameStatus.PLAYING
+            waveTransitionTimer = 0f
+            placementNotice = null
+            audioPlayer.playSound(GameSound.WAVE_START)
+            publishState()
+        } else if (waveManager.status == WaveStatus.READY_TO_START) {
+            waveManager.startCurrentWave()
+            gameStatus = GameStatus.PLAYING
+            audioPlayer.playSound(GameSound.WAVE_START)
+            publishState()
+        } else if (waveManager.status == WaveStatus.WAVE_CLEARED) {
+            if (waveManager.currentWave < waveManager.maxWaves) {
+                waveManager.advanceToNextWave()
                 gameStatus = GameStatus.PLAYING
                 audioPlayer.playSound(GameSound.WAVE_START)
-                showNotice("Wave 1 Started!")
                 publishState()
-            } else if (waveManager.status == WaveStatus.WAVE_CLEARED || gameStatus == GameStatus.WAVE_COMPLETE) {
-                if (waveManager.currentWave < waveManager.maxWaves) {
-                    waveManager.advanceToNextWave()
-                    gameStatus = GameStatus.PLAYING
-                    audioPlayer.playSound(GameSound.WAVE_START)
-                    showNotice("Wave ${waveManager.currentWave} Started!")
-                    publishState()
-                }
             }
         }
     }
@@ -280,6 +389,52 @@ class GameEngine(
         }
     }
 
+    fun isBuildableLocation(point: Point2D): Boolean {
+        val radius = GameConfig.TOWER_SIZE / 2f
+        if (!currentMap.canPlaceAt(point, radius)) return false
+        val tooCloseToOther = towers.any {
+            it.position.distanceTo(point) < GameConfig.MIN_DISTANCE_BETWEEN_TOWERS
+        }
+        return !tooCloseToOther
+    }
+
+    @Synchronized
+    fun selectBuildPosition(point: Point2D?) {
+        selectedExistingTower = null
+        selectedBuildPos = point
+        publishState()
+    }
+
+    @Synchronized
+    fun placeTowerAt(type: TowerType, virtualX: Float, virtualY: Float): Boolean {
+        val spec = TowerSpec.create(type, 1)
+        val targetPoint = Point2D(virtualX, virtualY)
+
+        if (!isBuildableLocation(targetPoint)) {
+            showNotice("Cannot build here! Check paths, water, or obstacles.")
+            return false
+        }
+
+        if (!economySystem.spend(spec.cost)) {
+            showNotice("Not enough coins! Need ${spec.cost}🪙")
+            return false
+        }
+
+        val newTower = Tower(
+            spec = spec,
+            position = targetPoint,
+            totalCoinsInvested = spec.cost
+        )
+        towers.add(newTower)
+        selectedBuildPos = null
+        selectedTowerSpec = null
+        isBuildingTower = false
+        showNotice("${spec.name} deployed!")
+        audioPlayer.playSound(GameSound.TOWER_FIRE_CANNON)
+        publishState()
+        return true
+    }
+
     fun validatePlacement(virtualX: Float, virtualY: Float): Pair<Boolean, String?> {
         val spec = selectedTowerSpec ?: TowerSpec.create(TowerType.MACHINE_GUN, 1)
         val targetPoint = Point2D(virtualX, virtualY)
@@ -334,48 +489,66 @@ class GameEngine(
 
     fun loadMap(map: GameMap) {
         currentMap = map
-        restart()
+        restart(isNewMission = true)
     }
 
+    @Synchronized
     fun pause() {
-        if (gameStatus == GameStatus.PLAYING) {
-            gameStatus = GameStatus.PAUSED
-            publishState()
+        if (gameStatus != GameStatus.PAUSED && gameStatus != GameStatus.GAME_OVER && gameStatus != GameStatus.VICTORY) {
+            stateBeforePause = gameStatus
+            changeGameState(GameStatus.PAUSED)
         }
     }
 
+    @Synchronized
     fun resume() {
         if (gameStatus == GameStatus.PAUSED) {
-            gameStatus = GameStatus.PLAYING
-            publishState()
+            changeGameState(stateBeforePause)
         }
     }
 
     fun toggleSpeed() {
-        gameSpeedMultiplier = if (gameSpeedMultiplier == 1.0f) 2.0f else 1.0f
+        gameSpeedMultiplier = when (gameSpeedMultiplier) {
+            1.0f -> 2.0f
+            2.0f -> 3.0f
+            else -> 1.0f
+        }
         publishState()
     }
 
-    fun restart() {
+    @Synchronized
+    fun restart(isNewMission: Boolean = true) {
         base = Base(position = currentMap.basePosition)
         towers.clear()
         enemies.clear()
         projectiles.clear()
         visualEffects.clear()
-        waveManager = WaveManager(path = currentMap.path)
+        waveManager = WaveManager(maxWaves = GameConfig.TOTAL_WAVES, paths = currentMap.paths)
         economySystem.reset()
-        gameStatus = GameStatus.WAVE_COMPLETE
+        if (isNewMission) {
+            gameStatus = GameStatus.PREPARATION
+            preparationCountdown = 5.0f
+            stateBeforePause = GameStatus.PREPARATION
+        } else {
+            gameStatus = GameStatus.PLAYING
+            preparationCountdown = 0f
+            waveManager.startCurrentWave()
+            stateBeforePause = GameStatus.PLAYING
+        }
+        selectedBuildPos = null
         isBuildingTower = false
         selectedTowerSpec = null
         previewPlacementPos = null
         isValidPlacement = false
         selectedExistingTower = null
-        placementNotice = "Prepare your defenses • Tap Start Wave"
-        placementNoticeTimer = 3.0f
+        placementNotice = null
+        placementNoticeTimer = 0f
+        waveTransitionTimer = 0f
         enemiesKilledTotal = 0
         gameSpeedMultiplier = 1.0f
         gameTime = 0f
         lastWaveRewarded = 0
+        audioPlayer.playSound(GameSound.WAVE_START)
         publishState()
     }
 
@@ -402,6 +575,8 @@ class GameEngine(
 
         return GameState(
             gameStatus = gameStatus,
+            preparationCountdown = preparationCountdown,
+            selectedBuildPos = selectedBuildPos,
             currentMap = currentMap,
             base = base,
             coins = economySystem.currentCoins,

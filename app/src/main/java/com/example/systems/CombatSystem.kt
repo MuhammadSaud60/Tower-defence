@@ -70,6 +70,7 @@ class CombatSystem(
                             targetLastKnownPosition = currentTarget.position,
                             damage = aimedTower.spec.damage,
                             splashRadius = aimedTower.spec.splashRadius,
+                            armorPiercing = aimedTower.spec.armorPiercing,
                             speed = speed
                         )
                     )
@@ -115,7 +116,7 @@ class CombatSystem(
                         if (enemy.isAlive && enemy.position.distanceTo(impactPos) <= updatedProj.splashRadius) {
                             val falloff = (1f - (enemy.position.distanceTo(impactPos) / updatedProj.splashRadius) * 0.4f).coerceIn(0.5f, 1f)
                             val dmg = updatedProj.damage * falloff
-                            val damaged = enemy.takeDamage(dmg)
+                            val damaged = enemy.takeDamage(dmg, updatedProj.armorPiercing)
                             enemyMap[id] = damaged
 
                             if (!damaged.isAlive) {
@@ -145,7 +146,7 @@ class CombatSystem(
                     )
 
                     if (targetEnemy != null && targetEnemy.isAlive) {
-                        val damaged = targetEnemy.takeDamage(updatedProj.damage)
+                        val damaged = targetEnemy.takeDamage(updatedProj.damage, updatedProj.armorPiercing)
                         enemyMap[targetEnemy.id] = damaged
 
                         if (!damaged.isAlive) {

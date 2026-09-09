@@ -123,10 +123,114 @@ class ExampleUnitTest {
     @Test
     fun testStartWaveEngineTransition() {
         val engine = com.example.game.GameEngine()
-        assertEquals(com.example.game.GameStatus.WAVE_COMPLETE, engine.gameState.value.gameStatus)
+        assertEquals(com.example.game.GameStatus.PREPARATION, engine.gameState.value.gameStatus)
+        assertEquals(5.0f, engine.gameState.value.preparationCountdown, 0.01f)
+        assertTrue(engine.gameState.value.enemies.isEmpty())
 
-        engine.startWave()
+        // Advance 2 seconds of preparation (40 frames of 0.05s)
+        repeat(40) { engine.update(0.05f) }
+        assertEquals(com.example.game.GameStatus.PREPARATION, engine.gameState.value.gameStatus)
+        assertEquals(3.0f, engine.gameState.value.preparationCountdown, 0.05f)
+        assertTrue(engine.gameState.value.enemies.isEmpty())
+
+        // Advance remaining 3.1 seconds (62 frames of 0.05s) -> transitions automatically to PLAYING
+        repeat(62) { engine.update(0.05f) }
         assertEquals(com.example.game.GameStatus.PLAYING, engine.gameState.value.gameStatus)
         assertEquals(com.example.systems.WaveStatus.SPAWNING, engine.gameState.value.waveStatus)
+    }
+
+    @Test
+    fun testPauseResumePreservesPreparation() {
+        val engine = com.example.game.GameEngine()
+        // Advance 1.5 seconds (30 frames of 0.05s)
+        repeat(30) { engine.update(0.05f) }
+        assertEquals(3.5f, engine.gameState.value.preparationCountdown, 0.05f)
+
+        engine.pause()
+        assertEquals(com.example.game.GameStatus.PAUSED, engine.gameState.value.gameStatus)
+
+        // Ticking while paused should NOT advance preparation countdown
+        repeat(20) { engine.update(0.05f) }
+        assertEquals(3.5f, engine.gameState.value.preparationCountdown, 0.05f)
+
+        engine.resume()
+        assertEquals(com.example.game.GameStatus.PREPARATION, engine.gameState.value.gameStatus)
+        assertEquals(3.5f, engine.gameState.value.preparationCountdown, 0.05f)
+    }
+
+    @Test
+    fun testEmptyBuildableAreaContextualPlacement() {
+        val engine = com.example.game.GameEngine()
+        val buildPoint = Point2D(200f, 700f)
+        assertTrue(engine.isBuildableLocation(buildPoint))
+
+        // Select build position
+        engine.selectBuildPosition(buildPoint)
+        assertEquals(buildPoint, engine.gameState.value.selectedBuildPos)
+
+        // Place Gunner tower
+        val initialCoins = engine.gameState.value.coins
+        val success = engine.placeTowerAt(TowerType.MACHINE_GUN, buildPoint.x, buildPoint.y)
+        assertTrue(success)
+        assertEquals(1, engine.gameState.value.towers.size)
+        assertEquals(initialCoins - GameConfig.MG_TOWER_COST, engine.gameState.value.coins)
+        assertEquals(null, engine.gameState.value.selectedBuildPos)
+
+        // Cannot place another tower at the same location
+        assertFalse(engine.isBuildableLocation(buildPoint))
+    }
+
+    @Test
+    fun testSpeedMultiplierCycle() {
+        val engine = com.example.game.GameEngine()
+        assertEquals(1f, engine.gameState.value.gameSpeedMultiplier)
+        engine.toggleSpeed()
+        assertEquals(2f, engine.gameState.value.gameSpeedMultiplier)
+        engine.toggleSpeed()
+        assertEquals(3f, engine.gameState.value.gameSpeedMultiplier)
+        engine.toggleSpeed()
+        assertEquals(1f, engine.gameState.value.gameSpeedMultiplier)
+    }
+
+    @Test
+    fun testMultiPathWaveDispatch() {
+        val path1 = GamePath(id = "p1", waypoints = listOf(Point2D(0f, 0f), Point2D(100f, 0f)))
+        val path2 = GamePath(id = "p2", waypoints = listOf(Point2D(0f, 100f), Point2D(100f, 100f)))
+        val waveManager = WaveManager(maxWaves = 5, paths = listOf(path1, path2))
+
+        waveManager.startCurrentWave()
+        // WaveManager.update spawns an enemy when cooldown elapses
+        val e1 = waveManager.update(1.0f, 0)
+        assertNotNull(e1)
+        assertEquals(0, e1!!.pathIndex)
+
+        val e2 = waveManager.update(1.5f, 1)
+        assertNotNull(e2)
+        assertEquals(1, e2!!.pathIndex)
+    }
+
+    @Test
+    fun testMapCannotPlaceOnRoads() {
+        val map = com.example.data.GameMap.createGreenValleyMap(isUnlocked = true)
+        // Waypoint at (500f, 340f) is directly on the path
+        val onRoad = map.canPlaceAt(Point2D(500f, 340f), 40f)
+        assertFalse("Tower placement on road should be forbidden", onRoad)
+
+        // Clear grassy open field at (200f, 700f)
+        val onMeadow = map.canPlaceAt(Point2D(200f, 700f), 40f)
+        assertTrue("Tower placement on open meadow should be allowed", onMeadow)
+    }
+
+    @Test
+    fun testTunnelRegionDetection() {
+        val map = com.example.data.GameMap.createObsidianTunnelMap(isUnlocked = true)
+        assertNotNull(map.tunnelRegion)
+        // Inside tunnel bounds: (620f, 600f)
+        assertTrue(map.isPointInTunnel(Point2D(620f, 600f)))
+        // Outside tunnel: (100f, 100f)
+        assertFalse(map.isPointInTunnel(Point2D(100f, 100f)))
+
+        // Cannot place tower directly inside solid mountain rock
+        assertFalse(map.canPlaceAt(Point2D(620f, 600f), 40f))
     }
 }

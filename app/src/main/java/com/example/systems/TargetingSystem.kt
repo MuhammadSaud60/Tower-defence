@@ -19,7 +19,9 @@ class TargetingSystem {
         return when (tower.targetingStrategy) {
             TargetingStrategy.FIRST -> candidates.maxByOrNull { it.totalProgress }
             TargetingStrategy.LAST -> candidates.minByOrNull { it.totalProgress }
-            TargetingStrategy.STRONGEST -> candidates.maxByOrNull { it.currentHp }
+            TargetingStrategy.STRONGEST -> candidates.maxWithOrNull(
+                compareBy<Enemy> { it.currentHp }.thenBy { if (it.spec.isBoss) 1 else 0 }
+            )
             TargetingStrategy.CLOSEST -> candidates.minByOrNull { tower.position.distanceTo(it.position) }
         }
     }

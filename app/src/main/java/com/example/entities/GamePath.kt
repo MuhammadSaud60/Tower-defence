@@ -9,6 +9,7 @@ import kotlin.math.min
  * Provides waypoint progression data and spatial collision checks for tower placement.
  */
 class GamePath(
+    val id: String = "main",
     val waypoints: List<Point2D> = listOf(
         Point2D(-40f, 180f),
         Point2D(340f, 180f),

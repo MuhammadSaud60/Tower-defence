@@ -25,9 +25,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             var lastTime = System.nanoTime()
             while (isActive) {
                 val currentTime = System.nanoTime()
-                val dt = ((currentTime - lastTime) / 1_000_000_000f).coerceAtMost(0.05f)
+                val dt = ((currentTime - lastTime) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
                 lastTime = currentTime
-                gameEngine.update(dt)
+                try {
+                    gameEngine.update(dt)
+                } catch (e: Throwable) {
+                    android.util.Log.e("GameViewModel", "Exception safely handled in game loop", e)
+                }
                 delay(16L)
             }
         }
@@ -38,6 +42,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun cancelTowerBuild() = gameEngine.cancelTowerBuild()
     fun updatePlacementPreview(virtualX: Float, virtualY: Float) = gameEngine.updatePlacementPreview(virtualX, virtualY)
     fun tryPlaceTower(virtualX: Float, virtualY: Float) = gameEngine.tryPlaceTower(virtualX, virtualY)
+    fun selectBuildPosition(point: com.example.entities.Point2D?) = gameEngine.selectBuildPosition(point)
+    fun placeTowerAt(type: TowerType, virtualX: Float, virtualY: Float) = gameEngine.placeTowerAt(type, virtualX, virtualY)
+    fun isBuildableLocation(point: com.example.entities.Point2D) = gameEngine.isBuildableLocation(point)
+    fun clearSelection() {
+        gameEngine.selectExistingTower(null)
+        gameEngine.selectBuildPosition(null)
+    }
     fun selectExistingTower(tower: Tower?) = gameEngine.selectExistingTower(tower)
     fun upgradeSelectedTower() = gameEngine.upgradeSelectedTower()
     fun sellSelectedTower() = gameEngine.sellSelectedTower()
@@ -56,11 +67,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val mapId = state.currentMap.id
         progressionManager.saveStarsForMap(mapId, state.starsEarned)
         progressionManager.recordWaveReached(mapId, state.currentWave)
-        if (mapId == "green_valley") {
-            progressionManager.unlockMap("desert_outpost")
-        }
-        if (progressionManager.getTotalStars() >= 3) {
-            progressionManager.unlockMap("forest_pass")
+        when (mapId) {
+            "green_valley" -> progressionManager.unlockMap("desert_outpost")
+            "desert_outpost" -> progressionManager.unlockMap("forest_pass")
+            "forest_pass" -> progressionManager.unlockMap("split_routes")
+            "split_routes" -> progressionManager.unlockMap("canyon_tunnel")
+            "canyon_tunnel", "map_4_tunnel" -> progressionManager.unlockMap("the_crossing")
+            "the_crossing" -> progressionManager.unlockMap("map_5_loop")
         }
     }
 }

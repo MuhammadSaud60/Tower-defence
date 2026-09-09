@@ -17,23 +17,26 @@ enum class EnemyType {
 data class EnemySpec(
     val type: EnemyType = EnemyType.SOLDIER,
     val name: String = "Soldier",
-    val baseHp: Float = 80f,
-    val baseSpeed: Float = 120f,
+    val baseHp: Float = 120f,
+    val armor: Float = 4f,
+    val baseSpeed: Float = 110f,
     val rewardCoins: Int = 12,
     val baseDamage: Int = GameConfig.DAMAGE_PER_ENEMY,
     val radius: Float = 22f,
     val primaryColorHex: Long = 0xFF4CAF50L,
     val secondaryColorHex: Long = 0xFF2E7D32L,
-    val isBoss: Boolean = false
+    val isBoss: Boolean = false,
+    val regenRate: Float = 0f
 ) {
     companion object {
         val SCOUT = EnemySpec(
             type = EnemyType.SCOUT,
             name = "Scout",
-            baseHp = 35f,
-            baseSpeed = 180f,
+            baseHp = 45f,
+            armor = 0f,
+            baseSpeed = 175f,
             rewardCoins = 8,
-            baseDamage = 8,
+            baseDamage = 6,
             radius = 16f,
             primaryColorHex = 0xFFFFB703L, // Warm Golden Amber
             secondaryColorHex = 0xFFFB8500L
@@ -42,8 +45,9 @@ data class EnemySpec(
         val SOLDIER = EnemySpec(
             type = EnemyType.SOLDIER,
             name = "Soldier",
-            baseHp = 85f,
-            baseSpeed = 120f,
+            baseHp = 120f,
+            armor = 4f,
+            baseSpeed = 110f,
             rewardCoins = 12,
             baseDamage = 10,
             radius = 20f,
@@ -54,9 +58,10 @@ data class EnemySpec(
         val HEAVY = EnemySpec(
             type = EnemyType.HEAVY,
             name = "Heavy",
-            baseHp = 260f,
-            baseSpeed = 70f,
-            rewardCoins = 25,
+            baseHp = 380f,
+            armor = 16f,
+            baseSpeed = 65f,
+            rewardCoins = 28,
             baseDamage = 20,
             radius = 28f,
             primaryColorHex = 0xFFE76F51L, // Rust Brick / Crimson Iron
@@ -66,8 +71,9 @@ data class EnemySpec(
         val RUNNER = EnemySpec(
             type = EnemyType.RUNNER,
             name = "Runner",
-            baseHp = 28f,
-            baseSpeed = 230f,
+            baseHp = 40f,
+            armor = 1f,
+            baseSpeed = 235f,
             rewardCoins = 10,
             baseDamage = 8,
             radius = 15f,
@@ -76,27 +82,33 @@ data class EnemySpec(
         )
 
         fun createBoss(wave: Int): EnemySpec {
-            val (name, hpMultiplier) = when (wave) {
-                5 -> "Iron Golem" to 1.0f
-                10 -> "Siege Titan" to 1.8f
-                15 -> "Dreadnought" to 2.8f
-                else -> "Overlord Colossus" to 4.2f
+            val (name, hp, armor, regen, speed, coins) = when (wave) {
+                5 -> Tuple6("Iron Golem", 1200f, 24f, 8f, 48f, 150)
+                10 -> Tuple6("Siege Titan", 2200f, 30f, 14f, 44f, 250)
+                15 -> Tuple6("Dreadnought", 3600f, 36f, 20f, 40f, 380)
+                else -> Tuple6("Overlord Colossus", 5200f, 42f, 28f, 36f, 550)
             }
             return EnemySpec(
                 type = EnemyType.BOSS,
                 name = name,
-                baseHp = 600f * hpMultiplier,
-                baseSpeed = 55f,
-                rewardCoins = (100 * hpMultiplier).toInt(),
+                baseHp = hp,
+                armor = armor,
+                baseSpeed = speed,
+                rewardCoins = coins,
                 baseDamage = GameConfig.DAMAGE_PER_BOSS,
                 radius = 38f,
                 primaryColorHex = 0xFF8338ECL, // Regal Royal Purple
                 secondaryColorHex = 0xFFFF006EL,
-                isBoss = true
+                isBoss = true,
+                regenRate = regen
             )
         }
     }
 }
+
+private data class Tuple6<A, B, C, D, E, F>(
+    val a: A, val b: B, val c: C, val d: D, val e: E, val f: F
+)
 
 /**
  * Individual enemy instance traveling on the battlefield.
@@ -104,6 +116,7 @@ data class EnemySpec(
 data class Enemy(
     val id: String = UUID.randomUUID().toString(),
     val spec: EnemySpec = EnemySpec.SOLDIER,
+    val pathIndex: Int = 0,
     val maxHp: Float = spec.baseHp,
     val currentHp: Float = spec.baseHp,
     val position: Point2D = Point2D(-40f, 180f),
@@ -113,13 +126,20 @@ data class Enemy(
     val isAlive: Boolean = true,
     val reachedBase: Boolean = false,
     val animWobbleTime: Float = 0f,
-    val hitFlashTimer: Float = 0f
+    val hitFlashTimer: Float = 0f,
+    val isShielded: Boolean = false,
+    val shieldTimer: Float = 0f,
+    val shieldCooldown: Float = 8.0f,
+    val isInTunnel: Boolean = false
 ) {
     val healthPercentage: Float get() = (currentHp / maxHp).coerceIn(0f, 1f)
     val isHitFlashing: Boolean get() = hitFlashTimer > 0f
 
-    fun takeDamage(amount: Float): Enemy {
-        val newHp = currentHp - amount
+    fun takeDamage(rawAmount: Float, armorPiercing: Float = 0f): Enemy {
+        val baseArmor = if (isShielded) (spec.armor + 25f) else spec.armor
+        val effectiveArmor = (baseArmor * (1f - armorPiercing.coerceIn(0f, 0.9f))).coerceAtLeast(0f)
+        val netDamage = kotlin.math.max(rawAmount * 0.15f, rawAmount - effectiveArmor)
+        val newHp = currentHp - netDamage
         return copy(
             currentHp = newHp,
             isAlive = newHp > 0f,
@@ -132,6 +152,35 @@ data class Enemy(
      */
     fun advance(dt: Float, path: GamePath): Enemy {
         if (!isAlive || reachedBase) return this
+
+        // Boss mechanics: Shield phase cycle and health regeneration
+        var newShielded = isShielded
+        var newShieldTimer = shieldTimer
+        var newShieldCooldown = shieldCooldown
+        var newHp = currentHp
+
+        if (spec.isBoss) {
+            // Regeneration
+            if (spec.regenRate > 0f && newHp < maxHp) {
+                newHp = kotlin.math.min(maxHp, newHp + spec.regenRate * dt)
+            }
+
+            // Shield phase
+            if (newShielded) {
+                newShieldTimer -= dt
+                if (newShieldTimer <= 0f) {
+                    newShielded = false
+                    newShieldTimer = 0f
+                    newShieldCooldown = 8.5f
+                }
+            } else {
+                newShieldCooldown -= dt
+                if (newShieldCooldown <= 0f) {
+                    newShielded = true
+                    newShieldTimer = 3.5f
+                }
+            }
+        }
 
         val moveDist = spec.baseSpeed * dt
         var newSegmentIndex = currentSegmentIndex
@@ -172,12 +221,16 @@ data class Enemy(
         val progress = path.calculateProgressDistance(newSegmentIndex, newDistanceOnSegment)
 
         return copy(
+            currentHp = newHp,
             position = currentPos,
             currentSegmentIndex = newSegmentIndex,
             distanceOnSegment = newDistanceOnSegment,
             totalProgress = progress,
             animWobbleTime = animWobbleTime + dt * 8f,
-            hitFlashTimer = updatedFlashTimer
+            hitFlashTimer = updatedFlashTimer,
+            isShielded = newShielded,
+            shieldTimer = newShieldTimer,
+            shieldCooldown = newShieldCooldown
         )
     }
 }

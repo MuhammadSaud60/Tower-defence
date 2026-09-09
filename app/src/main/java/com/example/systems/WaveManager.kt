@@ -25,8 +25,11 @@ data class WaveSpawnItem(
  */
 class WaveManager(
     val maxWaves: Int = GameConfig.TOTAL_WAVES,
-    private val path: GamePath
+    val paths: List<GamePath> = listOf(GamePath())
 ) {
+    constructor(maxWaves: Int = GameConfig.TOTAL_WAVES, path: GamePath) : this(maxWaves, listOf(path))
+
+    val primaryPath: GamePath get() = paths.first()
     var currentWave: Int = 1
         private set
 
@@ -34,7 +37,8 @@ class WaveManager(
         private set
 
     private var currentWaveQueue: List<WaveSpawnItem> = emptyList()
-    private var currentQueueIndex: Int = 0
+    var currentQueueIndex: Int = 0
+        private set
     private var spawnCooldown: Float = 0f
 
     var enemiesSpawnedThisWave: Int = 0
@@ -213,9 +217,12 @@ class WaveManager(
                 spawnCooldown = max(0f, spawnCooldown - dt)
                 if (spawnCooldown <= 0f && currentQueueIndex < currentWaveQueue.size) {
                     val item = currentWaveQueue[currentQueueIndex]
+                    val pathIdx = currentQueueIndex % paths.size
+                    val assignedPath = paths[pathIdx]
                     spawnedEnemy = Enemy(
                         spec = item.spec,
-                        position = path.startPoint
+                        pathIndex = pathIdx,
+                        position = assignedPath.startPoint
                     )
                     currentQueueIndex++
                     enemiesSpawnedThisWave = currentQueueIndex

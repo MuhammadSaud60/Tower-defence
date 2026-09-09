@@ -13,18 +13,26 @@ import com.example.systems.WaveStatus
 
 enum class GameStatus {
     MENU,
+    PREPARATION,
     PLAYING,
     PAUSED,
     WAVE_COMPLETE,
     GAME_OVER,
-    VICTORY
+    VICTORY;
+
+    companion object {
+        // Compatibility alias for WAVE_TRANSITION
+        val WAVE_TRANSITION = WAVE_COMPLETE
+    }
 }
 
 /**
- * Immutable snapshot of the entire game world state for Version 2.
+ * Immutable snapshot of the entire game world state.
  */
 data class GameState(
-    val gameStatus: GameStatus = GameStatus.PLAYING,
+    val gameStatus: GameStatus = GameStatus.PREPARATION,
+    val preparationCountdown: Float = 5.0f,
+    val selectedBuildPos: Point2D? = null,
     val currentMap: GameMap = GameMap.createGreenValleyMap(),
     val base: Base = Base(position = currentMap.basePosition),
     val coins: Int = GameConfig.STARTING_COINS,

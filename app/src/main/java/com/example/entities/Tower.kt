@@ -32,7 +32,8 @@ data class TowerSpec(
     val baseColorHex: Long = 0xFF5C677D,
     val turretColorHex: Long = 0xFF0466C8,
     val upgradeCost: Int = 35,
-    val splashRadius: Float = 0f
+    val splashRadius: Float = 0f,
+    val armorPiercing: Float = 0f
 ) {
     val attacksPerSecond: Float get() = if (attackCooldown > 0f) 1f / attackCooldown else 0f
 
@@ -50,31 +51,34 @@ data class TowerSpec(
                         attackCooldown = GameConfig.MG_TOWER_COOLDOWN,
                         baseColorHex = 0xFF4A5568,
                         turretColorHex = 0xFF3182CE,
-                        upgradeCost = 30
+                        upgradeCost = 35,
+                        armorPiercing = 0f
                     )
                     2 -> TowerSpec(
                         type = TowerType.MACHINE_GUN,
                         name = "Dual MG Mk.II",
                         level = 2,
-                        cost = 30,
+                        cost = 35,
                         range = 245f,
-                        damage = 14f,
+                        damage = 15f,
                         attackCooldown = 0.18f,
                         baseColorHex = 0xFF2D3748,
                         turretColorHex = 0xFF2B6CB0,
-                        upgradeCost = 50
+                        upgradeCost = 55,
+                        armorPiercing = 0f
                     )
                     else -> TowerSpec(
                         type = TowerType.MACHINE_GUN,
                         name = "Gatling Vulcan Mk.III",
                         level = 3,
-                        cost = 50,
+                        cost = 55,
                         range = 275f,
-                        damage = 22f,
+                        damage = 24f,
                         attackCooldown = 0.14f,
                         baseColorHex = 0xFF1A202C,
                         turretColorHex = 0xFF1A365D,
-                        upgradeCost = 0
+                        upgradeCost = 0,
+                        armorPiercing = 0f
                     )
                 }
 
@@ -89,34 +93,37 @@ data class TowerSpec(
                         attackCooldown = GameConfig.CANNON_TOWER_COOLDOWN,
                         baseColorHex = 0xFF744210,
                         turretColorHex = 0xFF975A16,
-                        upgradeCost = 75,
-                        splashRadius = GameConfig.CANNON_SPLASH_RADIUS
+                        upgradeCost = 80,
+                        splashRadius = GameConfig.CANNON_SPLASH_RADIUS,
+                        armorPiercing = 0.50f
                     )
                     2 -> TowerSpec(
                         type = TowerType.CANNON,
                         name = "Siege Howitzer Mk.II",
                         level = 2,
-                        cost = 75,
+                        cost = 80,
                         range = 340f,
-                        damage = 110f,
+                        damage = 120f,
                         attackCooldown = 1.35f,
                         baseColorHex = 0xFF5F370E,
                         turretColorHex = 0xFFB7791F,
-                        upgradeCost = 120,
-                        splashRadius = 110f
+                        upgradeCost = 130,
+                        splashRadius = 110f,
+                        armorPiercing = 0.55f
                     )
                     else -> TowerSpec(
                         type = TowerType.CANNON,
                         name = "Devastator Mortar Mk.III",
                         level = 3,
-                        cost = 120,
+                        cost = 130,
                         range = 380f,
-                        damage = 185f,
+                        damage = 200f,
                         attackCooldown = 1.2f,
                         baseColorHex = 0xFF442609,
                         turretColorHex = 0xFFD69E2E,
                         upgradeCost = 0,
-                        splashRadius = 135f
+                        splashRadius = 135f,
+                        armorPiercing = 0.60f
                     )
                 }
 
@@ -131,7 +138,8 @@ data class TowerSpec(
                         attackCooldown = GameConfig.RAPID_TOWER_COOLDOWN,
                         baseColorHex = 0xFF4C1D95,
                         turretColorHex = 0xFF8B5CF6,
-                        upgradeCost = 55
+                        upgradeCost = 55,
+                        armorPiercing = 0f
                     )
                     2 -> TowerSpec(
                         type = TowerType.RAPID_FIRE,
@@ -143,7 +151,8 @@ data class TowerSpec(
                         attackCooldown = 0.10f,
                         baseColorHex = 0xFF3B0764,
                         turretColorHex = 0xFFA78BFA,
-                        upgradeCost = 90
+                        upgradeCost = 90,
+                        armorPiercing = 0f
                     )
                     else -> TowerSpec(
                         type = TowerType.RAPID_FIRE,
@@ -155,7 +164,8 @@ data class TowerSpec(
                         attackCooldown = 0.08f,
                         baseColorHex = 0xFF2E0854,
                         turretColorHex = 0xFFC4B5FD,
-                        upgradeCost = 0
+                        upgradeCost = 0,
+                        armorPiercing = 0f
                     )
                 }
             }

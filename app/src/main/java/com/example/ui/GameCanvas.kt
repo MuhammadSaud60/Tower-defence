@@ -1,12 +1,38 @@
 package com.example.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -21,11 +47,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.DecorationType
 import com.example.data.EnvironmentType
 import com.example.data.GameConfig
 import com.example.data.GameMap
 import com.example.data.MapDecoration
+import com.example.data.TunnelRegion
 import com.example.entities.Base
 import com.example.entities.EffectType
 import com.example.entities.Enemy
@@ -34,6 +65,7 @@ import com.example.entities.GamePath
 import com.example.entities.Point2D
 import com.example.entities.Projectile
 import com.example.entities.ProjectileType
+import com.example.entities.TargetingStrategy
 import com.example.entities.Tower
 import com.example.entities.TowerType
 import com.example.entities.VisualEffect
@@ -47,70 +79,143 @@ import kotlin.math.sin
  * Features rolling green hills, dirt trail with pebbles, serene lake,
  * lush trees, rocks, cartoon defense turrets, animated enemies,
  * projectiles, explosion effects, and placement preview.
+ *
+ * Supports two-finger pinch-to-zoom (1.0x to 2.6x), smooth pan gestures,
+ * and maintains 100% accurate coordinate alignment for towers, enemies,
+ * health bars, and radial build menus.
  */
 @Composable
 fun GameCanvas(
     gameState: GameState,
     onCanvasTap: (Float, Float) -> Unit,
     onPlacementDrag: ((Float, Float) -> Unit)? = null,
+    onUpgradeTower: (() -> Unit)? = null,
+    onSellTower: (() -> Unit)? = null,
+    onStrategyChange: ((TargetingStrategy) -> Unit)? = null,
+    onDeselectTower: (() -> Unit)? = null,
+    onSelectBuildTower: ((TowerType) -> Unit)? = null,
+    onCloseBuildMenu: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val maxWidthPx = constraints.maxWidth.toFloat()
         val maxHeightPx = constraints.maxHeight.toFloat()
 
-        val scale = min(
+        // Base fit scale for map
+        val baseScale = min(
             maxWidthPx / GameConfig.VIRTUAL_WIDTH,
             maxHeightPx / GameConfig.VIRTUAL_HEIGHT
         )
-        val battlefieldWidth = GameConfig.VIRTUAL_WIDTH * scale
-        val battlefieldHeight = GameConfig.VIRTUAL_HEIGHT * scale
-        val offsetX = (maxWidthPx - battlefieldWidth) / 2f
-        val offsetY = (maxHeightPx - battlefieldHeight) / 2f
+        val baseBattlefieldWidth = GameConfig.VIRTUAL_WIDTH * baseScale
+        val baseBattlefieldHeight = GameConfig.VIRTUAL_HEIGHT * baseScale
+        val baseOffsetX = (maxWidthPx - baseBattlefieldWidth) / 2f
+        val baseOffsetY = (maxHeightPx - baseBattlefieldHeight) / 2f
 
-        val composePath = remember(gameState.currentMap.path) {
-            Path().apply {
-                val waypoints = gameState.currentMap.path.waypoints
+        // Camera viewport zoom (1.0x to 2.6x) and pan offsets
+        var zoom by remember(gameState.currentMap.id) { mutableFloatStateOf(1.0f) }
+        var panOffsetX by remember(gameState.currentMap.id) { mutableFloatStateOf(0f) }
+        var panOffsetY by remember(gameState.currentMap.id) { mutableFloatStateOf(0f) }
+
+        val totalScale = baseScale * zoom
+        val effectiveOffsetX = baseOffsetX + panOffsetX
+        val effectiveOffsetY = baseOffsetY + panOffsetY
+
+        val composePaths = remember(gameState.currentMap.paths) {
+            gameState.currentMap.paths.map { path ->
+                val p = Path()
+                val waypoints = path.waypoints
                 if (waypoints.isNotEmpty()) {
-                    moveTo(waypoints[0].x, waypoints[0].y)
+                    p.moveTo(waypoints[0].x, waypoints[0].y)
                     for (i in 1 until waypoints.size) {
-                        lineTo(waypoints[i].x, waypoints[i].y)
+                        p.lineTo(waypoints[i].x, waypoints[i].y)
                     }
                 }
+                path to p
             }
         }
 
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(gameState.isBuildingTower, offsetX, offsetY, scale) {
-                    detectTapGestures { tapOffset ->
-                        val touchX = tapOffset.x
-                        val touchY = tapOffset.y
-                        if (touchX in offsetX..(offsetX + battlefieldWidth) &&
-                            touchY in offsetY..(offsetY + battlefieldHeight)
-                        ) {
-                            val virtualX = (touchX - offsetX) / scale
-                            val virtualY = (touchY - offsetY) / scale
-                            onCanvasTap(virtualX, virtualY)
-                        }
-                    }
-                }
-                .pointerInput(gameState.isBuildingTower, offsetX, offsetY, scale) {
-                    if (gameState.isBuildingTower) {
-                        detectDragGestures(
-                            onDrag = { change, _ ->
-                                val touchX = change.position.x
-                                val touchY = change.position.y
-                                if (touchX in offsetX..(offsetX + battlefieldWidth) &&
-                                    touchY in offsetY..(offsetY + battlefieldHeight)
-                                ) {
-                                    val virtualX = (touchX - offsetX) / scale
-                                    val virtualY = (touchY - offsetY) / scale
-                                    onPlacementDrag?.invoke(virtualX, virtualY)
+                .pointerInput(gameState.currentMap.id, zoom, panOffsetX, panOffsetY, baseScale, effectiveOffsetX, effectiveOffsetY) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var isPinching = false
+                        var isDragging = false
+                        var prevDistance = 0f
+                        var prevCentroid = down.position
+                        val touchSlop = viewConfiguration.touchSlop
+                        var totalDragDistance = 0f
+                        val startPos = down.position
+
+                        do {
+                            val event = awaitPointerEvent()
+                            val activePointers = event.changes.filter { it.pressed }
+
+                            if (activePointers.size >= 2) {
+                                isPinching = true
+                                val p0 = activePointers[0].position
+                                val p1 = activePointers[1].position
+                                val centroid = (p0 + p1) / 2f
+                                val distance = (p0 - p1).getDistance()
+
+                                if (prevDistance > 0f) {
+                                    val scaleRatio = distance / prevDistance
+                                    val oldZoom = zoom
+                                    val newZoom = (oldZoom * scaleRatio).coerceIn(1.0f, 2.6f)
+
+                                    // Zoom around centroid
+                                    val wx = (centroid.x - effectiveOffsetX) / (baseScale * oldZoom)
+                                    val wy = (centroid.y - effectiveOffsetY) / (baseScale * oldZoom)
+
+                                    val newEffX = centroid.x - wx * (baseScale * newZoom)
+                                    val newEffY = centroid.y - wy * (baseScale * newZoom)
+
+                                    val centroidPan = centroid - prevCentroid
+                                    val targetPanX = newEffX - baseOffsetX + centroidPan.x
+                                    val targetPanY = newEffY - baseOffsetY + centroidPan.y
+
+                                    zoom = newZoom
+                                    panOffsetX = clampPanX(targetPanX, newZoom, maxWidthPx, baseScale, baseOffsetX)
+                                    panOffsetY = clampPanY(targetPanY, newZoom, maxHeightPx, baseScale, baseOffsetY)
                                 }
+                                prevDistance = distance
+                                prevCentroid = centroid
+                                activePointers.forEach { it.consume() }
+                            } else if (activePointers.size == 1 && !isPinching) {
+                                val currentPos = activePointers[0].position
+                                val delta = currentPos - prevCentroid
+                                totalDragDistance += delta.getDistance()
+                                if (totalDragDistance > touchSlop) {
+                                    isDragging = true
+                                }
+                                if (isDragging && zoom > 1.02f) {
+                                    val targetPanX = panOffsetX + delta.x
+                                    val targetPanY = panOffsetY + delta.y
+                                    panOffsetX = clampPanX(targetPanX, zoom, maxWidthPx, baseScale, baseOffsetX)
+                                    panOffsetY = clampPanY(targetPanY, zoom, maxHeightPx, baseScale, baseOffsetY)
+                                    activePointers[0].consume()
+                                }
+                                prevCentroid = currentPos
                             }
-                        )
+                        } while (event.changes.any { it.pressed })
+
+                        // Gesture completed (all fingers up)
+                        // Single tap only if neither pinching nor dragging
+                        if (!isPinching && !isDragging && totalDragDistance < touchSlop) {
+                            val tapX = startPos.x
+                            val tapY = startPos.y
+                            val activeWidth = GameConfig.VIRTUAL_WIDTH * totalScale
+                            val activeHeight = GameConfig.VIRTUAL_HEIGHT * totalScale
+
+                            if (tapX in effectiveOffsetX..(effectiveOffsetX + activeWidth) &&
+                                tapY in effectiveOffsetY..(effectiveOffsetY + activeHeight)
+                            ) {
+                                val virtualX = (tapX - effectiveOffsetX) / totalScale
+                                val virtualY = (tapY - effectiveOffsetY) / totalScale
+                                onCanvasTap(virtualX, virtualY)
+                            }
+                        }
                     }
                 }
         ) {
@@ -118,8 +223,8 @@ fun GameCanvas(
             drawRect(color = Color(0xFF1B2E15), size = size)
 
             withTransform({
-                translate(left = offsetX, top = offsetY)
-                scale(scaleX = scale, scaleY = scale, pivot = Offset.Zero)
+                translate(left = effectiveOffsetX, top = effectiveOffsetY)
+                scale(scaleX = totalScale, scaleY = totalScale, pivot = Offset.Zero)
             }) {
                 // 1. Natural Terrain
                 drawNaturalTerrain(gameState.currentMap)
@@ -127,41 +232,252 @@ fun GameCanvas(
                 // 2. Water pond if present
                 drawWaterPond(gameState.currentMap, gameState.gameTime)
 
-                // 3. Winding Dirt Road
-                drawDirtRoad(composePath, gameState.currentMap.path)
+                // 3. Roads across all paths
+                for ((gamePath, composeP) in composePaths) {
+                    drawDirtRoad(composeP, gamePath, gameState.currentMap.environmentType)
+                }
 
-                // 4. Ground Decorations (Trees, Rocks, Bushes)
+                // 4. Ground Decorations (Trees, Rocks, Bushes, Crystals)
                 drawDecorations(gameState.currentMap.decorations)
 
-                // 5. Entrance Cave / Spawn Gate
-                drawSpawnGate(gameState.currentMap.path.startPoint)
+                // 5. Entrance Cave / Spawn Gate for each path
+                for (sp in gameState.currentMap.spawnPoints) {
+                    drawSpawnGate(sp)
+                }
 
-                // 6. Player Castle Fortress Base
+                // 6. Tunnel entrances/exits if present
+                if (gameState.currentMap.tunnelRegion != null) {
+                    drawTunnelPortals(gameState.currentMap.tunnelRegion!!)
+                }
+
+                // 7. Player Castle Fortress Base
                 drawCastleBase(gameState.base)
 
-                // 7. Placed Defense Towers
+                // 8. Placed Defense Towers
                 drawTowers(gameState.towers, gameState.selectedExistingTower, gameState.gameTime)
 
-                // 8. Active Enemies with animations
+                // 9. Active Enemies with animations
                 drawEnemies(gameState.enemies, gameState.gameTime)
 
-                // 9. Ballistic Projectiles
+                // 10. Tunnel Mountain Canopy (Drawn OVER enemies so enemies pass under it!)
+                if (gameState.currentMap.tunnelRegion != null) {
+                    drawTunnelCavernCanopy(gameState.currentMap.tunnelRegion!!, gameState.gameTime)
+                }
+
+                // 11. Ballistic Projectiles
                 drawProjectiles(gameState.projectiles)
 
-                // 10. Combat Particles & Explosions
+                // 12. Combat Particles & Explosions
                 drawVisualEffects(gameState.effects)
 
-                // 11. Tower Placement Preview
+                // 13. Tower Placement Preview (Legacy dragging)
                 if (gameState.isBuildingTower) {
                     drawPlacementPreview(gameState)
                 }
+
+                // 14. Level 1 Tutorial Beacon (Glowing beacon on recommended build plot)
+                if (gameState.currentMap.id == "green_valley" && gameState.towers.isEmpty() && gameState.selectedBuildPos == null) {
+                    val plotPos = TUTORIAL_RECOMMENDED_PLOT
+                    val pulse = sin(gameState.gameTime * 4.5f) * 6f
+                    drawCircle(
+                        color = Color(0x440284C7),
+                        radius = GameConfig.TOWER_SIZE * 1.05f + pulse,
+                        center = Offset(plotPos.x, plotPos.y)
+                    )
+                    drawCircle(
+                        color = Color(0xFF38BDF8),
+                        radius = GameConfig.TOWER_SIZE * 0.9f,
+                        center = Offset(plotPos.x, plotPos.y),
+                        style = Stroke(width = 3.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), gameState.gameTime * 20f))
+                    )
+                    // Downward beacon arrow
+                    val arrowY = plotPos.y - GameConfig.TOWER_SIZE * 1.15f - (sin(gameState.gameTime * 6f) * 6f)
+                    val arrowPath = Path().apply {
+                        moveTo(plotPos.x - 12f, arrowY - 16f)
+                        lineTo(plotPos.x + 12f, arrowY - 16f)
+                        lineTo(plotPos.x, arrowY)
+                        close()
+                    }
+                    drawPath(arrowPath, Color(0xFFFACC15))
+                }
+
+                // 15. Selected Empty Build Plot Marker
+                if (gameState.selectedBuildPos != null) {
+                    val pos = gameState.selectedBuildPos
+                    drawCircle(
+                        color = Color(0x3338BDF8),
+                        radius = GameConfig.TOWER_SIZE * 0.9f,
+                        center = Offset(pos.x, pos.y)
+                    )
+                    drawCircle(
+                        color = Color(0xFF38BDF8),
+                        radius = GameConfig.TOWER_SIZE * 0.9f,
+                        center = Offset(pos.x, pos.y),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f)
+                    )
+                }
             }
+        }
+
+        // Floating Camera Zoom Pill (Bottom-Right, unobtrusive, touch-friendly)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 12.dp, bottom = 12.dp)
+        ) {
+            Surface(
+                color = Color(0xCC0F172A),
+                shape = RoundedCornerShape(20.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
+                shadowElevation = 6.dp
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                ) {
+                    // Zoom Out Button
+                    IconButton(
+                        onClick = {
+                            val newZoom = (zoom - 0.25f).coerceIn(1.0f, 2.6f)
+                            zoom = newZoom
+                            if (newZoom <= 1.01f) {
+                                panOffsetX = 0f
+                                panOffsetY = 0f
+                            } else {
+                                panOffsetX = clampPanX(panOffsetX, newZoom, maxWidthPx, baseScale, baseOffsetX)
+                                panOffsetY = clampPanY(panOffsetY, newZoom, maxHeightPx, baseScale, baseOffsetY)
+                            }
+                        },
+                        enabled = zoom > 1.0f,
+                        modifier = Modifier.size(30.dp).testTag("zoom_out_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "Zoom Out",
+                            tint = if (zoom > 1.0f) Color.White else Color(0xFF64748B),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Zoom Level Text / Reset Clickable
+                    Text(
+                        text = "${String.format(java.util.Locale.US, "%.1f", zoom)}x",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (zoom > 1.05f) Color(0xFF38BDF8) else Color(0xFF94A3B8),
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .clickable {
+                                zoom = 1.0f
+                                panOffsetX = 0f
+                                panOffsetY = 0f
+                            }
+                    )
+
+                    // Zoom In Button
+                    IconButton(
+                        onClick = {
+                            val newZoom = (zoom + 0.25f).coerceIn(1.0f, 2.6f)
+                            zoom = newZoom
+                            panOffsetX = clampPanX(panOffsetX, newZoom, maxWidthPx, baseScale, baseOffsetX)
+                            panOffsetY = clampPanY(panOffsetY, newZoom, maxHeightPx, baseScale, baseOffsetY)
+                        },
+                        enabled = zoom < 2.6f,
+                        modifier = Modifier.size(30.dp).testTag("zoom_in_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Zoom In",
+                            tint = if (zoom < 2.6f) Color.White else Color(0xFF64748B),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Reset Button (Visible when zoomed in)
+                    if (zoom > 1.05f) {
+                        IconButton(
+                            onClick = {
+                                zoom = 1.0f
+                                panOffsetX = 0f
+                                panOffsetY = 0f
+                            },
+                            modifier = Modifier.size(30.dp).testTag("zoom_reset_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RestartAlt,
+                                contentDescription = "Reset Zoom",
+                                tint = Color(0xFFFACC15),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1. Mobile Game Style Radial Tower Menu around selected tower
+        val selectedTower = gameState.selectedExistingTower
+        if (selectedTower != null && !gameState.isBuildingTower && gameState.selectedBuildPos == null) {
+            val towerScreenX = effectiveOffsetX + selectedTower.position.x * totalScale
+            val towerScreenY = effectiveOffsetY + selectedTower.position.y * totalScale
+
+            TowerRadialMenu(
+                tower = selectedTower,
+                screenX = towerScreenX,
+                screenY = towerScreenY,
+                maxWidthPx = maxWidthPx,
+                maxHeightPx = maxHeightPx,
+                playerCoins = gameState.coins,
+                onUpgrade = { onUpgradeTower?.invoke() },
+                onSell = { onSellTower?.invoke() },
+                onStrategyChange = { strat -> onStrategyChange?.invoke(strat) },
+                onClose = { onDeselectTower?.invoke() }
+            )
+        }
+
+        // 2. Mobile Game Style Radial Tower Build Menu on empty buildable area
+        val buildPos = gameState.selectedBuildPos
+        if (buildPos != null) {
+            val buildScreenX = effectiveOffsetX + buildPos.x * totalScale
+            val buildScreenY = effectiveOffsetY + buildPos.y * totalScale
+
+            TowerBuildRadialMenu(
+                buildPos = buildPos,
+                screenX = buildScreenX,
+                screenY = buildScreenY,
+                maxWidthPx = maxWidthPx,
+                maxHeightPx = maxHeightPx,
+                playerCoins = gameState.coins,
+                highlightGunner = (gameState.currentMap.id == "green_valley" && gameState.towers.isEmpty()),
+                onSelectTower = { type -> onSelectBuildTower?.invoke(type) },
+                onClose = { onCloseBuildMenu?.invoke() }
+            )
         }
     }
 }
 
 /**
- * Draws cartoon rolling hills and natural terrain.
+ * Bounds clamping so the map cannot be panned completely off screen.
+ */
+private fun clampPanX(targetPanX: Float, currentZoom: Float, maxWidthPx: Float, baseScale: Float, baseOffsetX: Float): Float {
+    if (currentZoom <= 1.01f) return 0f
+    val zoomedWidth = GameConfig.VIRTUAL_WIDTH * baseScale * currentZoom
+    val minPanX = (maxWidthPx - zoomedWidth - baseOffsetX).coerceAtMost(0f) - 60f
+    val maxPanX = (-baseOffsetX).coerceAtLeast(0f) + 60f
+    return targetPanX.coerceIn(minPanX, maxPanX)
+}
+
+private fun clampPanY(targetPanY: Float, currentZoom: Float, maxHeightPx: Float, baseScale: Float, baseOffsetY: Float): Float {
+    if (currentZoom <= 1.01f) return 0f
+    val zoomedHeight = GameConfig.VIRTUAL_HEIGHT * baseScale * currentZoom
+    val minPanY = (maxHeightPx - zoomedHeight - baseOffsetY).coerceAtMost(0f) - 80f
+    val maxPanY = (-baseOffsetY).coerceAtLeast(0f) + 80f
+    return targetPanY.coerceIn(minPanY, maxPanY)
+}
+
+/**
+ * Draws natural terrain tailored for each map's distinct environment.
  */
 private fun DrawScope.drawNaturalTerrain(map: GameMap) {
     val arenaSize = Size(GameConfig.VIRTUAL_WIDTH, GameConfig.VIRTUAL_HEIGHT)
@@ -180,15 +496,39 @@ private fun DrawScope.drawNaturalTerrain(map: GameMap) {
             // Scattered cartoon grass patches
             drawGrassTufts()
         }
-        EnvironmentType.DESERT_OUTPOST -> {
-            drawRect(color = Color(0xFFE9C46A), size = arenaSize)
-            drawHillLayer(Color(0xFFDFB658), 240f, 400f)
-            drawHillLayer(Color(0xFFF4A261), 700f, 880f)
+        EnvironmentType.DESERT_CANYON -> {
+            // Warm sandstone canyon base
+            drawRect(color = Color(0xFFD4A373), size = arenaSize)
+            drawHillLayer(Color(0xFFBC6C25), 180f, 340f)
+            drawHillLayer(Color(0xFFCC8B46), 460f, 640f)
+            drawHillLayer(Color(0xFFBC6C25), 780f, 960f)
+            drawHillLayer(Color(0xFFDDA15E), 1100f, 1280f)
+            drawSandRipples()
         }
-        EnvironmentType.FOREST_PASS -> {
+        EnvironmentType.FOREST_CROSSROADS -> {
+            // Dense woodland deep green
             drawRect(color = Color(0xFF2D5A27), size = arenaSize)
-            drawHillLayer(Color(0xFF244820), 200f, 380f)
-            drawHillLayer(Color(0xFF35692E), 600f, 780f)
+            drawHillLayer(Color(0xFF244820), 160f, 340f)
+            drawHillLayer(Color(0xFF35692E), 520f, 700f)
+            drawHillLayer(Color(0xFF244820), 880f, 1060f)
+            drawHillLayer(Color(0xFF35692E), 1200f, 1380f)
+            drawForestFoliage()
+        }
+        EnvironmentType.OBSIDIAN_TUNNEL -> {
+            // Dark volcanic subterranean rock
+            drawRect(color = Color(0xFF1E293B), size = arenaSize)
+            drawHillLayer(Color(0xFF0F172A), 180f, 360f)
+            drawHillLayer(Color(0xFF334155), 580f, 760f)
+            drawHillLayer(Color(0xFF0F172A), 980f, 1160f)
+            drawCaveFloorGlow()
+        }
+        EnvironmentType.DRAGON_COIL -> {
+            // Ancient weathered stone bedrock with central plateau
+            drawRect(color = Color(0xFF3F3B37), size = arenaSize)
+            drawHillLayer(Color(0xFF524A42), 200f, 380f)
+            drawHillLayer(Color(0xFF6A5F54), 600f, 780f)
+            drawHillLayer(Color(0xFF524A42), 1000f, 1180f)
+            drawCentralPlateau()
         }
     }
 }
@@ -282,11 +622,188 @@ private fun DrawScope.drawWaterPond(map: GameMap, time: Float) {
     drawCircle(color = Color(0xFFFF85A1), radius = 4f, center = Offset(center.x - 22f, center.y - 16f))
 }
 
-private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath) {
+private fun DrawScope.drawSandRipples() {
+    val ripples = listOf(
+        Point2D(140f, 260f), Point2D(520f, 120f), Point2D(840f, 260f),
+        Point2D(240f, 480f), Point2D(660f, 420f), Point2D(880f, 580f),
+        Point2D(160f, 840f), Point2D(520f, 820f), Point2D(840f, 960f),
+        Point2D(300f, 1120f), Point2D(720f, 1260f)
+    )
+    for (r in ripples) {
+        drawLine(
+            color = Color(0x33A76C20),
+            start = Offset(r.x - 22f, r.y),
+            end = Offset(r.x + 22f, r.y + 4f),
+            strokeWidth = 2.5f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+private fun DrawScope.drawForestFoliage() {
+    val leafPatches = listOf(
+        Point2D(120f, 220f), Point2D(460f, 100f), Point2D(820f, 240f),
+        Point2D(220f, 460f), Point2D(580f, 380f), Point2D(860f, 520f),
+        Point2D(140f, 820f), Point2D(460f, 760f), Point2D(820f, 900f),
+        Point2D(280f, 1140f), Point2D(680f, 1280f)
+    )
+    for (p in leafPatches) {
+        drawCircle(color = Color(0x331B3A17), radius = 12f, center = Offset(p.x, p.y))
+        drawCircle(color = Color(0xFF1E461A), radius = 4f, center = Offset(p.x - 3f, p.y - 2f))
+        drawCircle(color = Color(0xFF38662A), radius = 3.5f, center = Offset(p.x + 4f, p.y + 3f))
+    }
+}
+
+private fun DrawScope.drawCaveFloorGlow() {
+    val crystals = listOf(
+        Point2D(160f, 260f), Point2D(840f, 220f), Point2D(240f, 520f),
+        Point2D(820f, 780f), Point2D(180f, 920f), Point2D(780f, 1180f)
+    )
+    for (c in crystals) {
+        drawCircle(color = Color(0x33A855F7), radius = 14f, center = Offset(c.x, c.y))
+        drawCircle(color = Color(0xFFC084FC), radius = 3.5f, center = Offset(c.x, c.y))
+        drawCircle(color = Color(0xFFE9D5FF), radius = 1.5f, center = Offset(c.x, c.y))
+    }
+}
+
+private fun DrawScope.drawCentralPlateau() {
+    val cx = 520f
+    val cy = 660f
+    val r = 160f
+
+    // Elevated plateau cliff shadow
+    drawCircle(color = Color(0x60000000), radius = r + 18f, center = Offset(cx + 8f, cy + 14f))
+    // Stone cliff wall
+    drawCircle(color = Color(0xFF292524), radius = r + 8f, center = Offset(cx, cy))
+    drawCircle(color = Color(0xFF44403C), radius = r + 4f, center = Offset(cx, cy))
+    // Plateau upper grass / earth surface
+    drawCircle(color = Color(0xFF57534E), radius = r, center = Offset(cx, cy))
+    drawCircle(color = Color(0xFF78716C), radius = r * 0.9f, center = Offset(cx, cy))
+    drawCircle(color = Color(0xFF292524), radius = r, center = Offset(cx, cy), style = Stroke(width = 3f))
+
+    // Carved runic dragon emblem on high-ground
+    drawCircle(
+        color = Color(0xFFD6D3D1),
+        radius = r * 0.6f,
+        center = Offset(cx, cy),
+        style = Stroke(width = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
+    )
+    drawCircle(color = Color(0xFFF59E0B), radius = 7f, center = Offset(cx, cy))
+}
+
+private fun DrawScope.drawTunnelPortals(tunnel: TunnelRegion) {
+    // Entrance Portal
+    val ent = tunnel.entrance
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(ent.x - 48f, ent.y - 30f),
+        size = Size(96f, 52f),
+        cornerRadius = CornerRadius(16f, 16f)
+    )
+    drawRoundRect(
+        color = Color(0xFF020617),
+        topLeft = Offset(ent.x - 38f, ent.y - 20f),
+        size = Size(76f, 42f),
+        cornerRadius = CornerRadius(12f, 12f)
+    )
+    // Timber beams
+    drawRect(color = Color(0xFF78350F), topLeft = Offset(ent.x - 44f, ent.y - 26f), size = Size(8f, 48f))
+    drawRect(color = Color(0xFF78350F), topLeft = Offset(ent.x + 36f, ent.y - 26f), size = Size(8f, 48f))
+    drawRect(color = Color(0xFF92400E), topLeft = Offset(ent.x - 44f, ent.y - 26f), size = Size(88f, 8f))
+
+    // Exit Portal
+    val ex = tunnel.exit
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(ex.x - 48f, ex.y - 22f),
+        size = Size(96f, 52f),
+        cornerRadius = CornerRadius(16f, 16f)
+    )
+    drawRoundRect(
+        color = Color(0xFF020617),
+        topLeft = Offset(ex.x - 38f, ex.y - 12f),
+        size = Size(76f, 42f),
+        cornerRadius = CornerRadius(12f, 12f)
+    )
+    // Exit Timber beams
+    drawRect(color = Color(0xFF78350F), topLeft = Offset(ex.x - 44f, ex.y - 18f), size = Size(8f, 48f))
+    drawRect(color = Color(0xFF78350F), topLeft = Offset(ex.x + 36f, ex.y - 18f), size = Size(8f, 48f))
+    drawRect(color = Color(0xFF92400E), topLeft = Offset(ex.x - 44f, ex.y - 18f), size = Size(88f, 8f))
+}
+
+private fun DrawScope.drawTunnelCavernCanopy(tunnel: TunnelRegion, time: Float) {
+    val width = tunnel.boundsRight - tunnel.boundsLeft
+    val height = tunnel.boundsBottom - tunnel.boundsTop
+    val left = tunnel.boundsLeft
+    val top = tunnel.boundsTop
+
+    // Heavy mountain drop shadow cast to bottom right
+    drawRoundRect(
+        color = Color(0x77000000),
+        topLeft = Offset(left + 12f, top + 14f),
+        size = Size(width, height),
+        cornerRadius = CornerRadius(24f, 24f)
+    )
+
+    // Solid rocky mountain mass covering the tunnel
+    drawRoundRect(
+        color = Color(0xFF1E293B),
+        topLeft = Offset(left, top),
+        size = Size(width, height),
+        cornerRadius = CornerRadius(24f, 24f)
+    )
+    drawRoundRect(
+        color = Color(0xFF334155),
+        topLeft = Offset(left + 6f, top + 6f),
+        size = Size(width - 12f, height - 12f),
+        cornerRadius = CornerRadius(20f, 20f)
+    )
+
+    // Craggy mountain ridges and stone strata
+    for (step in 1..4) {
+        val yOffset = top + (height / 5f) * step
+        drawLine(
+            color = Color(0xFF0F172A),
+            start = Offset(left + 14f, yOffset),
+            end = Offset(left + width - 14f, yOffset + 12f),
+            strokeWidth = 3f,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = Color(0xFF475569),
+            start = Offset(left + 14f, yOffset - 2f),
+            end = Offset(left + width - 14f, yOffset + 10f),
+            strokeWidth = 1.5f,
+            cap = StrokeCap.Round
+        )
+    }
+
+    // Glowing purple mountain crystal clusters on the rock roof
+    val pulse = (sin(time * 3f) * 0.15f + 0.85f)
+    drawCircle(color = Color(0xFFA855F7).copy(alpha = 0.6f * pulse), radius = 18f * pulse, center = Offset(left + 45f, top + 55f))
+    drawCircle(color = Color(0xFFC084FC), radius = 8f, center = Offset(left + 45f, top + 55f))
+
+    drawCircle(color = Color(0xFFA855F7).copy(alpha = 0.6f * pulse), radius = 18f * pulse, center = Offset(left + width - 45f, top + height - 55f))
+    drawCircle(color = Color(0xFFC084FC), radius = 8f, center = Offset(left + width - 45f, top + height - 55f))
+
+    // Carved runic warning emblem on center of mountain
+    drawCircle(color = Color(0xFF0F172A), radius = 24f, center = Offset(left + width / 2f, top + height / 2f))
+    drawCircle(color = Color(0xFFE2E8F0), radius = 20f, center = Offset(left + width / 2f, top + height / 2f), style = Stroke(width = 2f))
+}
+
+private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath, env: EnvironmentType) {
+    val (shadowColor, shoulderColor, roadColor, wagonColor) = when (env) {
+        EnvironmentType.GREEN_VALLEY -> listOf(Color(0xFF4D381E), Color(0xFF966838), Color(0xFFC59556), Color(0x447A5328))
+        EnvironmentType.DESERT_CANYON -> listOf(Color(0xFF5C3317), Color(0xFFA0522D), Color(0xFFD28242), Color(0x447A3818))
+        EnvironmentType.FOREST_CROSSROADS -> listOf(Color(0xFF2B1D0C), Color(0xFF5C4022), Color(0xFF8B6538), Color(0x443D2810))
+        EnvironmentType.OBSIDIAN_TUNNEL -> listOf(Color(0xFF020617), Color(0xFF1E293B), Color(0xFF334155), Color(0x4464748B))
+        EnvironmentType.DRAGON_COIL -> listOf(Color(0xFF1C1917), Color(0xFF44403C), Color(0xFF78716C), Color(0x44A8A29E))
+    }
+
     // 1. Road edge shadow
     drawPath(
         path = composePath,
-        color = Color(0xFF4D381E),
+        color = shadowColor,
         style = Stroke(
             width = path.pathWidth + 16f,
             cap = StrokeCap.Round,
@@ -297,7 +814,7 @@ private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath) {
     // 2. Earth shoulder
     drawPath(
         path = composePath,
-        color = Color(0xFF966838),
+        color = shoulderColor,
         style = Stroke(
             width = path.pathWidth + 6f,
             cap = StrokeCap.Round,
@@ -308,7 +825,7 @@ private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath) {
     // 3. Main sunlit dirt surface
     drawPath(
         path = composePath,
-        color = Color(0xFFC59556),
+        color = roadColor,
         style = Stroke(
             width = path.pathWidth,
             cap = StrokeCap.Round,
@@ -319,7 +836,7 @@ private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath) {
     // 4. Center worn wagon tracks
     drawPath(
         path = composePath,
-        color = Color(0x447A5328),
+        color = wagonColor,
         style = Stroke(
             width = 6f,
             cap = StrokeCap.Round,
@@ -327,18 +844,6 @@ private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath) {
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(24f, 16f))
         )
     )
-
-    // Road pebbles
-    val pebbles = listOf(
-        Point2D(120f, 185f), Point2D(280f, 175f), Point2D(345f, 320f),
-        Point2D(335f, 440f), Point2D(520f, 495f), Point2D(700f, 505f),
-        Point2D(785f, 660f), Point2D(775f, 790f), Point2D(560f, 865f),
-        Point2D(340f, 855f), Point2D(215f, 1020f), Point2D(460f, 1225f)
-    )
-    for (p in pebbles) {
-        drawCircle(color = Color(0xFF7D5931), radius = 3.5f, center = Offset(p.x, p.y))
-        drawCircle(color = Color(0xFFDFBA85), radius = 2f, center = Offset(p.x - 1f, p.y - 1f))
-    }
 }
 
 private fun DrawScope.drawDecorations(decorations: List<MapDecoration>) {
@@ -427,15 +932,17 @@ private fun DrawScope.drawPineTier(cx: Float, cy: Float, radius: Float, color: C
 }
 
 private fun DrawScope.drawSpawnGate(start: Point2D) {
-    val center = Offset(start.x + 20f, start.y)
-    // Dark tunnel/portal entry
+    val gateX = if (start.x < 0f) 24f else if (start.x > GameConfig.VIRTUAL_WIDTH) GameConfig.VIRTUAL_WIDTH - 24f else start.x
+    val gateY = if (start.y < 0f) 24f else if (start.y > GameConfig.VIRTUAL_HEIGHT) GameConfig.VIRTUAL_HEIGHT - 24f else start.y
+    val center = Offset(gateX, gateY)
+    // Dark portal entry
     drawCircle(color = Color(0xFF1E293B), radius = 32f, center = center)
     drawCircle(color = Color(0xFF475569), radius = 32f, center = center, style = Stroke(width = 6f))
     drawCircle(color = Color(0xFF0F172A), radius = 22f, center = center)
 
     // Red warning torch glow
-    drawCircle(color = Color(0xFFFF5722), radius = 5f, center = Offset(center.x - 14f, center.y - 24f))
-    drawCircle(color = Color(0xFFFF5722), radius = 5f, center = Offset(center.x + 14f, center.y - 24f))
+    drawCircle(color = Color(0xFFFF5722), radius = 5f, center = Offset(center.x - 14f, center.y - 18f))
+    drawCircle(color = Color(0xFFFF5722), radius = 5f, center = Offset(center.x + 14f, center.y - 18f))
 }
 
 private fun DrawScope.drawCastleBase(base: Base) {
@@ -1099,29 +1606,104 @@ private fun DrawScope.drawEnemies(enemies: List<Enemy>, time: Float) {
             drawCircle(color = Color(0xFFFFE066), radius = enemy.spec.radius * 0.90f, center = center)
         }
 
-        // Enemy Health Bar
-        val barWidth = (enemy.spec.radius * 2f).coerceAtLeast(34f)
-        val barHeight = 5.5f
-        val barTop = center.y - enemy.spec.radius - 14f
-        val barLeft = center.x - barWidth / 2f
-
-        drawRoundRect(
-            color = Color(0xDD0F172A),
-            topLeft = Offset(barLeft - 1f, barTop - 1f),
-            size = Size(barWidth + 2f, barHeight + 2f),
-            cornerRadius = CornerRadius(3f, 3f)
-        )
-        val hpColor = when {
-            enemy.healthPercentage > 0.5f -> Color(0xFF22C55E)
-            enemy.healthPercentage > 0.25f -> Color(0xFFF59E0B)
-            else -> Color(0xFFEF4444)
+        // Boss Shield Phase Aura
+        if (enemy.spec.isBoss && enemy.isShielded) {
+            val pulse = (sin(time * 8f) * 3f)
+            drawCircle(
+                color = Color(0x44F59E0B),
+                radius = enemy.spec.radius + 12f + pulse,
+                center = center
+            )
+            drawCircle(
+                color = Color(0xFFFACC15),
+                radius = enemy.spec.radius + 10f + pulse,
+                center = center,
+                style = Stroke(width = 3.5f)
+            )
         }
-        drawRoundRect(
-            color = hpColor,
-            topLeft = Offset(barLeft, barTop),
-            size = Size(barWidth * enemy.healthPercentage, barHeight),
-            cornerRadius = CornerRadius(2.5f, 2.5f)
-        )
+
+        // Health Bars (World-Space)
+        if (enemy.spec.isBoss) {
+            // World-Space Boss Health Bar directly above the boss
+            val bossBarWidth = 54f
+            val bossBarHeight = 6.5f
+            val bossBarTop = center.y - enemy.spec.radius - 22f
+            val bossBarLeft = center.x - bossBarWidth / 2f
+
+            // Outer dark container
+            drawRoundRect(
+                color = Color(0xEE0F172A),
+                topLeft = Offset(bossBarLeft - 1.5f, bossBarTop - 1.5f),
+                size = Size(bossBarWidth + 3f, bossBarHeight + 3f),
+                cornerRadius = CornerRadius(3f, 3f)
+            )
+            // Golden boss frame
+            drawRoundRect(
+                color = Color(0xFFF59E0B),
+                topLeft = Offset(bossBarLeft - 1.5f, bossBarTop - 1.5f),
+                size = Size(bossBarWidth + 3f, bossBarHeight + 3f),
+                cornerRadius = CornerRadius(3f, 3f),
+                style = Stroke(width = 1f)
+            )
+            // Crimson track background
+            drawRoundRect(
+                color = Color(0xFF450A0A),
+                topLeft = Offset(bossBarLeft, bossBarTop),
+                size = Size(bossBarWidth, bossBarHeight),
+                cornerRadius = CornerRadius(2f, 2f)
+            )
+            // Health Fill
+            val hpColor = when {
+                enemy.healthPercentage > 0.5f -> Color(0xFFEF4444)
+                enemy.healthPercentage > 0.25f -> Color(0xFFF97316)
+                else -> Color(0xFFDC2626)
+            }
+            if (enemy.healthPercentage > 0f) {
+                drawRoundRect(
+                    color = hpColor,
+                    topLeft = Offset(bossBarLeft, bossBarTop),
+                    size = Size((bossBarWidth * enemy.healthPercentage).coerceAtLeast(1f), bossBarHeight),
+                    cornerRadius = CornerRadius(2f, 2f)
+                )
+                // Top highlight gloss
+                drawRoundRect(
+                    color = Color(0x55FFFFFF),
+                    topLeft = Offset(bossBarLeft, bossBarTop),
+                    size = Size(bossBarWidth * enemy.healthPercentage, bossBarHeight * 0.45f),
+                    cornerRadius = CornerRadius(1.5f, 1.5f)
+                )
+            }
+            // Small golden skull / crown indicator dot above
+            drawCircle(
+                color = Color(0xFFFDE047),
+                radius = 2.5f,
+                center = Offset(center.x, bossBarTop - 4f)
+            )
+        } else if (enemy.healthPercentage < 1.0f) {
+            // Standard Enemy Health Bar (Only displayed when damaged to keep screen clean)
+            val barWidth = (enemy.spec.radius * 2f).coerceAtLeast(32f)
+            val barHeight = 4.5f
+            val barTop = center.y - enemy.spec.radius - 12f
+            val barLeft = center.x - barWidth / 2f
+
+            drawRoundRect(
+                color = Color(0xCC0F172A),
+                topLeft = Offset(barLeft - 1f, barTop - 1f),
+                size = Size(barWidth + 2f, barHeight + 2f),
+                cornerRadius = CornerRadius(2.5f, 2.5f)
+            )
+            val hpColor = when {
+                enemy.healthPercentage > 0.5f -> Color(0xFF22C55E)
+                enemy.healthPercentage > 0.25f -> Color(0xFFF59E0B)
+                else -> Color(0xFFEF4444)
+            }
+            drawRoundRect(
+                color = hpColor,
+                topLeft = Offset(barLeft, barTop),
+                size = Size(barWidth * enemy.healthPercentage, barHeight),
+                cornerRadius = CornerRadius(2f, 2f)
+            )
+        }
     }
 }
 

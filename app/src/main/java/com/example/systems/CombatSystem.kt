@@ -3,6 +3,7 @@ package com.example.systems
 import com.example.data.GameConfig
 import com.example.entities.EffectType
 import com.example.entities.Enemy
+import com.example.entities.EnemyType
 import com.example.entities.Projectile
 import com.example.entities.ProjectileType
 import com.example.entities.Tower
@@ -20,7 +21,11 @@ data class CombatTickResult(
     val enemiesKilled: Int,
     val coinsEarned: Int,
     val bossDefeated: Boolean,
-    val newProjectilesFired: Int
+    val newProjectilesFired: Int,
+    val firedTowerTypes: Set<TowerType> = emptySet(),
+    val hasCannonImpact: Boolean = false,
+    val hasBossImpact: Boolean = false,
+    val hasEnemyHit: Boolean = false
 )
 
 class CombatSystem(
@@ -38,6 +43,10 @@ class CombatSystem(
         var coinsEarned = 0
         var bossDefeated = false
         var newProjectilesCount = 0
+        val firedTowerTypes = mutableSetOf<TowerType>()
+        var hasCannonImpact = false
+        var hasBossImpact = false
+        var hasEnemyHit = false
 
         val newEffects = mutableListOf<VisualEffect>()
 
@@ -54,18 +63,19 @@ class CombatSystem(
                     val projType = when (aimedTower.spec.type) {
                         TowerType.MACHINE_GUN -> ProjectileType.BULLET
                         TowerType.CANNON -> ProjectileType.CANNONBALL
-                        TowerType.RAPID_FIRE -> ProjectileType.PLASMA_BOLT
+                        TowerType.RAPID_FIRE -> ProjectileType.RAPID_SLUG
                     }
                     val speed = when (projType) {
                         ProjectileType.BULLET -> GameConfig.BULLET_SPEED
                         ProjectileType.CANNONBALL -> GameConfig.CANNONBALL_SPEED
-                        ProjectileType.PLASMA_BOLT -> GameConfig.PLASMA_SPEED
+                        ProjectileType.RAPID_SLUG -> GameConfig.PLASMA_SPEED
                     }
 
                     newProjectiles.add(
                         Projectile(
                             type = projType,
                             currentPosition = aimedTower.position,
+                            prevPosition = aimedTower.position,
                             targetEnemyId = currentTarget.id,
                             targetLastKnownPosition = currentTarget.position,
                             damage = aimedTower.spec.damage,
@@ -74,6 +84,7 @@ class CombatSystem(
                             speed = speed
                         )
                     )
+                    firedTowerTypes.add(aimedTower.spec.type)
                     newProjectilesCount++
                     aimedTower.resetCooldown()
                 } else {
@@ -101,12 +112,13 @@ class CombatSystem(
                 val impactPos = updatedProj.currentPosition
 
                 if (updatedProj.splashRadius > 0f) {
-                    // Cannon explosion splash
+                    hasCannonImpact = true
+                    // Heavy cannon blast & cratering explosion
                     newEffects.add(
                         VisualEffect(
                             type = EffectType.CANNON_EXPLOSION,
                             position = impactPos,
-                            maxLifetime = 0.4f,
+                            maxLifetime = 0.45f,
                             maxRadius = updatedProj.splashRadius
                         )
                     )
@@ -123,27 +135,44 @@ class CombatSystem(
                                 enemiesKilled++
                                 coinsEarned += enemy.spec.rewardCoins
                                 if (enemy.spec.isBoss) bossDefeated = true
-                                newEffects.add(
-                                    VisualEffect(
-                                        type = EffectType.ENEMY_DEATH_POOF,
-                                        position = enemy.position,
-                                        maxLifetime = 0.35f,
-                                        maxRadius = enemy.spec.radius * 1.5f
-                                    )
-                                )
+                                newEffects.add(createEnemyDeathEffect(enemy))
                             }
                         }
                     }
                 } else {
                     // Direct hit
-                    newEffects.add(
-                        VisualEffect(
-                            type = EffectType.HIT_SPARK,
-                            position = impactPos,
-                            maxLifetime = 0.16f,
-                            maxRadius = 18f
+                    val isBoss = targetEnemy?.spec?.isBoss == true
+                    if (isBoss) {
+                        hasBossImpact = true
+                        newEffects.add(
+                            VisualEffect(
+                                type = EffectType.BOSS_HIT_IMPACT,
+                                position = impactPos,
+                                maxLifetime = 0.24f,
+                                maxRadius = 26f
+                            )
                         )
-                    )
+                    } else if (updatedProj.type == ProjectileType.RAPID_SLUG) {
+                        hasEnemyHit = true
+                        newEffects.add(
+                            VisualEffect(
+                                type = EffectType.RAPID_HIT_SPARK,
+                                position = impactPos,
+                                maxLifetime = 0.12f,
+                                maxRadius = 14f
+                            )
+                        )
+                    } else {
+                        hasEnemyHit = true
+                        newEffects.add(
+                            VisualEffect(
+                                type = EffectType.MG_HIT_SPARK,
+                                position = impactPos,
+                                maxLifetime = 0.18f,
+                                maxRadius = 18f
+                            )
+                        )
+                    }
 
                     if (targetEnemy != null && targetEnemy.isAlive) {
                         val damaged = targetEnemy.takeDamage(updatedProj.damage, updatedProj.armorPiercing)
@@ -153,14 +182,7 @@ class CombatSystem(
                             enemiesKilled++
                             coinsEarned += targetEnemy.spec.rewardCoins
                             if (targetEnemy.spec.isBoss) bossDefeated = true
-                            newEffects.add(
-                                VisualEffect(
-                                    type = EffectType.ENEMY_DEATH_POOF,
-                                    position = targetEnemy.position,
-                                    maxLifetime = 0.35f,
-                                    maxRadius = targetEnemy.spec.radius * 1.5f
-                                )
-                            )
+                            newEffects.add(createEnemyDeathEffect(targetEnemy))
                         }
                     }
                 }
@@ -182,7 +204,39 @@ class CombatSystem(
             enemiesKilled = enemiesKilled,
             coinsEarned = coinsEarned,
             bossDefeated = bossDefeated,
-            newProjectilesFired = newProjectilesCount
+            newProjectilesFired = newProjectilesCount,
+            firedTowerTypes = firedTowerTypes,
+            hasCannonImpact = hasCannonImpact,
+            hasBossImpact = hasBossImpact,
+            hasEnemyHit = hasEnemyHit
+        )
+    }
+
+    private fun createEnemyDeathEffect(enemy: Enemy): VisualEffect {
+        val type = when (enemy.spec.type) {
+            EnemyType.SCOUT -> EffectType.SCOUT_DEATH
+            EnemyType.SOLDIER -> EffectType.SOLDIER_DEATH
+            EnemyType.HEAVY -> EffectType.HEAVY_DEATH
+            EnemyType.RUNNER -> EffectType.SCOUT_DEATH
+            EnemyType.BOSS -> EffectType.BOSS_DEATH
+        }
+        val radius = when (enemy.spec.type) {
+            EnemyType.SCOUT -> 24f
+            EnemyType.RUNNER -> 26f
+            EnemyType.SOLDIER -> 34f
+            EnemyType.HEAVY -> 48f
+            EnemyType.BOSS -> 80f
+        }
+        val lifetime = when (enemy.spec.type) {
+            EnemyType.BOSS -> 0.75f
+            EnemyType.HEAVY -> 0.48f
+            else -> 0.35f
+        }
+        return VisualEffect(
+            type = type,
+            position = enemy.position,
+            maxLifetime = lifetime,
+            maxRadius = radius
         )
     }
 }

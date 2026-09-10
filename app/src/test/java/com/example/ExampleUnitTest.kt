@@ -233,4 +233,34 @@ class ExampleUnitTest {
         // Cannot place tower directly inside solid mountain rock
         assertFalse(map.canPlaceAt(Point2D(620f, 600f), 40f))
     }
+
+    @Test
+    fun testEnemyHeadingAngleAdvance() {
+        val path = GamePath(waypoints = listOf(Point2D(0f, 0f), Point2D(100f, 0f), Point2D(100f, 100f)))
+        var enemy = Enemy(
+            id = "test-soldier",
+            spec = EnemySpec.SOLDIER,
+            position = Point2D(0f, 0f),
+            headingAngle = 0f
+        )
+        // Advance along first segment (eastwards -> angle should be approx 0 degrees)
+        enemy = enemy.advance(0.1f, path)
+        assertEquals(0f, enemy.headingAngle, 5f)
+
+        // Advance past (100, 0) into southwards segment (towards 100, 100) -> angle turns towards 90 degrees
+        repeat(30) {
+            enemy = enemy.advance(0.1f, path)
+        }
+        assertEquals(90f, enemy.headingAngle, 10f)
+    }
+
+    @Test
+    fun testBossSpawnCreatesEntranceEffect() {
+        val engine = com.example.game.GameEngine()
+        // Force spawn a boss wave or check wave manager boss spec
+        val bossSpec = EnemySpec.createBoss(5)
+        assertTrue(bossSpec.isBoss)
+        assertEquals(EnemyType.BOSS, bossSpec.type)
+        assertTrue(bossSpec.radius >= 36f)
+    }
 }

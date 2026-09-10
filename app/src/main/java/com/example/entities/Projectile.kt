@@ -6,7 +6,11 @@ import java.util.UUID
 enum class ProjectileType {
     BULLET,
     CANNONBALL,
-    PLASMA_BOLT
+    RAPID_SLUG;
+
+    companion object {
+        @JvmField val PLASMA_BOLT = RAPID_SLUG
+    }
 }
 
 /**
@@ -16,6 +20,7 @@ data class Projectile(
     val id: String = UUID.randomUUID().toString(),
     val type: ProjectileType = ProjectileType.BULLET,
     val currentPosition: Point2D,
+    val prevPosition: Point2D = currentPosition,
     val targetEnemyId: String,
     val targetLastKnownPosition: Point2D,
     val damage: Float,
@@ -43,6 +48,7 @@ data class Projectile(
         return if (step >= distance || distance <= GameConfig.PROJECTILE_HIT_RADIUS) {
             // Reached target
             copy(
+                prevPosition = currentPosition,
                 currentPosition = destination,
                 isHit = true,
                 lifetime = newLifetime
@@ -54,6 +60,7 @@ data class Projectile(
                 y = currentPosition.y + (destination.y - currentPosition.y) * fraction
             )
             copy(
+                prevPosition = currentPosition,
                 currentPosition = nextPos,
                 targetLastKnownPosition = destination,
                 lifetime = newLifetime

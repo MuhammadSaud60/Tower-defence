@@ -6,6 +6,7 @@ import com.example.audio.GameSound
 import com.example.data.GameConfig
 import com.example.data.GameMap
 import com.example.entities.Base
+import com.example.entities.EffectType
 import com.example.entities.Enemy
 import com.example.entities.Point2D
 import com.example.entities.Projectile
@@ -183,6 +184,14 @@ class GameEngine(
             if (newEnemy.spec.isBoss) {
                 audioPlayer.playSound(GameSound.BOSS_APPEARANCE)
                 showNotice("WARNING: ${newEnemy.spec.name} has arrived!")
+                visualEffects.add(
+                    VisualEffect(
+                        type = EffectType.BOSS_ENTRANCE,
+                        position = newEnemy.position,
+                        maxLifetime = 0.85f,
+                        maxRadius = 85f
+                    )
+                )
             }
         }
 
@@ -230,8 +239,24 @@ class GameEngine(
         visualEffects.clear()
         visualEffects.addAll(combatResult.updatedEffects)
 
-        if (combatResult.newProjectilesFired > 0) {
-            audioPlayer.playSound(GameSound.TOWER_FIRE_BULLET)
+        // Discrete weapon fire sound events
+        if (combatResult.firedTowerTypes.contains(TowerType.MACHINE_GUN)) {
+            audioPlayer.machineGunFire()
+        }
+        if (combatResult.firedTowerTypes.contains(TowerType.CANNON)) {
+            audioPlayer.cannonFire()
+        }
+        if (combatResult.firedTowerTypes.contains(TowerType.RAPID_FIRE)) {
+            audioPlayer.rapidFire()
+        }
+
+        // Discrete impact sound events
+        if (combatResult.hasCannonImpact) {
+            audioPlayer.cannonImpact()
+        } else if (combatResult.hasBossImpact) {
+            audioPlayer.bossImpact()
+        } else if (combatResult.hasEnemyHit) {
+            audioPlayer.enemyHit()
         }
 
         if (combatResult.coinsEarned > 0) {
@@ -239,7 +264,7 @@ class GameEngine(
         }
         if (combatResult.enemiesKilled > 0) {
             enemiesKilledTotal += combatResult.enemiesKilled
-            audioPlayer.playSound(GameSound.ENEMY_DEATH)
+            audioPlayer.enemyDeath()
         }
 
         if (combatResult.bossDefeated) {
@@ -359,7 +384,7 @@ class GameEngine(
             towers[idx] = upgraded
             selectedExistingTower = upgraded
             showNotice("${upgraded.spec.name} upgraded!")
-            audioPlayer.playSound(GameSound.TOWER_FIRE_CANNON)
+            audioPlayer.playSound(GameSound.BUILD_TOWER)
             publishState()
             return true
         }
@@ -430,7 +455,7 @@ class GameEngine(
         selectedTowerSpec = null
         isBuildingTower = false
         showNotice("${spec.name} deployed!")
-        audioPlayer.playSound(GameSound.TOWER_FIRE_CANNON)
+        audioPlayer.playSound(GameSound.BUILD_TOWER)
         publishState()
         return true
     }
@@ -482,7 +507,7 @@ class GameEngine(
         selectedTowerSpec = null
         previewPlacementPos = null
         showNotice("${spec.name} deployed!")
-        audioPlayer.playSound(GameSound.TOWER_FIRE_CANNON)
+        audioPlayer.playSound(GameSound.BUILD_TOWER)
         publishState()
         return true
     }

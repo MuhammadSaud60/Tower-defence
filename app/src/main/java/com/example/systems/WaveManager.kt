@@ -219,10 +219,14 @@ class WaveManager(
                     val item = currentWaveQueue[currentQueueIndex]
                     val pathIdx = currentQueueIndex % paths.size
                     val assignedPath = paths[pathIdx]
+                    val p1 = assignedPath.waypoints.getOrNull(0) ?: assignedPath.startPoint
+                    val p2 = assignedPath.waypoints.getOrNull(1) ?: p1
+                    val initAngle = (kotlin.math.atan2((p2.y - p1.y).toDouble(), (p2.x - p1.x).toDouble()) * 180.0 / Math.PI).toFloat()
                     spawnedEnemy = Enemy(
                         spec = item.spec,
                         pathIndex = pathIdx,
-                        position = assignedPath.startPoint
+                        position = assignedPath.startPoint,
+                        headingAngle = initAngle
                     )
                     currentQueueIndex++
                     enemiesSpawnedThisWave = currentQueueIndex

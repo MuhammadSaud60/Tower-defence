@@ -76,6 +76,7 @@ import com.example.entities.Tower
 import com.example.entities.TowerType
 import com.example.entities.VisualEffect
 import com.example.game.GameState
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -1075,126 +1076,207 @@ private fun DrawScope.drawTowers(towers: List<Tower>, selectedTower: Tower?, gam
 private fun DrawScope.drawMachineGunTower(center: Offset, tower: Tower) {
     val baseR = tower.spec.size * 0.48f
 
-    // Soft drop shadow
-    drawCircle(
-        color = Color(0x50000000),
-        radius = baseR * 1.05f,
-        center = Offset(center.x + 3f, center.y + 5f)
+    // 1. Soft ground drop shadow underneath
+    drawOval(
+        color = Color(0x45000000),
+        topLeft = Offset(center.x - baseR * 1.05f + 4f, center.y - baseR * 0.75f + 6f),
+        size = Size(baseR * 2.1f, baseR * 1.6f)
     )
 
-    // Fortified stone base platform with bevel
-    drawCircle(color = Color(0xFF334155), radius = baseR, center = center)
-    drawCircle(color = Color(0xFF475569), radius = baseR * 0.90f, center = center)
-    drawCircle(color = Color(0xFF1E293B), radius = baseR, center = center, style = Stroke(width = 2.5f))
+    // 2. Heavy fortified circular steel pedestal base with double bevel and dark border
+    drawCircle(color = Color(0xFF1E293B), radius = baseR, center = center)
+    drawCircle(color = Color(0xFF334155), radius = baseR - 2.5f, center = center)
+    drawCircle(color = Color(0xFF475569), radius = baseR * 0.85f, center = center)
+    drawCircle(color = Color(0xFF64748B), radius = baseR * 0.82f, center = Offset(center.x - 1.5f, center.y - 1.5f), style = Stroke(width = 1.5f))
 
-    // 4 Corner heavy rivet plates
-    for (i in 0..3) {
-        val ang = (i * Math.PI / 2.0 + Math.PI / 4.0).toFloat()
-        val bx = center.x + cos(ang) * (baseR * 0.76f)
-        val by = center.y + sin(ang) * (baseR * 0.76f)
-        drawCircle(color = Color(0xFF0F172A), radius = 3.5f, center = Offset(bx, by))
-        drawCircle(color = Color(0xFFCBD5E1), radius = 2.2f, center = Offset(bx - 0.5f, by - 0.5f))
+    // 3. Hexagonal steel perimeter bolts
+    for (i in 0..5) {
+        val ang = (i * Math.PI / 3.0).toFloat()
+        val bx = center.x + cos(ang) * (baseR * 0.88f)
+        val by = center.y + sin(ang) * (baseR * 0.88f)
+        drawCircle(color = Color(0xFF0F172A), radius = 3f, center = Offset(bx, by))
+        drawCircle(color = Color(0xFFCBD5E1), radius = 1.8f, center = Offset(bx - 0.6f, by - 0.6f))
     }
 
-    // Rotating Turret Top & Barrels
+    // 4. Rotating Turret Mechanism & Weapon Assembly
     rotate(degrees = tower.rotationAngle, pivot = center) {
-        // Swivel ring mount
-        drawCircle(color = Color(0xFF0F172A), radius = 16f, center = center)
-        drawCircle(color = Color(0xFF64748B), radius = 14f, center = center)
-        drawCircle(color = Color(0xFF334155), radius = 14f, center = center, style = Stroke(width = 2f))
+        // Geared turntable ring with traverse teeth
+        drawCircle(color = Color(0xFF0F172A), radius = 17f, center = center)
+        drawCircle(color = Color(0xFF475569), radius = 15f, center = center)
+        for (g in 0..7) {
+            val gang = (g * Math.PI / 4.0).toFloat()
+            val gx = center.x + cos(gang) * 14.5f
+            val gy = center.y + sin(gang) * 14.5f
+            drawCircle(color = Color(0xFF1E293B), radius = 1.5f, center = Offset(gx, gy))
+        }
 
-        val recoil = tower.recoilFraction * 6f
+        val recoil = tower.recoilFraction * 7f
 
         when (tower.spec.level) {
             1 -> {
-                // Level 1: Twin gunmetal barrels
+                // Level 1: Sturdy twin machine gun barrels with side olive ammo box
+                // Side ammo box (military olive-drab steel canister)
+                drawRoundRect(
+                    color = Color(0xFF0F172A),
+                    topLeft = Offset(center.x - 8f, center.y - 17f),
+                    size = Size(13f, 8f),
+                    cornerRadius = CornerRadius(2f, 2f)
+                )
+                drawRoundRect(
+                    color = Color(0xFF166534), // Olive green
+                    topLeft = Offset(center.x - 7f, center.y - 16f),
+                    size = Size(11f, 6f),
+                    cornerRadius = CornerRadius(1.5f, 1.5f)
+                )
+                // Ammo box latch & lid crease
+                drawRect(color = Color(0xFF14532D), topLeft = Offset(center.x - 7f, center.y - 13.5f), size = Size(11f, 1.5f))
+                // Linked brass ammo belt entering breech
+                for (b in 0..2) {
+                    drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 6f + b * 3.5f, center.y - 10f), size = Size(2.2f, 4f))
+                }
+
+                // Twin gunmetal barrels
+                val barrelLength = 26f
+                // Top barrel
                 drawRoundRect(
                     color = Color(0xFF0F172A),
                     topLeft = Offset(center.x + 2f - recoil, center.y - 7f),
-                    size = Size(26f, 4.5f),
+                    size = Size(barrelLength, 4.5f),
                     cornerRadius = CornerRadius(1.5f, 1.5f)
                 )
+                drawRect(color = Color(0xFF475569), topLeft = Offset(center.x + 3f - recoil, center.y - 6f), size = Size(barrelLength - 4f, 1.5f))
+                // Bottom barrel
                 drawRoundRect(
                     color = Color(0xFF0F172A),
                     topLeft = Offset(center.x + 2f - recoil, center.y + 2.5f),
-                    size = Size(26f, 4.5f),
+                    size = Size(barrelLength, 4.5f),
                     cornerRadius = CornerRadius(1.5f, 1.5f)
                 )
-                // Highlights
-                drawRect(color = Color(0xFF64748B), topLeft = Offset(center.x + 4f - recoil, center.y - 6f), size = Size(20f, 1.5f))
-                drawRect(color = Color(0xFF64748B), topLeft = Offset(center.x + 4f - recoil, center.y + 3.5f), size = Size(20f, 1.5f))
-                // Brass muzzle rings
-                drawRect(color = Color(0xFFFFD166), topLeft = Offset(center.x + 24f - recoil, center.y - 7.5f), size = Size(4f, 5.5f))
-                drawRect(color = Color(0xFFFFD166), topLeft = Offset(center.x + 24f - recoil, center.y + 2f), size = Size(4f, 5.5f))
-            }
-            2 -> {
-                // Level 2: Extended heavy twin barrels with cooling jacket vents
-                drawRoundRect(
-                    color = Color(0xFF0F172A),
-                    topLeft = Offset(center.x + 2f - recoil, center.y - 8f),
-                    size = Size(32f, 5.5f),
-                    cornerRadius = CornerRadius(2f, 2f)
-                )
-                drawRoundRect(
-                    color = Color(0xFF0F172A),
-                    topLeft = Offset(center.x + 2f - recoil, center.y + 2.5f),
-                    size = Size(32f, 5.5f),
-                    cornerRadius = CornerRadius(2f, 2f)
-                )
-                // Circular cooling perforations
-                for (h in 0..2) {
-                    drawCircle(color = Color(0xFF475569), radius = 1.5f, center = Offset(center.x + 12f + h * 6f - recoil, center.y - 5.2f))
-                    drawCircle(color = Color(0xFF475569), radius = 1.5f, center = Offset(center.x + 12f + h * 6f - recoil, center.y + 5.2f))
-                }
-                // Dual side ammo drums
-                drawRoundRect(color = Color(0xFFD97706), topLeft = Offset(center.x - 6f, center.y - 17f), size = Size(13f, 7f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFFD97706), topLeft = Offset(center.x - 6f, center.y + 10f), size = Size(13f, 7f), cornerRadius = CornerRadius(2f, 2f))
-                // Heavy muzzle brakes
-                drawRect(color = Color(0xFFCBD5E1), topLeft = Offset(center.x + 30f - recoil, center.y - 9f), size = Size(5f, 7.5f))
-                drawRect(color = Color(0xFFCBD5E1), topLeft = Offset(center.x + 30f - recoil, center.y + 1.5f), size = Size(5f, 7.5f))
-            }
-            else -> {
-                // Level 3: Gatling Vulcan Rotary Cluster
+                drawRect(color = Color(0xFF475569), topLeft = Offset(center.x + 3f - recoil, center.y + 3.5f), size = Size(barrelLength - 4f, 1.5f))
+
+                // Muzzle flash hider / compensator tips
+                drawRect(color = Color(0xFF94A3B8), topLeft = Offset(center.x + barrelLength - 1f - recoil, center.y - 7.5f), size = Size(3.5f, 5.5f))
+                drawRect(color = Color(0xFF94A3B8), topLeft = Offset(center.x + barrelLength - 1f - recoil, center.y + 2f), size = Size(3.5f, 5.5f))
+
+                // Armored receiver housing block
                 drawRoundRect(
                     color = Color(0xFF1E293B),
-                    topLeft = Offset(center.x - 7f, center.y - 16f),
-                    size = Size(14f, 32f),
-                    cornerRadius = CornerRadius(4f, 4f)
+                    topLeft = Offset(center.x - 12f, center.y - 9.5f),
+                    size = Size(17f, 19f),
+                    cornerRadius = CornerRadius(3f, 3f)
                 )
                 drawRoundRect(
-                    color = Color(0xFF0284C7),
-                    topLeft = Offset(center.x - 7f, center.y - 16f),
-                    size = Size(14f, 32f),
-                    cornerRadius = CornerRadius(4f, 4f),
-                    style = Stroke(width = 2f)
+                    color = Color(0xFF334155),
+                    topLeft = Offset(center.x - 10f, center.y - 7.5f),
+                    size = Size(13f, 15f),
+                    cornerRadius = CornerRadius(2f, 2f)
                 )
-                // 4-barrel rotary Gatling array
-                drawRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 2f - recoil, center.y - 8f), size = Size(36f, 3.5f))
-                drawRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 2f - recoil, center.y - 3f), size = Size(37f, 4f))
-                drawRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 2f - recoil, center.y + 2f), size = Size(37f, 4f))
-                drawRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 2f - recoil, center.y + 6.5f), size = Size(36f, 3.5f))
-                // Golden barrel clamps
-                drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x + 22f - recoil, center.y - 9f), size = Size(5f, 18f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x + 34f - recoil, center.y - 9f), size = Size(4f, 18f), cornerRadius = CornerRadius(2f, 2f))
-                // Golden ammo belt
+            }
+            2 -> {
+                // Level 2: Extended heavy twin barrels with perforated cooling jackets + front mantlet shield
+                // Dual side ammo boxes (olive green)
+                drawRoundRect(color = Color(0xFF166534), topLeft = Offset(center.x - 7f, center.y - 18f), size = Size(12f, 7f), cornerRadius = CornerRadius(2f, 2f))
+                drawRoundRect(color = Color(0xFF166534), topLeft = Offset(center.x - 7f, center.y + 11f), size = Size(12f, 7f), cornerRadius = CornerRadius(2f, 2f))
+                // Linked brass ammo feeds
                 for (b in 0..2) {
-                    drawRect(color = Color(0xFFFFD166), topLeft = Offset(center.x - 12f + b * 4f, center.y + 11f + b * 2f), size = Size(3f, 6f))
+                    drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 5f + b * 3f, center.y - 11f), size = Size(2f, 3.5f))
+                    drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 5f + b * 3f, center.y + 7.5f), size = Size(2f, 3.5f))
                 }
+
+                // Front curved gun shield / mantlet armor
+                drawRoundRect(
+                    color = Color(0xFF0F172A),
+                    topLeft = Offset(center.x - 4f, center.y - 14f),
+                    size = Size(9f, 28f),
+                    cornerRadius = CornerRadius(3f, 3f)
+                )
+                drawRoundRect(
+                    color = Color(0xFF475569),
+                    topLeft = Offset(center.x - 3f, center.y - 12.5f),
+                    size = Size(6f, 25f),
+                    cornerRadius = CornerRadius(2f, 2f)
+                )
+
+                // Heavy extended twin barrels (length 33px)
+                val barrelLength = 33f
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 3f - recoil, center.y - 8f), size = Size(barrelLength, 5.5f), cornerRadius = CornerRadius(2f, 2f))
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 3f - recoil, center.y + 2.5f), size = Size(barrelLength, 5.5f), cornerRadius = CornerRadius(2f, 2f))
+                // Highlights
+                drawRect(color = Color(0xFF64748B), topLeft = Offset(center.x + 5f - recoil, center.y - 7f), size = Size(barrelLength - 7f, 1.8f))
+                drawRect(color = Color(0xFF64748B), topLeft = Offset(center.x + 5f - recoil, center.y + 3.5f), size = Size(barrelLength - 7f, 1.8f))
+
+                // Perforated barrel cooling sleeve vents
+                for (h in 0..2) {
+                    drawCircle(color = Color(0xFF1E293B), radius = 1.4f, center = Offset(center.x + 12f + h * 6f - recoil, center.y - 5.2f))
+                    drawCircle(color = Color(0xFF1E293B), radius = 1.4f, center = Offset(center.x + 12f + h * 6f - recoil, center.y + 5.2f))
+                }
+
+                // Slotted muzzle brakes
+                drawRect(color = Color(0xFFCBD5E1), topLeft = Offset(center.x + barrelLength - 1f - recoil, center.y - 9f), size = Size(5f, 7.5f))
+                drawRect(color = Color(0xFFCBD5E1), topLeft = Offset(center.x + barrelLength - 1f - recoil, center.y + 1.5f), size = Size(5f, 7.5f))
+
+                // Receiver body
+                drawRoundRect(color = Color(0xFF1E293B), topLeft = Offset(center.x - 13f, center.y - 11f), size = Size(18f, 22f), cornerRadius = CornerRadius(4f, 4f))
+                drawRoundRect(color = Color(0xFF334155), topLeft = Offset(center.x - 11f, center.y - 9f), size = Size(14f, 18f), cornerRadius = CornerRadius(3f, 3f))
+            }
+            else -> {
+                // Level 3: Quad-barrel Gatling Vulcan Rotary Turret
+                // Dual high-capacity ammo drums
+                drawCircle(color = Color(0xFF0F172A), radius = 7f, center = Offset(center.x - 4f, center.y - 16f))
+                drawCircle(color = Color(0xFF166534), radius = 5.5f, center = Offset(center.x - 4f, center.y - 16f))
+                drawCircle(color = Color(0xFF0F172A), radius = 7f, center = Offset(center.x - 4f, center.y + 16f))
+                drawCircle(color = Color(0xFF166534), radius = 5.5f, center = Offset(center.x - 4f, center.y + 16f))
+
+                // Flexible linked brass ammo chute entering the receiver
+                for (b in 0..3) {
+                    drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 9f + b * 3f, center.y - 12f + b * 1f), size = Size(2.2f, 4f))
+                    drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 9f + b * 3f, center.y + 8f - b * 1f), size = Size(2.2f, 4f))
+                }
+
+                // Rotary barrel cluster (4 heavy steel barrels)
+                val barrelLength = 37f
+                drawRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 3f - recoil, center.y - 8f), size = Size(barrelLength, 3.5f))
+                drawRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 3f - recoil, center.y - 3f), size = Size(barrelLength + 1f, 3.8f))
+                drawRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 3f - recoil, center.y + 2f), size = Size(barrelLength + 1f, 3.8f))
+                drawRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 3f - recoil, center.y + 6.5f), size = Size(barrelLength, 3.5f))
+
+                // Steel barrel highlights
+                drawRect(color = Color(0xFF64748B), topLeft = Offset(center.x + 5f - recoil, center.y - 2f), size = Size(barrelLength - 8f, 1.5f))
+                drawRect(color = Color(0xFF64748B), topLeft = Offset(center.x + 5f - recoil, center.y + 3f), size = Size(barrelLength - 8f, 1.5f))
+
+                // Golden/brass barrel retaining brackets/clamps
+                drawRoundRect(color = Color(0xFFD97706), topLeft = Offset(center.x + 20f - recoil, center.y - 9.5f), size = Size(4.5f, 19f), cornerRadius = CornerRadius(1.5f, 1.5f))
+                drawRoundRect(color = Color(0xFFD97706), topLeft = Offset(center.x + 34f - recoil, center.y - 9.5f), size = Size(4f, 19f), cornerRadius = CornerRadius(1.5f, 1.5f))
+
+                // Heavy angular armored receiver
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 14f, center.y - 12f), size = Size(20f, 24f), cornerRadius = CornerRadius(4f, 4f))
+                drawRoundRect(color = Color(0xFF334155), topLeft = Offset(center.x - 12f, center.y - 10f), size = Size(16f, 20f), cornerRadius = CornerRadius(3f, 3f))
             }
         }
 
-        // Turret Center Dome
-        drawCircle(color = Color(0xFF0284C7), radius = 13f, center = center)
-        drawCircle(color = Color(0xFF38BDF8), radius = 9f, center = Offset(center.x - 2f, center.y - 2f))
-        drawCircle(color = Color(0xFFFFFFFF), radius = 3.5f, center = Offset(center.x - 3f, center.y - 3f))
+        // Turret gunner cupola / center optics dome with glint
+        drawCircle(color = Color(0xFF0F172A), radius = 12f, center = center)
+        drawCircle(color = Color(0xFF334155), radius = 10f, center = center)
+        drawCircle(color = Color(0xFF475569), radius = 7f, center = Offset(center.x - 1.5f, center.y - 1.5f))
+        drawCircle(color = Color(0xFFFFFFFF), radius = 2.5f, center = Offset(center.x - 3f, center.y - 3f))
 
-        // Recoil Muzzle Flash (Vibrant cartoon starburst on firing)
+        // Muzzle Flash on Firing: Sharp cartoon 8-point golden starburst + ejecting shell casing
         if (tower.isFiring) {
-            val muzzleTipX = center.x + (if (tower.spec.level == 1) 28f else if (tower.spec.level == 2) 35f else 38f) - recoil
-            drawCircle(color = Color(0xFFFFD166), radius = 10f, center = Offset(muzzleTipX + 4f, center.y))
-            drawCircle(color = Color(0xFFFFFFFF), radius = 5f, center = Offset(muzzleTipX + 4f, center.y))
-            drawLine(Color(0xFFFFE066), Offset(muzzleTipX - 2f, center.y), Offset(muzzleTipX + 16f, center.y), strokeWidth = 3f, cap = StrokeCap.Round)
-            drawLine(Color(0xFFFFE066), Offset(muzzleTipX + 4f, center.y - 10f), Offset(muzzleTipX + 4f, center.y + 10f), strokeWidth = 3f, cap = StrokeCap.Round)
+            val tipX = center.x + (if (tower.spec.level == 1) 28f else if (tower.spec.level == 2) 35f else 39f) - recoil
+            // Ejecting brass shell casing to the side
+            val casingX = center.x + 2f
+            val casingY = center.y - 12f - (tower.recoilFraction * 6f)
+            drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(casingX, casingY), size = Size(4f, 2.5f), cornerRadius = CornerRadius(0.8f, 0.8f))
+
+            // Starburst flash at muzzle tip
+            drawCircle(color = Color(0xFFFFD166), radius = 11f, center = Offset(tipX + 3f, center.y))
+            drawCircle(color = Color(0xFFFFFFFF), radius = 5.5f, center = Offset(tipX + 3f, center.y))
+            // 4 Spikes
+            drawLine(Color(0xFFFEF08A), Offset(tipX - 4f, center.y), Offset(tipX + 16f, center.y), strokeWidth = 3f, cap = StrokeCap.Round)
+            drawLine(Color(0xFFFEF08A), Offset(tipX + 3f, center.y - 10f), Offset(tipX + 3f, center.y + 10f), strokeWidth = 3f, cap = StrokeCap.Round)
+            // Diagonal spikes
+            drawLine(Color(0xFFF59E0B), Offset(tipX - 2f, center.y - 6f), Offset(tipX + 8f, center.y + 6f), strokeWidth = 2f, cap = StrokeCap.Round)
+            drawLine(Color(0xFFF59E0B), Offset(tipX - 2f, center.y + 6f), Offset(tipX + 8f, center.y - 6f), strokeWidth = 2f, cap = StrokeCap.Round)
         }
     }
 }
@@ -1202,106 +1284,158 @@ private fun DrawScope.drawMachineGunTower(center: Offset, tower: Tower) {
 private fun DrawScope.drawCannonTower(center: Offset, tower: Tower) {
     val baseR = tower.spec.size * 0.48f
 
-    // Soft drop shadow
-    drawCircle(
-        color = Color(0x50000000),
-        radius = baseR * 1.05f,
-        center = Offset(center.x + 4f, center.y + 6f)
+    // 1. Soft ground drop shadow underneath
+    drawOval(
+        color = Color(0x55000000),
+        topLeft = Offset(center.x - baseR * 1.1f + 5f, center.y - baseR * 0.8f + 8f),
+        size = Size(baseR * 2.2f, baseR * 1.7f)
     )
 
-    // Rugged chiseled granite foundation
-    drawCircle(color = Color(0xFF1E293B), radius = baseR, center = center)
-    drawCircle(color = Color(0xFF334155), radius = baseR * 0.90f, center = center)
-    drawCircle(color = Color(0xFF475569), radius = baseR * 0.75f, center = center)
+    // 2. Heavy fortified octagonal stone and riveted iron foundation
+    drawCircle(color = Color(0xFF0F172A), radius = baseR, center = center)
+    drawCircle(color = Color(0xFF1E293B), radius = baseR - 2.5f, center = center)
+    drawCircle(color = Color(0xFF334155), radius = baseR * 0.86f, center = center)
 
-    // Corner bolted iron brackets
+    // 4 Corner heavy iron bracket plates with central bolts
     for (i in 0..3) {
-        val ang = (i * Math.PI / 2.0).toFloat()
-        val bx = center.x + cos(ang) * (baseR * 0.78f)
-        val by = center.y + sin(ang) * (baseR * 0.78f)
-        drawRoundRect(color = Color(0xFF64748B), topLeft = Offset(bx - 3.5f, by - 3.5f), size = Size(7f, 7f), cornerRadius = CornerRadius(2f, 2f))
-        drawCircle(color = Color(0xFF0F172A), radius = 1.5f, center = Offset(bx, by))
+        val ang = (i * Math.PI / 2.0 + Math.PI / 4.0).toFloat()
+        val bx = center.x + cos(ang) * (baseR * 0.80f)
+        val by = center.y + sin(ang) * (baseR * 0.80f)
+        drawRoundRect(
+            color = Color(0xFF0F172A),
+            topLeft = Offset(bx - 4.5f, by - 4.5f),
+            size = Size(9f, 9f),
+            cornerRadius = CornerRadius(2.5f, 2.5f)
+        )
+        drawRoundRect(
+            color = Color(0xFF64748B),
+            topLeft = Offset(bx - 3.5f, by - 3.5f),
+            size = Size(7f, 7f),
+            cornerRadius = CornerRadius(2f, 2f)
+        )
+        drawCircle(color = Color(0xFF0F172A), radius = 1.8f, center = Offset(bx, by))
+        drawCircle(color = Color(0xFFE2E8F0), radius = 1f, center = Offset(bx - 0.5f, by - 0.5f))
     }
 
-    // Rotating Turret Top & Barrels
+    // 3. Rotating Turret Mechanism & Cannon Assembly
     rotate(degrees = tower.rotationAngle, pivot = center) {
-        // Mechanical swivel turntable
-        drawCircle(color = Color(0xFF0F172A), radius = 17f, center = center)
-        drawCircle(color = Color(0xFF475569), radius = 15f, center = center)
+        // Heavy mechanical swivel turntable
+        drawCircle(color = Color(0xFF0F172A), radius = 19f, center = center)
+        drawCircle(color = Color(0xFF475569), radius = 16.5f, center = center)
+        drawCircle(color = Color(0xFF1E293B), radius = 16.5f, center = center, style = Stroke(width = 2f))
 
-        // Heavy trunnion side brackets
-        drawRoundRect(color = Color(0xFF1E293B), topLeft = Offset(center.x - 10f, center.y - 15f), size = Size(13f, 6f), cornerRadius = CornerRadius(2f, 2f))
-        drawRoundRect(color = Color(0xFF1E293B), topLeft = Offset(center.x - 10f, center.y + 9f), size = Size(13f, 6f), cornerRadius = CornerRadius(2f, 2f))
-        drawCircle(color = Color(0xFFCBD5E1), radius = 2.5f, center = Offset(center.x - 3f, center.y - 12f))
-        drawCircle(color = Color(0xFFCBD5E1), radius = 2.5f, center = Offset(center.x - 3f, center.y + 12f))
+        // Heavy trunnion side brackets (where the cannon pivots)
+        drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 11f, center.y - 17f), size = Size(14f, 7f), cornerRadius = CornerRadius(2.5f, 2.5f))
+        drawRoundRect(color = Color(0xFF334155), topLeft = Offset(center.x - 10f, center.y - 16f), size = Size(12f, 5f), cornerRadius = CornerRadius(2f, 2f))
+        drawCircle(color = Color(0xFFCBD5E1), radius = 2.5f, center = Offset(center.x - 4f, center.y - 13.5f))
 
-        val recoil = tower.recoilFraction * 9f
+        drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 11f, center.y + 10f), size = Size(14f, 7f), cornerRadius = CornerRadius(2.5f, 2.5f))
+        drawRoundRect(color = Color(0xFF334155), topLeft = Offset(center.x - 10f, center.y + 11f), size = Size(12f, 5f), cornerRadius = CornerRadius(2f, 2f))
+        drawCircle(color = Color(0xFFCBD5E1), radius = 2.5f, center = Offset(center.x - 4f, center.y + 13.5f))
+
+        // Recoil displacement (substantial backward pushback!)
+        val recoil = tower.recoilFraction * 12f
 
         when (tower.spec.level) {
             1 -> {
-                // Level 1: Classic heavy mortar barrel
-                drawRoundRect(
-                    color = Color(0xFF1E293B),
-                    topLeft = Offset(center.x - 2f - recoil, center.y - 9f),
-                    size = Size(32f, 18f),
-                    cornerRadius = CornerRadius(3f, 3f)
-                )
-                // Specular highlight
-                drawRect(color = Color(0xFF475569), topLeft = Offset(center.x - 2f - recoil, center.y - 6f), size = Size(28f, 3f))
-                // Brass breech ring
-                drawRoundRect(color = Color(0xFFD97706), topLeft = Offset(center.x + 8f - recoil, center.y - 10f), size = Size(4f, 20f), cornerRadius = CornerRadius(2f, 2f))
-                // Flared muzzle lip
-                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 27f - recoil, center.y - 11f), size = Size(7f, 22f), cornerRadius = CornerRadius(3f, 3f))
-                drawRoundRect(color = Color(0xFFE2E8F0), topLeft = Offset(center.x + 27f - recoil, center.y - 11f), size = Size(7f, 22f), cornerRadius = CornerRadius(3f, 3f), style = Stroke(width = 1.5f))
-            }
-            2 -> {
-                // Level 2: Extended Siege Howitzer with hydraulic pistons
-                drawRoundRect(
-                    color = Color(0xFF1E293B),
-                    topLeft = Offset(center.x - 4f - recoil, center.y - 10f),
-                    size = Size(39f, 20f),
-                    cornerRadius = CornerRadius(4f, 4f)
-                )
-                drawRect(color = Color(0xFF475569), topLeft = Offset(center.x - 4f - recoil, center.y - 7f), size = Size(36f, 3.5f))
-                // Top & bottom hydraulic recoil pistons
-                drawRoundRect(color = Color(0xFF64748B), topLeft = Offset(center.x - 2f - recoil, center.y - 13f), size = Size(18f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFF64748B), topLeft = Offset(center.x - 2f - recoil, center.y + 9f), size = Size(18f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                // Double reinforced blast collar
-                drawRoundRect(color = Color(0xFFCBD5E1), topLeft = Offset(center.x + 20f - recoil, center.y - 11.5f), size = Size(5f, 23f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 33f - recoil, center.y - 12f), size = Size(8f, 24f), cornerRadius = CornerRadius(3f, 3f))
-            }
-            else -> {
-                // Level 3: Devastator Mortar with glowing thermal vents
+                // Level 1: Heavy Siege Mortar Barrel
+                // Recoil cylinder atop breech
+                drawRoundRect(color = Color(0xFF334155), topLeft = Offset(center.x - 8f, center.y - 3f), size = Size(18f, 6f), cornerRadius = CornerRadius(2f, 2f))
+                drawRect(color = Color(0xFF94A3B8), topLeft = Offset(center.x - 6f - recoil * 0.5f, center.y - 1.5f), size = Size(12f, 3f))
+
+                // Heavy tapered barrel body (thick cast iron)
                 drawRoundRect(
                     color = Color(0xFF0F172A),
-                    topLeft = Offset(center.x - 6f - recoil, center.y - 12f),
-                    size = Size(44f, 24f),
-                    cornerRadius = CornerRadius(4f, 4f)
+                    topLeft = Offset(center.x - 2f - recoil, center.y - 9.5f),
+                    size = Size(33f, 19f),
+                    cornerRadius = CornerRadius(3.5f, 3.5f)
                 )
-                // Molten thermal exhaust vents
-                for (v in 0..2) {
-                    drawRect(color = Color(0xFFF97316), topLeft = Offset(center.x + 6f + v * 8f - recoil, center.y - 4f), size = Size(5f, 8f))
+                drawRoundRect(
+                    color = Color(0xFF1E293B),
+                    topLeft = Offset(center.x - 1f - recoil, center.y - 8f),
+                    size = Size(30f, 16f),
+                    cornerRadius = CornerRadius(2.5f, 2.5f)
+                )
+                // Top cylindrical specular cartoon highlight
+                drawRect(color = Color(0xFF475569), topLeft = Offset(center.x - 1f - recoil, center.y - 6f), size = Size(27f, 3f))
+                drawRect(color = Color(0xFF64748B), topLeft = Offset(center.x - 1f - recoil, center.y - 5f), size = Size(24f, 1.2f))
+
+                // Brass breech reinforcement band
+                drawRoundRect(color = Color(0xFFD97706), topLeft = Offset(center.x + 8f - recoil, center.y - 10.5f), size = Size(4.5f, 21f), cornerRadius = CornerRadius(2f, 2f))
+
+                // Flared cast-iron muzzle collar & dark bore opening
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 28f - recoil, center.y - 11.5f), size = Size(7.5f, 23f), cornerRadius = CornerRadius(3.5f, 3.5f))
+                drawRoundRect(color = Color(0xFF475569), topLeft = Offset(center.x + 29f - recoil, center.y - 10f), size = Size(4.5f, 20f), cornerRadius = CornerRadius(2.5f, 2.5f))
+                drawOval(color = Color(0xFF0F172A), topLeft = Offset(center.x + 33f - recoil, center.y - 8f), size = Size(2.5f, 16f))
+            }
+            2 -> {
+                // Level 2: Extended Siege Howitzer with dual hydraulic recoil damping cylinders
+                // Upper & lower hydraulic damping cylinders with sliding piston rods
+                val pistonSlide = recoil * 0.7f
+                // Top cylinder
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 4f, center.y - 14f), size = Size(18f, 5f), cornerRadius = CornerRadius(2f, 2f))
+                drawRoundRect(color = Color(0xFF475569), topLeft = Offset(center.x - 3f, center.y - 13f), size = Size(16f, 3f), cornerRadius = CornerRadius(1.5f, 1.5f))
+                drawRect(color = Color(0xFFE2E8F0), topLeft = Offset(center.x + 8f - pistonSlide, center.y - 12.5f), size = Size(10f, 2f))
+
+                // Bottom cylinder
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 4f, center.y + 9f), size = Size(18f, 5f), cornerRadius = CornerRadius(2f, 2f))
+                drawRoundRect(color = Color(0xFF475569), topLeft = Offset(center.x - 3f, center.y + 10f), size = Size(16f, 3f), cornerRadius = CornerRadius(1.5f, 1.5f))
+                drawRect(color = Color(0xFFE2E8F0), topLeft = Offset(center.x + 8f - pistonSlide, center.y + 10.5f), size = Size(10f, 2f))
+
+                // Extended heavy barrel (length 41px)
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 4f - recoil, center.y - 10.5f), size = Size(41f, 21f), cornerRadius = CornerRadius(4f, 4f))
+                drawRoundRect(color = Color(0xFF1E293B), topLeft = Offset(center.x - 3f - recoil, center.y - 9f), size = Size(38f, 18f), cornerRadius = CornerRadius(3f, 3f))
+                drawRect(color = Color(0xFF475569), topLeft = Offset(center.x - 3f - recoil, center.y - 7f), size = Size(35f, 3.5f))
+                drawRect(color = Color(0xFF64748B), topLeft = Offset(center.x - 3f - recoil, center.y - 6f), size = Size(31f, 1.5f))
+
+                // Steel reinforcement collars
+                drawRoundRect(color = Color(0xFF64748B), topLeft = Offset(center.x + 14f - recoil, center.y - 11.5f), size = Size(4.5f, 23f), cornerRadius = CornerRadius(2f, 2f))
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 33f - recoil, center.y - 12.5f), size = Size(8.5f, 25f), cornerRadius = CornerRadius(3.5f, 3.5f))
+                drawRoundRect(color = Color(0xFFCBD5E1), topLeft = Offset(center.x + 34f - recoil, center.y - 11f), size = Size(5.5f, 22f), cornerRadius = CornerRadius(2.5f, 2.5f))
+            }
+            else -> {
+                // Level 3: Devastator Siege Bombard with heavy angled side blast shields & colossal rifled bore
+                // Angled heavy steel side blast shields
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 10f, center.y - 19f), size = Size(13f, 38f), cornerRadius = CornerRadius(4f, 4f))
+                drawRoundRect(color = Color(0xFF334155), topLeft = Offset(center.x - 9f, center.y - 17.5f), size = Size(10f, 35f), cornerRadius = CornerRadius(3f, 3f))
+                drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 9f, center.y - 17.5f), size = Size(10f, 35f), cornerRadius = CornerRadius(3f, 3f), style = Stroke(width = 1.5f))
+
+                // Massive bombard barrel (length 46px)
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 6f - recoil, center.y - 12.5f), size = Size(46f, 25f), cornerRadius = CornerRadius(4.5f, 4.5f))
+                drawRoundRect(color = Color(0xFF1E293B), topLeft = Offset(center.x - 5f - recoil, center.y - 11f), size = Size(43f, 22f), cornerRadius = CornerRadius(3.5f, 3.5f))
+                drawRect(color = Color(0xFF475569), topLeft = Offset(center.x - 4f - recoil, center.y - 8f), size = Size(40f, 4f))
+                drawRect(color = Color(0xFF94A3B8), topLeft = Offset(center.x - 4f - recoil, center.y - 7f), size = Size(35f, 1.8f))
+
+                // Triple heavy reinforcement ribs
+                for (r in 0..2) {
+                    drawRoundRect(color = Color(0xFFD97706), topLeft = Offset(center.x + 8f + r * 10f - recoil, center.y - 13.5f), size = Size(4f, 27f), cornerRadius = CornerRadius(1.8f, 1.8f))
                 }
-                // Angled blast shield deflectors
-                drawRoundRect(color = Color(0xFFDC2626), topLeft = Offset(center.x - 8f, center.y - 18f), size = Size(12f, 36f), cornerRadius = CornerRadius(4f, 4f))
-                drawRoundRect(color = Color(0xFFFFD166), topLeft = Offset(center.x - 8f, center.y - 18f), size = Size(12f, 36f), cornerRadius = CornerRadius(4f, 4f), style = Stroke(width = 2f))
-                // Spiked colossal bore
-                drawRoundRect(color = Color(0xFF1E293B), topLeft = Offset(center.x + 35f - recoil, center.y - 14f), size = Size(10f, 28f), cornerRadius = CornerRadius(4f, 4f))
-                drawRoundRect(color = Color(0xFFF97316), topLeft = Offset(center.x + 35f - recoil, center.y - 14f), size = Size(10f, 28f), cornerRadius = CornerRadius(4f, 4f), style = Stroke(width = 2f))
+
+                // Colossal spiked muzzle ring
+                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x + 37f - recoil, center.y - 15f), size = Size(10f, 30f), cornerRadius = CornerRadius(4f, 4f))
+                drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x + 38f - recoil, center.y - 14f), size = Size(7f, 28f), cornerRadius = CornerRadius(3f, 3f), style = Stroke(width = 2f))
             }
         }
 
-        // Turret Breech Cap
-        drawCircle(color = Color(0xFFDC2626), radius = 10f, center = Offset(center.x - 4f, center.y))
-        drawCircle(color = Color(0xFFFFFFFF), radius = 3.5f, center = Offset(center.x - 6f, center.y - 2f))
+        // Breech block counterweight dome
+        drawCircle(color = Color(0xFF0F172A), radius = 11f, center = Offset(center.x - 5f, center.y))
+        drawCircle(color = Color(0xFF334155), radius = 9f, center = Offset(center.x - 5f, center.y))
+        drawCircle(color = Color(0xFF94A3B8), radius = 3f, center = Offset(center.x - 7f, center.y - 2f))
 
-        // Cannon Firing Effect: Massive Fireball Puff & Smoke
+        // Massive Artillery Firing Animation: Expanding Fireball Blast & Billowing Smoke
         if (tower.isFiring) {
-            val muzzleTipX = center.x + (if (tower.spec.level == 1) 34f else if (tower.spec.level == 2) 41f else 45f) - recoil
-            drawCircle(color = Color(0xFF64748B).copy(alpha = 0.7f), radius = 16f, center = Offset(muzzleTipX + 8f, center.y))
-            drawCircle(color = Color(0xFFEA580C), radius = 13f, center = Offset(muzzleTipX + 5f, center.y))
-            drawCircle(color = Color(0xFFFACC15), radius = 8f, center = Offset(muzzleTipX + 4f, center.y))
-            drawCircle(color = Color(0xFFFFFFFF), radius = 4f, center = Offset(muzzleTipX + 3f, center.y))
+            val tipX = center.x + (if (tower.spec.level == 1) 34f else if (tower.spec.level == 2) 42f else 47f) - recoil
+            // Expanding grey smoke puffs
+            drawCircle(color = Color(0x9964748B), radius = 18f, center = Offset(tipX + 10f, center.y - 4f))
+            drawCircle(color = Color(0x9994A3B8), radius = 15f, center = Offset(tipX + 12f, center.y + 5f))
+
+            // Fire core layers
+            drawCircle(color = Color(0xFFEA580C), radius = 14f, center = Offset(tipX + 6f, center.y))
+            drawCircle(color = Color(0xFFFACC15), radius = 9f, center = Offset(tipX + 5f, center.y))
+            drawCircle(color = Color(0xFFFFFFFF), radius = 4.5f, center = Offset(tipX + 4f, center.y))
+            // Lateral blast flames
+            drawLine(Color(0xFFF59E0B), Offset(tipX + 2f, center.y - 13f), Offset(tipX + 12f, center.y - 5f), strokeWidth = 3.5f, cap = StrokeCap.Round)
+            drawLine(Color(0xFFF59E0B), Offset(tipX + 2f, center.y + 13f), Offset(tipX + 12f, center.y + 5f), strokeWidth = 3.5f, cap = StrokeCap.Round)
         }
     }
 }
@@ -1309,95 +1443,144 @@ private fun DrawScope.drawCannonTower(center: Offset, tower: Tower) {
 private fun DrawScope.drawRapidFireTower(center: Offset, tower: Tower, time: Float) {
     val baseR = tower.spec.size * 0.48f
 
-    // Soft drop shadow
-    drawCircle(
-        color = Color(0x50000000),
-        radius = baseR * 1.05f,
-        center = Offset(center.x + 3f, center.y + 5f)
+    // 1. Ground drop shadow
+    drawOval(
+        color = Color(0x45000000),
+        topLeft = Offset(center.x - baseR * 1.05f + 4f, center.y - baseR * 0.75f + 6f),
+        size = Size(baseR * 2.1f, baseR * 1.6f)
     )
 
-    // High-tech obsidian base with glowing runic energy nodes
-    drawCircle(color = Color(0xFF1E1B4B), radius = baseR, center = center)
-    drawCircle(color = Color(0xFF312E81), radius = baseR * 0.88f, center = center)
-    drawCircle(color = Color(0xFF6366F1), radius = baseR * 0.88f, center = center, style = Stroke(width = 2f))
+    // 2. High-precision mechanical gunmetal base with amber hazard accents
+    drawCircle(color = Color(0xFF18181B), radius = baseR, center = center)
+    drawCircle(color = Color(0xFF27272A), radius = baseR - 2.5f, center = center)
+    drawCircle(color = Color(0xFF3F3F46), radius = baseR * 0.85f, center = center)
 
-    for (i in 0..5) {
-        val ang = (i * Math.PI / 3.0).toFloat()
-        val bx = center.x + cos(ang) * (baseR * 0.74f)
-        val by = center.y + sin(ang) * (baseR * 0.74f)
-        drawCircle(color = Color(0xFF38BDF8), radius = 2.2f, center = Offset(bx, by))
+    // Precision bearing ring
+    drawCircle(
+        color = Color(0xFF71717A),
+        radius = baseR * 0.82f,
+        center = center,
+        style = Stroke(width = 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 4f)))
+    )
+
+    // 4 Corner hazard warning accents (amber/black striped corners)
+    for (i in 0..3) {
+        val ang = (i * Math.PI / 2.0).toFloat()
+        val bx = center.x + cos(ang) * (baseR * 0.82f)
+        val by = center.y + sin(ang) * (baseR * 0.82f)
+        drawCircle(color = Color(0xFF09090B), radius = 3.5f, center = Offset(bx, by))
+        drawCircle(color = Color(0xFFF59E0B), radius = 2.2f, center = Offset(bx - 0.5f, by - 0.5f))
     }
 
-    // Rotating Turret Top & Barrels
+    // 3. Rotating Mechanical Turret Housing & Autocannon Assembly
     rotate(degrees = tower.rotationAngle, pivot = center) {
-        // Swivel chassis
-        drawCircle(color = Color(0xFF4C1D95), radius = 16f, center = center)
-        drawCircle(color = Color(0xFFA855F7), radius = 15f, center = center, style = Stroke(width = 2f))
+        // High-speed traverse collar
+        drawCircle(color = Color(0xFF09090B), radius = 17f, center = center)
+        drawCircle(color = Color(0xFF27272A), radius = 15f, center = center)
+        drawCircle(color = Color(0xFFF59E0B), radius = 14.5f, center = center, style = Stroke(width = 1.5f))
 
-        // Central Pulsing Energy Core
-        val pulse = (sin(time * 8f) * 0.15f + 0.85f)
-        drawCircle(color = Color(0x66A855F7), radius = 12f * pulse, center = center)
-        drawCircle(color = Color(0xFFC084FC), radius = 8f * pulse, center = center)
-        drawCircle(color = Color(0xFFFFFFFF), radius = 3.5f, center = center)
+        // Snappy rapid vibration shudder
+        val recoil = (tower.recoilFraction * 4.5f)
 
         when (tower.spec.level) {
             1 -> {
-                // Level 1: Dual forward crystal prongs with spark
-                drawRoundRect(
-                    color = Color(0xFF6B21A8),
-                    topLeft = Offset(center.x + 2f, center.y - 9f),
-                    size = Size(26f, 4f),
-                    cornerRadius = CornerRadius(2f, 2f)
-                )
-                drawRoundRect(
-                    color = Color(0xFF6B21A8),
-                    topLeft = Offset(center.x + 2f, center.y + 5f),
-                    size = Size(26f, 4f),
-                    cornerRadius = CornerRadius(2f, 2f)
-                )
-                // Glowing cyan focus tips
-                drawCircle(color = Color(0xFF38BDF8), radius = 3.5f, center = Offset(center.x + 28f, center.y - 7f))
-                drawCircle(color = Color(0xFF38BDF8), radius = 3.5f, center = Offset(center.x + 28f, center.y + 7f))
-                drawLine(Color(0xFFE0E7FF), Offset(center.x + 28f, center.y - 7f), Offset(center.x + 28f, center.y + 7f), strokeWidth = 1.5f)
+                // Level 1: Quad-barrel light autocannon cluster (2x2 squared steel barrels)
+                // Left & right ammo chutes
+                drawRoundRect(color = Color(0xFF18181B), topLeft = Offset(center.x - 6f, center.y - 16f), size = Size(11f, 6f), cornerRadius = CornerRadius(2f, 2f))
+                drawRoundRect(color = Color(0xFF18181B), topLeft = Offset(center.x - 6f, center.y + 10f), size = Size(11f, 6f), cornerRadius = CornerRadius(2f, 2f))
+                drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 5f, center.y - 15f), size = Size(9f, 1.5f))
+                drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 5f, center.y + 13.5f), size = Size(9f, 1.5f))
+
+                // 4 parallel autocannon barrels (2 upper, 2 lower)
+                val barrelLength = 26f
+                drawRect(color = Color(0xFF09090B), topLeft = Offset(center.x + 2f - recoil, center.y - 7.5f), size = Size(barrelLength, 3f))
+                drawRect(color = Color(0xFF27272A), topLeft = Offset(center.x + 2f - recoil, center.y - 3.5f), size = Size(barrelLength, 3f))
+                drawRect(color = Color(0xFF27272A), topLeft = Offset(center.x + 2f - recoil, center.y + 0.5f), size = Size(barrelLength, 3f))
+                drawRect(color = Color(0xFF09090B), topLeft = Offset(center.x + 2f - recoil, center.y + 4.5f), size = Size(barrelLength, 3f))
+
+                // Square muzzle clamp & flash hider
+                drawRoundRect(color = Color(0xFF71717A), topLeft = Offset(center.x + barrelLength - 2f - recoil, center.y - 8.5f), size = Size(4.5f, 17f), cornerRadius = CornerRadius(1.5f, 1.5f))
+
+                // Low-profile angular housing
+                drawRoundRect(color = Color(0xFF18181B), topLeft = Offset(center.x - 11f, center.y - 9.5f), size = Size(16f, 19f), cornerRadius = CornerRadius(3f, 3f))
+                drawRoundRect(color = Color(0xFF27272A), topLeft = Offset(center.x - 9f, center.y - 7.5f), size = Size(12f, 15f), cornerRadius = CornerRadius(2f, 2f))
             }
             2 -> {
-                // Level 2: Triple plasma prongs & floating capacitors
-                drawRoundRect(color = Color(0xFF581C87), topLeft = Offset(center.x + 2f, center.y - 10f), size = Size(28f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFF581C87), topLeft = Offset(center.x + 5f, center.y - 2f), size = Size(32f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFF581C87), topLeft = Offset(center.x + 2f, center.y + 6f), size = Size(28f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                // Cyan focus lenses
-                drawCircle(color = Color(0xFF22D3EE), radius = 3.5f, center = Offset(center.x + 30f, center.y - 8f))
-                drawCircle(color = Color(0xFF38BDF8), radius = 4.5f, center = Offset(center.x + 37f, center.y))
-                drawCircle(color = Color(0xFF22D3EE), radius = 3.5f, center = Offset(center.x + 30f, center.y + 8f))
-                // Side capacitors
-                drawRoundRect(color = Color(0xFF0284C7), topLeft = Offset(center.x - 5f, center.y - 17f), size = Size(10f, 6f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFF0284C7), topLeft = Offset(center.x - 5f, center.y + 11f), size = Size(10f, 6f), cornerRadius = CornerRadius(2f, 2f))
+                // Level 2: 6-barrel micro-rotary gatling cluster with central spindle drive
+                // Side drum magazines (amber trimmed gunmetal drums)
+                drawCircle(color = Color(0xFF09090B), radius = 6.5f, center = Offset(center.x - 3f, center.y - 15.5f))
+                drawCircle(color = Color(0xFF3F3F46), radius = 5f, center = Offset(center.x - 3f, center.y - 15.5f))
+                drawCircle(color = Color(0xFFF59E0B), radius = 2.5f, center = Offset(center.x - 3f, center.y - 15.5f))
+
+                drawCircle(color = Color(0xFF09090B), radius = 6.5f, center = Offset(center.x - 3f, center.y + 15.5f))
+                drawCircle(color = Color(0xFF3F3F46), radius = 5f, center = Offset(center.x - 3f, center.y + 15.5f))
+                drawCircle(color = Color(0xFFF59E0B), radius = 2.5f, center = Offset(center.x - 3f, center.y + 15.5f))
+
+                // 6-barrel micro rotary cluster
+                val barrelLength = 32f
+                drawRect(color = Color(0xFF09090B), topLeft = Offset(center.x + 3f - recoil, center.y - 8f), size = Size(barrelLength, 2.5f))
+                drawRect(color = Color(0xFF27272A), topLeft = Offset(center.x + 3f - recoil, center.y - 5f), size = Size(barrelLength, 2.5f))
+                drawRect(color = Color(0xFF3F3F46), topLeft = Offset(center.x + 3f - recoil, center.y - 2f), size = Size(barrelLength, 2.5f))
+                drawRect(color = Color(0xFF3F3F46), topLeft = Offset(center.x + 3f - recoil, center.y + 1f), size = Size(barrelLength, 2.5f))
+                drawRect(color = Color(0xFF27272A), topLeft = Offset(center.x + 3f - recoil, center.y + 4f), size = Size(barrelLength, 2.5f))
+                drawRect(color = Color(0xFF09090B), topLeft = Offset(center.x + 3f - recoil, center.y + 7f), size = Size(barrelLength, 2.5f))
+
+                // Front spindle disk & retaining collar
+                drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x + 20f - recoil, center.y - 9f), size = Size(4f, 18f), cornerRadius = CornerRadius(1.5f, 1.5f))
+                drawRoundRect(color = Color(0xFF71717A), topLeft = Offset(center.x + barrelLength - 2f - recoil, center.y - 9.5f), size = Size(4.5f, 19f), cornerRadius = CornerRadius(1.5f, 1.5f))
+
+                // Housing with heat sink radiator fins
+                drawRoundRect(color = Color(0xFF18181B), topLeft = Offset(center.x - 12f, center.y - 11f), size = Size(18f, 22f), cornerRadius = CornerRadius(3.5f, 3.5f))
+                drawRoundRect(color = Color(0xFF27272A), topLeft = Offset(center.x - 10f, center.y - 9f), size = Size(14f, 18f), cornerRadius = CornerRadius(2.5f, 2.5f))
+                for (f in 0..2) {
+                    drawRect(color = Color(0xFF52525B), topLeft = Offset(center.x - 8f + f * 4f, center.y - 7f), size = Size(2f, 14f))
+                }
             }
             else -> {
-                // Level 3: Quad ornate gold & electric indigo focus spikes
-                drawRoundRect(color = Color(0xFF3B0764), topLeft = Offset(center.x + 2f, center.y - 12f), size = Size(32f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFF3B0764), topLeft = Offset(center.x + 6f, center.y - 5f), size = Size(36f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFF3B0764), topLeft = Offset(center.x + 6f, center.y + 1f), size = Size(36f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                drawRoundRect(color = Color(0xFF3B0764), topLeft = Offset(center.x + 2f, center.y + 8f), size = Size(32f, 4f), cornerRadius = CornerRadius(2f, 2f))
-                // Gold trim
-                drawRoundRect(color = Color(0xFFFFD166), topLeft = Offset(center.x + 22f, center.y - 13f), size = Size(4f, 26f), cornerRadius = CornerRadius(2f, 2f))
-                // Orbiting energy sparkles
-                for (o in 0..2) {
-                    val orbAng = time * 6f + o * (Math.PI * 2.0 / 3.0).toFloat()
-                    val ox = center.x + cos(orbAng) * 22f
-                    val oy = center.y + sin(orbAng) * 22f
-                    drawCircle(color = Color(0xFF67E8F9), radius = 3f, center = Offset(ox, oy))
-                    drawCircle(color = Color(0xFFFFFFFF), radius = 1.5f, center = Offset(ox, oy))
+                // Level 3: 8-barrel Heavy Rotary Storm Battery
+                // Dual high-capacity helical drum magazines
+                drawRoundRect(color = Color(0xFF09090B), topLeft = Offset(center.x - 8f, center.y - 19f), size = Size(15f, 8f), cornerRadius = CornerRadius(2.5f, 2.5f))
+                drawRoundRect(color = Color(0xFF3F3F46), topLeft = Offset(center.x - 7f, center.y - 18f), size = Size(13f, 6f), cornerRadius = CornerRadius(2f, 2f))
+                drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 7f, center.y - 15f), size = Size(13f, 1.5f))
+
+                drawRoundRect(color = Color(0xFF09090B), topLeft = Offset(center.x - 8f, center.y + 11f), size = Size(15f, 8f), cornerRadius = CornerRadius(2.5f, 2.5f))
+                drawRoundRect(color = Color(0xFF3F3F46), topLeft = Offset(center.x - 7f, center.y + 12f), size = Size(13f, 6f), cornerRadius = CornerRadius(2f, 2f))
+                drawRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 7f, center.y + 13.5f), size = Size(13f, 1.5f))
+
+                // 8-barrel storm battery assembly
+                val barrelLength = 36f
+                for (b in 0..7) {
+                    val byOffset = -10.5f + b * 3f
+                    val bColor = if (b == 0 || b == 7) Color(0xFF09090B) else if (b % 2 == 0) Color(0xFF27272A) else Color(0xFF3F3F46)
+                    drawRect(color = bColor, topLeft = Offset(center.x + 3f - recoil, center.y + byOffset), size = Size(barrelLength, 2.2f))
                 }
+
+                // Twin reinforced barrel clamps & flash compensators
+                drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x + 18f - recoil, center.y - 11.5f), size = Size(4.5f, 23f), cornerRadius = CornerRadius(1.5f, 1.5f))
+                drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x + 30f - recoil, center.y - 11.5f), size = Size(4.5f, 23f), cornerRadius = CornerRadius(1.5f, 1.5f))
+                drawRoundRect(color = Color(0xFFCBD5E1), topLeft = Offset(center.x + barrelLength - 1f - recoil, center.y - 12f), size = Size(4.5f, 24f), cornerRadius = CornerRadius(1.5f, 1.5f))
+
+                // Reinforced armored traverse housing
+                drawRoundRect(color = Color(0xFF09090B), topLeft = Offset(center.x - 14f, center.y - 13f), size = Size(20f, 26f), cornerRadius = CornerRadius(4f, 4f))
+                drawRoundRect(color = Color(0xFF27272A), topLeft = Offset(center.x - 12f, center.y - 11f), size = Size(16f, 22f), cornerRadius = CornerRadius(3f, 3f))
+                drawRoundRect(color = Color(0xFFF59E0B), topLeft = Offset(center.x - 12f, center.y - 11f), size = Size(16f, 22f), cornerRadius = CornerRadius(3f, 3f), style = Stroke(width = 1.5f))
             }
         }
 
-        // Firing Burst Effect
+        // Turret optics sensor dome with amber tracking ring
+        drawCircle(color = Color(0xFF09090B), radius = 11f, center = center)
+        drawCircle(color = Color(0xFF27272A), radius = 9f, center = center)
+        drawCircle(color = Color(0xFFF59E0B), radius = 6f, center = Offset(center.x - 1f, center.y - 1f))
+        drawCircle(color = Color(0xFFFFFFFF), radius = 2f, center = Offset(center.x - 2f, center.y - 2f))
+
+        // Firing Animation: Tight, snappy alternating muzzle micro-flash
         if (tower.isFiring) {
-            val tipX = center.x + (if (tower.spec.level == 1) 30f else 38f)
-            drawCircle(color = Color(0x88C084FC), radius = 13f, center = Offset(tipX, center.y))
-            drawCircle(color = Color(0xFF22D3EE), radius = 7f, center = Offset(tipX, center.y))
-            drawCircle(color = Color(0xFFFFFFFF), radius = 3.5f, center = Offset(tipX, center.y))
+            val tipX = center.x + (if (tower.spec.level == 1) 28f else if (tower.spec.level == 2) 34f else 38f) - recoil
+            val flashOffset = if ((time * 100).toInt() % 2 == 0) -3f else 3f
+            drawCircle(color = Color(0xFFFB923C), radius = 7f, center = Offset(tipX + 2f, center.y + flashOffset))
+            drawCircle(color = Color(0xFFFDE047), radius = 4f, center = Offset(tipX + 2f, center.y + flashOffset))
+            drawCircle(color = Color(0xFFFFFFFF), radius = 2f, center = Offset(tipX + 2f, center.y + flashOffset))
+            drawLine(Color(0xFFFEF08A), Offset(tipX - 1f, center.y + flashOffset), Offset(tipX + 9f, center.y + flashOffset), strokeWidth = 2f, cap = StrokeCap.Round)
         }
     }
 }
@@ -1407,220 +1590,69 @@ private fun DrawScope.drawEnemies(enemies: List<Enemy>, time: Float) {
         if (!enemy.isAlive || enemy.reachedBase) continue
 
         // Wobble walking animation
-        val wobbleY = sin(enemy.animWobbleTime) * 2.2f
+        val wobbleY = sin(enemy.animWobbleTime) * 1.5f
         val center = Offset(enemy.position.x, enemy.position.y + wobbleY)
 
-        // Drop shadow
+        // 1. Ground Drop Shadow (World-space coordinates)
+        val shadowRadius = enemy.spec.radius
+        val shadowWidth = if (enemy.spec.isBoss) shadowRadius * 2.3f else shadowRadius * 1.8f
+        val shadowHeight = if (enemy.spec.isBoss) shadowRadius * 1.2f else shadowRadius * 0.75f
+        val shadowYOffset = if (enemy.spec.isBoss) shadowRadius * 0.45f else shadowRadius * 0.40f
         drawOval(
-            color = Color(0x40000000),
-            topLeft = Offset(center.x - enemy.spec.radius * 0.85f, center.y + enemy.spec.radius * 0.45f),
-            size = Size(enemy.spec.radius * 1.7f, enemy.spec.radius * 0.75f)
+            color = Color(0x4D000000),
+            topLeft = Offset(center.x - shadowWidth / 2f, center.y + shadowYOffset - shadowHeight / 2f),
+            size = Size(shadowWidth, shadowHeight)
         )
 
-        when (enemy.spec.type) {
-            EnemyType.SCOUT -> {
-                // Cartoon flying bug/bat: flapping wings, warm amber body, glossy eyes, antennae
-                val wingAngle = sin(enemy.animWobbleTime * 2.5f) * 12f
-                // Translucent flapping wings
-                drawRoundRect(
-                    color = Color(0xFFFDE68A).copy(alpha = 0.85f),
-                    topLeft = Offset(center.x - 12f, center.y - 15f + wingAngle),
-                    size = Size(9f, 15f),
-                    cornerRadius = CornerRadius(4f, 4f)
-                )
-                drawRoundRect(
-                    color = Color(0xFFFDE68A).copy(alpha = 0.85f),
-                    topLeft = Offset(center.x - 12f, center.y + 1f - wingAngle),
-                    size = Size(9f, 15f),
-                    cornerRadius = CornerRadius(4f, 4f)
-                )
-                // Amber Body
-                drawOval(
-                    color = Color(0xFFF59E0B),
-                    topLeft = Offset(center.x - enemy.spec.radius, center.y - enemy.spec.radius * 0.75f),
-                    size = Size(enemy.spec.radius * 2f, enemy.spec.radius * 1.5f)
-                )
-                drawOval(
-                    color = Color(0xFFD97706),
-                    topLeft = Offset(center.x - enemy.spec.radius, center.y - enemy.spec.radius * 0.75f),
-                    size = Size(enemy.spec.radius * 2f, enemy.spec.radius * 1.5f),
-                    style = Stroke(width = 2f)
-                )
-                // Belly Stripes
-                drawLine(Color(0xFF78350F), Offset(center.x - 3f, center.y - 6f), Offset(center.x - 3f, center.y + 6f), strokeWidth = 2f)
-                drawLine(Color(0xFF78350F), Offset(center.x + 2f, center.y - 5f), Offset(center.x + 2f, center.y + 5f), strokeWidth = 2f)
-                // Large glossy cartoon eyes
-                drawCircle(Color.White, radius = 5.5f, center = Offset(center.x + 8f, center.y - 4f))
-                drawCircle(Color.White, radius = 5.5f, center = Offset(center.x + 8f, center.y + 4f))
-                drawCircle(Color(0xFF0F172A), radius = 3.2f, center = Offset(center.x + 9.5f, center.y - 4f))
-                drawCircle(Color(0xFF0F172A), radius = 3.2f, center = Offset(center.x + 9.5f, center.y + 4f))
-                drawCircle(Color.White, radius = 1.2f, center = Offset(center.x + 10f, center.y - 5f))
-                drawCircle(Color.White, radius = 1.2f, center = Offset(center.x + 10f, center.y + 3f))
-                // Antennae with golden tips
-                drawLine(Color(0xFF78350F), Offset(center.x + 6f, center.y - 6f), Offset(center.x + 14f, center.y - 11f), strokeWidth = 1.5f)
-                drawLine(Color(0xFF78350F), Offset(center.x + 6f, center.y + 6f), Offset(center.x + 14f, center.y + 11f), strokeWidth = 1.5f)
-                drawCircle(Color(0xFFFDE047), radius = 2f, center = Offset(center.x + 14f, center.y - 11f))
-                drawCircle(Color(0xFFFDE047), radius = 2f, center = Offset(center.x + 14f, center.y + 11f))
-            }
-            EnemyType.SOLDIER -> {
-                // Armored goblin/grunt: stout teal body, steel domed helmet with golden crest, fierce eyes, shield
-                drawCircle(color = Color(0xFF0D9488), radius = enemy.spec.radius, center = center)
-                drawCircle(color = Color(0xFF115E59), radius = enemy.spec.radius, center = center, style = Stroke(width = 2.5f))
-                // Helmet with golden crest
-                drawRoundRect(
-                    color = Color(0xFF475569),
-                    topLeft = Offset(center.x - enemy.spec.radius * 0.95f, center.y - enemy.spec.radius * 1.05f),
-                    size = Size(enemy.spec.radius * 1.9f, enemy.spec.radius * 1.15f),
-                    cornerRadius = CornerRadius(10f, 10f)
-                )
-                drawRoundRect(
-                    color = Color(0xFF1E293B),
-                    topLeft = Offset(center.x - enemy.spec.radius * 0.95f, center.y - enemy.spec.radius * 1.05f),
-                    size = Size(enemy.spec.radius * 1.9f, enemy.spec.radius * 1.15f),
-                    cornerRadius = CornerRadius(10f, 10f),
-                    style = Stroke(width = 2f)
-                )
-                // Golden helmet spike
-                drawLine(Color(0xFFFFD166), Offset(center.x, center.y - enemy.spec.radius * 1.05f), Offset(center.x, center.y - enemy.spec.radius * 1.45f), strokeWidth = 3f, cap = StrokeCap.Round)
-                // Visor rim
-                drawRect(color = Color(0xFF334155), topLeft = Offset(center.x - enemy.spec.radius * 0.9f, center.y - 2f), size = Size(enemy.spec.radius * 1.8f, 3.5f))
-                // Determined eyes
-                drawCircle(Color.White, radius = 4.5f, center = Offset(center.x + 4f, center.y + 4f))
-                drawCircle(Color.White, radius = 4.5f, center = Offset(center.x - 4f, center.y + 4f))
-                drawCircle(Color(0xFF0F172A), radius = 2.5f, center = Offset(center.x + 5f, center.y + 4f))
-                drawCircle(Color(0xFF0F172A), radius = 2.5f, center = Offset(center.x - 3f, center.y + 4f))
-                // Buckler shield on side
-                drawCircle(Color(0xFF92400E), radius = 6.5f, center = Offset(center.x - enemy.spec.radius + 2f, center.y + 2f))
-                drawCircle(Color(0xFFD97706), radius = 3.5f, center = Offset(center.x - enemy.spec.radius + 2f, center.y + 2f))
-            }
-            EnemyType.HEAVY -> {
-                // Hulking horned iron golem: wide trapezoidal body, curved horns, glowing eye slit
-                drawRoundRect(
-                    color = Color(0xFF991B1B),
-                    topLeft = Offset(center.x - enemy.spec.radius, center.y - enemy.spec.radius),
-                    size = Size(enemy.spec.radius * 2f, enemy.spec.radius * 2f),
-                    cornerRadius = CornerRadius(8f, 8f)
-                )
-                drawRoundRect(
-                    color = Color(0xFF450A0A),
-                    topLeft = Offset(center.x - enemy.spec.radius, center.y - enemy.spec.radius),
-                    size = Size(enemy.spec.radius * 2f, enemy.spec.radius * 2f),
-                    cornerRadius = CornerRadius(8f, 8f),
-                    style = Stroke(width = 3f)
-                )
-                // Massive curved iron horns
-                drawLine(Color(0xFFCBD5E1), Offset(center.x - enemy.spec.radius + 3f, center.y - enemy.spec.radius + 5f), Offset(center.x - enemy.spec.radius - 8f, center.y - enemy.spec.radius - 9f), strokeWidth = 5f, cap = StrokeCap.Round)
-                drawLine(Color(0xFFCBD5E1), Offset(center.x + enemy.spec.radius - 3f, center.y - enemy.spec.radius + 5f), Offset(center.x + enemy.spec.radius + 8f, center.y - enemy.spec.radius - 9f), strokeWidth = 5f, cap = StrokeCap.Round)
-                // Spiked shoulder plates
-                drawCircle(color = Color(0xFF334155), radius = 6f, center = Offset(center.x - enemy.spec.radius + 2f, center.y))
-                drawCircle(color = Color(0xFF334155), radius = 6f, center = Offset(center.x + enemy.spec.radius - 2f, center.y))
-                // Visor slit with glowing orange eye slit
-                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 12f, center.y - 7f), size = Size(24f, 7f), cornerRadius = CornerRadius(3f, 3f))
-                drawRect(color = Color(0xFFF97316), topLeft = Offset(center.x - 8f, center.y - 5f), size = Size(16f, 3f))
-                // Steel chest plate rivets
-                drawCircle(color = Color(0xFFE2E8F0), radius = 2f, center = Offset(center.x - 6f, center.y + 8f))
-                drawCircle(color = Color(0xFFE2E8F0), radius = 2f, center = Offset(center.x + 6f, center.y + 8f))
-            }
-            EnemyType.RUNNER -> {
-                // Electric cyan speedster: streamlined raptor body, swept-back crest, afterimages
-                drawCircle(color = Color(0x330284C7), radius = enemy.spec.radius * 0.7f, center = Offset(center.x - 12f, center.y))
-                drawCircle(color = Color(0x550284C7), radius = enemy.spec.radius * 0.85f, center = Offset(center.x - 6f, center.y))
-                // Streamlined aerodynamic body
-                drawOval(
-                    color = Color(0xFF0284C7),
-                    topLeft = Offset(center.x - enemy.spec.radius * 1.1f, center.y - enemy.spec.radius * 0.75f),
-                    size = Size(enemy.spec.radius * 2.2f, enemy.spec.radius * 1.5f)
-                )
-                drawOval(
-                    color = Color(0xFF0369A1),
-                    topLeft = Offset(center.x - enemy.spec.radius * 1.1f, center.y - enemy.spec.radius * 0.75f),
-                    size = Size(enemy.spec.radius * 2.2f, enemy.spec.radius * 1.5f),
-                    style = Stroke(width = 2.5f)
-                )
-                // Swept-back electric fins
-                drawLine(Color(0xFF38BDF8), Offset(center.x - 2f, center.y - 6f), Offset(center.x - 16f, center.y - 12f), strokeWidth = 3f, cap = StrokeCap.Round)
-                drawLine(Color(0xFF38BDF8), Offset(center.x - 2f, center.y + 6f), Offset(center.x - 16f, center.y + 12f), strokeWidth = 3f, cap = StrokeCap.Round)
-                // Sharp glowing electric eyes
-                drawRoundRect(color = Color(0xFFFACC15), topLeft = Offset(center.x + 4f, center.y - 4f), size = Size(8f, 3.5f), cornerRadius = CornerRadius(1.5f, 1.5f))
-                drawCircle(Color.White, radius = 1.5f, center = Offset(center.x + 9f, center.y - 2f))
-            }
-            EnemyType.BOSS -> {
-                // Colossal Legendary War Titan
-                val bossAura = (sin(time * 4f) * 4f) + enemy.spec.radius + 10f
-                drawCircle(color = Color(0x44E11D48), radius = bossAura, center = center)
-                drawCircle(
-                    color = Color(0x88E11D48),
-                    radius = bossAura,
-                    center = center,
-                    style = Stroke(width = 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f)))
-                )
-                // Colossal dragon/mech armor
-                drawCircle(color = Color(0xFF4C0519), radius = enemy.spec.radius, center = center)
-                drawCircle(color = Color(0xFF881337), radius = enemy.spec.radius * 0.85f, center = center)
-                drawCircle(color = Color(0xFFFFD166), radius = enemy.spec.radius, center = center, style = Stroke(width = 3.5f))
-                // Grand 5-Spike Golden Crown on top
-                for (s in -2..2) {
-                    val spikeX = center.x + (s * 10f)
-                    val spikeLen = if (s == 0) 18f else if (Math.abs(s) == 1) 14f else 10f
-                    drawLine(Color(0xFFFFD166), Offset(spikeX, center.y - enemy.spec.radius + 4f), Offset(spikeX, center.y - enemy.spec.radius - spikeLen), strokeWidth = 4f, cap = StrokeCap.Round)
-                    drawCircle(Color(0xFFE11D48), radius = 2.5f, center = Offset(spikeX, center.y - enemy.spec.radius - spikeLen))
-                }
-                // Pulsing central power core
-                val corePulse = (sin(time * 6f) * 0.2f + 0.8f)
-                drawCircle(color = Color(0xFFFF0055), radius = enemy.spec.radius * 0.35f * corePulse, center = center)
-                drawCircle(color = Color(0xFFFDE047), radius = enemy.spec.radius * 0.20f * corePulse, center = center)
-                drawCircle(color = Color.White, radius = enemy.spec.radius * 0.10f, center = center)
-                // Glowing slit eyes under heavy brow
-                drawRoundRect(color = Color(0xFF0F172A), topLeft = Offset(center.x - 14f, center.y - 14f), size = Size(28f, 8f), cornerRadius = CornerRadius(3f, 3f))
-                drawRect(color = Color(0xFFEF4444), topLeft = Offset(center.x - 10f, center.y - 12f), size = Size(8f, 3.5f))
-                drawRect(color = Color(0xFFEF4444), topLeft = Offset(center.x + 2f, center.y - 12f), size = Size(8f, 3.5f))
+        // 2. Character Sprite facing movement direction
+        rotate(degrees = enemy.headingAngle, pivot = center) {
+            when (enemy.spec.type) {
+                EnemyType.SCOUT -> drawScoutEnemy(center, enemy, time)
+                EnemyType.SOLDIER -> drawSoldierEnemy(center, enemy, time)
+                EnemyType.HEAVY -> drawHeavyEnemy(center, enemy, time)
+                EnemyType.RUNNER -> drawRunnerEnemy(center, enemy, time)
+                EnemyType.BOSS -> drawBossEnemy(center, enemy, time)
             }
         }
 
-        // Hit Reaction Flash Overlay (White-yellow flash on damage)
-        if (enemy.isHitFlashing) {
-            drawCircle(color = Color(0xEEFFFFFF), radius = enemy.spec.radius * 1.05f, center = center)
-            drawCircle(color = Color(0xFFFFE066), radius = enemy.spec.radius * 0.90f, center = center)
-        }
-
-        // Boss Shield Phase Aura
+        // 3. Boss Shield Phase Barrier
         if (enemy.spec.isBoss && enemy.isShielded) {
-            val pulse = (sin(time * 8f) * 3f)
+            val pulse = sin(time * 8f) * 3f
             drawCircle(
-                color = Color(0x44F59E0B),
-                radius = enemy.spec.radius + 12f + pulse,
+                color = Color(0x33F59E0B),
+                radius = enemy.spec.radius * 1.25f + pulse,
                 center = center
             )
             drawCircle(
                 color = Color(0xFFFACC15),
-                radius = enemy.spec.radius + 10f + pulse,
+                radius = enemy.spec.radius * 1.20f + pulse,
                 center = center,
-                style = Stroke(width = 3.5f)
+                style = Stroke(width = 3.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 8f), time * 25f))
             )
         }
 
-        // Health Bars (World-Space)
+        // 4. World-Space Health Bars (Drawn horizontally upright directly above the unit)
         if (enemy.spec.isBoss) {
             // World-Space Boss Health Bar directly above the boss
-            val bossBarWidth = 54f
-            val bossBarHeight = 6.5f
-            val bossBarTop = center.y - enemy.spec.radius - 22f
+            val bossBarWidth = 64f
+            val bossBarHeight = 7.5f
+            val bossBarTop = center.y - enemy.spec.radius * 1.35f - 24f
             val bossBarLeft = center.x - bossBarWidth / 2f
 
             // Outer dark container
             drawRoundRect(
                 color = Color(0xEE0F172A),
-                topLeft = Offset(bossBarLeft - 1.5f, bossBarTop - 1.5f),
-                size = Size(bossBarWidth + 3f, bossBarHeight + 3f),
+                topLeft = Offset(bossBarLeft - 2f, bossBarTop - 2f),
+                size = Size(bossBarWidth + 4f, bossBarHeight + 4f),
                 cornerRadius = CornerRadius(3f, 3f)
             )
             // Golden boss frame
             drawRoundRect(
                 color = Color(0xFFF59E0B),
-                topLeft = Offset(bossBarLeft - 1.5f, bossBarTop - 1.5f),
-                size = Size(bossBarWidth + 3f, bossBarHeight + 3f),
+                topLeft = Offset(bossBarLeft - 2f, bossBarTop - 2f),
+                size = Size(bossBarWidth + 4f, bossBarHeight + 4f),
                 cornerRadius = CornerRadius(3f, 3f),
-                style = Stroke(width = 1f)
+                style = Stroke(width = 1.5f)
             )
             // Crimson track background
             drawRoundRect(
@@ -1650,11 +1682,11 @@ private fun DrawScope.drawEnemies(enemies: List<Enemy>, time: Float) {
                     cornerRadius = CornerRadius(1.5f, 1.5f)
                 )
             }
-            // Small golden skull / crown indicator dot above
+            // Golden skull / crown indicator dot above
             drawCircle(
                 color = Color(0xFFFDE047),
-                radius = 2.5f,
-                center = Offset(center.x, bossBarTop - 4f)
+                radius = 3f,
+                center = Offset(center.x, bossBarTop - 5f)
             )
         } else if (enemy.healthPercentage < 1.0f) {
             // Standard Enemy Health Bar (Only displayed when damaged to keep screen clean)
@@ -1684,31 +1716,880 @@ private fun DrawScope.drawEnemies(enemies: List<Enemy>, time: Float) {
     }
 }
 
+/**
+ * 1. Scout Enemy: Nimble, light goblin scout.
+ * Forward lean, animated running legs, canvas courier backpack, leather jerkin,
+ * pointed ears, skullcap with goggles, keen eyes, and carved scout sling/dagger.
+ */
+private fun DrawScope.drawScoutEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 1.8f)
+
+    // Running Legs (stepping forward and back along the movement X axis)
+    val bootColor = Color(0xFF451A03)
+    val legGreen = Color(0xFF15803D)
+    // Left Leg
+    val leftLegX = center.x - 2f + stride * 7f
+    val leftLegY = center.y - 7f
+    drawLine(legGreen, Offset(center.x - 2f, center.y - 5f), Offset(leftLegX, leftLegY), strokeWidth = 3f, cap = StrokeCap.Round)
+    drawOval(bootColor, topLeft = Offset(leftLegX - 2f, leftLegY - 2.5f), size = Size(6f, 4f))
+    // Right Leg
+    val rightLegX = center.x - 2f - stride * 7f
+    val rightLegY = center.y + 7f
+    drawLine(legGreen, Offset(center.x - 2f, center.y + 5f), Offset(rightLegX, rightLegY), strokeWidth = 3f, cap = StrokeCap.Round)
+    drawOval(bootColor, topLeft = Offset(rightLegX - 2f, rightLegY - 1.5f), size = Size(6f, 4f))
+
+    // Canvas Courier Backpack strapped behind torso (-X side)
+    drawRoundRect(
+        color = Color(0xFF92400E),
+        topLeft = Offset(center.x - 12f, center.y - 5f),
+        size = Size(7f, 10f),
+        cornerRadius = CornerRadius(2f, 2f)
+    )
+    // Bedroll tied to backpack top
+    drawRoundRect(
+        color = Color(0xFFD97706),
+        topLeft = Offset(center.x - 13f, center.y - 6f),
+        size = Size(4f, 12f),
+        cornerRadius = CornerRadius(1.5f, 1.5f)
+    )
+    // Rope ties
+    drawLine(Color(0xFFFEF3C7), Offset(center.x - 12f, center.y - 3f), Offset(center.x - 9f, center.y - 3f), strokeWidth = 1f)
+    drawLine(Color(0xFFFEF3C7), Offset(center.x - 12f, center.y + 3f), Offset(center.x - 9f, center.y + 3f), strokeWidth = 1f)
+
+    // Torso / Leather Jerkin (leaning forward into movement)
+    drawRoundRect(
+        color = Color(0xFFB45309),
+        topLeft = Offset(center.x - 6f, center.y - 6f),
+        size = Size(10f, 12f),
+        cornerRadius = CornerRadius(3f, 3f)
+    )
+    // Cross strap & belt
+    drawLine(Color(0xFF78350F), Offset(center.x - 4f, center.y - 5f), Offset(center.x + 2f, center.y + 5f), strokeWidth = 2f)
+    drawCircle(Color(0xFFF59E0B), radius = 1.5f, center = Offset(center.x, center.y))
+
+    // Arms & Equipment
+    // Left Arm (swinging back with fist)
+    val leftArmX = center.x - 1f - stride * 4f
+    drawLine(legGreen, Offset(center.x, center.y - 5f), Offset(leftArmX, center.y - 9f), strokeWidth = 2.5f, cap = StrokeCap.Round)
+    drawCircle(Color(0xFF16A34A), radius = 2f, center = Offset(leftArmX, center.y - 9f))
+    // Right Arm (swinging forward with carved wooden sling / scout dagger)
+    val rightArmX = center.x + 4f + stride * 4f
+    drawLine(legGreen, Offset(center.x + 1f, center.y + 5f), Offset(rightArmX, center.y + 8f), strokeWidth = 2.5f, cap = StrokeCap.Round)
+    // Scout Dagger / Sling
+    drawLine(Color(0xFF78350F), Offset(rightArmX, center.y + 8f), Offset(rightArmX + 6f, center.y + 9f), strokeWidth = 2f, cap = StrokeCap.Round)
+    drawLine(Color(0xFFE2E8F0), Offset(rightArmX + 4f, center.y + 9f), Offset(rightArmX + 9f, center.y + 9f), strokeWidth = 1.8f, cap = StrokeCap.Round)
+
+    // Head / Face (+X direction)
+    val headCenter = Offset(center.x + 5f, center.y)
+    // Pointed Goblin Ears extending laterally
+    val leftEar = Path().apply {
+        moveTo(headCenter.x - 1f, headCenter.y - 4f)
+        lineTo(headCenter.x - 3f, headCenter.y - 10f)
+        lineTo(headCenter.x + 2f, headCenter.y - 4f)
+        close()
+    }
+    drawPath(leftEar, Color(0xFF15803D))
+    val rightEar = Path().apply {
+        moveTo(headCenter.x - 1f, headCenter.y + 4f)
+        lineTo(headCenter.x - 3f, headCenter.y + 10f)
+        lineTo(headCenter.x + 2f, headCenter.y + 4f)
+        close()
+    }
+    drawPath(rightEar, Color(0xFF15803D))
+
+    // Head base
+    drawCircle(Color(0xFF16A34A), radius = 5.5f, center = headCenter)
+    // Leather Scout Skullcap
+    drawArc(
+        color = Color(0xFF78350F),
+        startAngle = 100f,
+        sweepAngle = 160f,
+        useCenter = true,
+        topLeft = Offset(headCenter.x - 5.5f, headCenter.y - 5.5f),
+        size = Size(11f, 11f)
+    )
+    // Scout Goggles perched on cap
+    drawRoundRect(
+        color = Color(0xFFF59E0B),
+        topLeft = Offset(headCenter.x + 1f, headCenter.y - 4f),
+        size = Size(3f, 8f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+    drawCircle(Color(0xFF38BDF8), radius = 1.4f, center = Offset(headCenter.x + 2.5f, headCenter.y - 2f))
+    drawCircle(Color(0xFF38BDF8), radius = 1.4f, center = Offset(headCenter.x + 2.5f, headCenter.y + 2f))
+
+    // Keen Cartoon Eyes looking forward
+    drawCircle(Color.White, radius = 2.2f, center = Offset(headCenter.x + 4f, headCenter.y - 2.2f))
+    drawCircle(Color.White, radius = 2.2f, center = Offset(headCenter.x + 4f, headCenter.y + 2.2f))
+    drawCircle(Color(0xFF0F172A), radius = 1.2f, center = Offset(headCenter.x + 4.8f, headCenter.y - 2.2f))
+    drawCircle(Color(0xFF0F172A), radius = 1.2f, center = Offset(headCenter.x + 4.8f, headCenter.y + 2.2f))
+    drawCircle(Color.White, radius = 0.5f, center = Offset(headCenter.x + 5.1f, headCenter.y - 2.6f))
+    drawCircle(Color.White, radius = 0.5f, center = Offset(headCenter.x + 5.1f, headCenter.y + 1.8f))
+
+    // Hit Reaction Flash
+    if (enemy.isHitFlashing) {
+        drawCircle(Color(0xEEFFFFFF), radius = 14f, center = center)
+        drawCircle(Color(0xFFFFD166), radius = 10f, center = center)
+    }
+}
+
+/**
+ * 2. Soldier Enemy: Disciplined vanguard foot soldier / royal infantry.
+ * Iron kettle helm with golden ridge comb, shadowed visor, steel cuirass over emerald surcoat,
+ * steel kite shield on left arm, steel broadsword extending forward on right arm, armored marching greaves.
+ */
+private fun DrawScope.drawSoldierEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 1.0f)
+
+    // Armored Marching Legs & Sabatons
+    val steelGreave = Color(0xFF475569)
+    val bootIron = Color(0xFF1E293B)
+    // Left Leg
+    val leftLegX = center.x - 3f + stride * 6f
+    val leftLegY = center.y - 7f
+    drawLine(steelGreave, Offset(center.x - 3f, center.y - 5f), Offset(leftLegX, leftLegY), strokeWidth = 4f, cap = StrokeCap.Round)
+    drawRoundRect(bootIron, topLeft = Offset(leftLegX - 2f, leftLegY - 2.5f), size = Size(7f, 5f), cornerRadius = CornerRadius(2f, 2f))
+    // Right Leg
+    val rightLegX = center.x - 3f - stride * 6f
+    val rightLegY = center.y + 7f
+    drawLine(steelGreave, Offset(center.x - 3f, center.y + 5f), Offset(rightLegX, rightLegY), strokeWidth = 4f, cap = StrokeCap.Round)
+    drawRoundRect(bootIron, topLeft = Offset(rightLegX - 2f, rightLegY - 2.5f), size = Size(7f, 5f), cornerRadius = CornerRadius(2f, 2f))
+
+    // Torso / Emerald Surcoat Base
+    drawRoundRect(
+        color = Color(0xFF0D9488),
+        topLeft = Offset(center.x - 7f, center.y - 8f),
+        size = Size(13f, 16f),
+        cornerRadius = CornerRadius(3f, 3f)
+    )
+    // Steel Cuirass (Breastplate)
+    drawRoundRect(
+        color = Color(0xFF334155),
+        topLeft = Offset(center.x - 5f, center.y - 7f),
+        size = Size(10f, 14f),
+        cornerRadius = CornerRadius(2f, 2f)
+    )
+    drawRoundRect(
+        color = Color(0xFF64748B),
+        topLeft = Offset(center.x - 4f, center.y - 6f),
+        size = Size(8f, 12f),
+        cornerRadius = CornerRadius(2f, 2f),
+        style = Stroke(width = 1.2f)
+    )
+    // Leather Utility Belt with Brass Buckle
+    drawRect(Color(0xFF78350F), topLeft = Offset(center.x - 6f, center.y - 7f), size = Size(3f, 14f))
+    drawRect(Color(0xFFF59E0B), topLeft = Offset(center.x - 6f, center.y - 2f), size = Size(3f, 4f))
+
+    // Left Arm & Steel Kite / Heater Shield
+    val shieldCenter = Offset(center.x - 1f, center.y - 12f)
+    // Shield Body (Pointed heraldic shield)
+    val shieldPath = Path().apply {
+        moveTo(shieldCenter.x - 7f, shieldCenter.y - 5f)
+        lineTo(shieldCenter.x + 8f, shieldCenter.y - 5f)
+        lineTo(shieldCenter.x + 9f, shieldCenter.y + 2f)
+        lineTo(shieldCenter.x, shieldCenter.y + 7f)
+        lineTo(shieldCenter.x - 7f, shieldCenter.y + 2f)
+        close()
+    }
+    drawPath(shieldPath, Color(0xFF0F172A))
+    // Shield Face
+    val shieldInner = Path().apply {
+        moveTo(shieldCenter.x - 5.5f, shieldCenter.y - 3.5f)
+        lineTo(shieldCenter.x + 6.5f, shieldInnerY(shieldCenter.y - 3.5f))
+        lineTo(shieldCenter.x + 7f, shieldCenter.y + 1f)
+        lineTo(shieldCenter.x, shieldCenter.y + 5.5f)
+        lineTo(shieldCenter.x - 5.5f, shieldCenter.y + 1f)
+        close()
+    }
+    drawPath(shieldInner, Color(0xFF0D9488))
+    // Golden Shield Boss / Emblem
+    drawCircle(Color(0xFFF59E0B), radius = 2.2f, center = shieldCenter)
+    drawCircle(Color(0xFFFEF3C7), radius = 1f, center = shieldCenter)
+
+    // Right Arm & Polished Steel Broadsword
+    val swordArmX = center.x + 2f + stride * 3f
+    val swordHandY = center.y + 10f
+    // Arm
+    drawLine(Color(0xFF334155), Offset(center.x, center.y + 6f), Offset(swordArmX, swordHandY), strokeWidth = 3.5f, cap = StrokeCap.Round)
+    // Sword Crossguard & Pommel
+    drawLine(Color(0xFFF59E0B), Offset(swordArmX, swordHandY - 4f), Offset(swordArmX, swordHandY + 4f), strokeWidth = 2f, cap = StrokeCap.Round)
+    drawLine(Color(0xFF78350F), Offset(swordArmX - 3f, swordHandY), Offset(swordArmX, swordHandY), strokeWidth = 2.5f, cap = StrokeCap.Round)
+    // Steel Blade extending forward
+    val bladePath = Path().apply {
+        moveTo(swordArmX, swordHandY - 1.5f)
+        lineTo(swordArmX + 13f, swordHandY - 1f)
+        lineTo(swordArmX + 17f, swordHandY)
+        lineTo(swordArmX + 13f, swordHandY + 1f)
+        lineTo(swordArmX, swordHandY + 1.5f)
+        close()
+    }
+    drawPath(bladePath, Color(0xFFE2E8F0))
+    drawLine(Color.White, Offset(swordArmX + 1f, swordHandY), Offset(swordArmX + 15f, swordHandY), strokeWidth = 1f)
+
+    // Helmet & Head (+X forward)
+    val headPos = Offset(center.x + 4f, center.y)
+    // Domed Kettle Helm
+    drawCircle(Color(0xFF475569), radius = 6.5f, center = headPos)
+    drawCircle(Color(0xFF1E293B), radius = 6.5f, center = headPos, style = Stroke(width = 1.5f))
+    // Golden Comb / Crest Ridge on helmet top
+    drawLine(Color(0xFFF59E0B), Offset(headPos.x - 5f, headPos.y), Offset(headPos.x + 6f, headPos.y), strokeWidth = 2.5f, cap = StrokeCap.Round)
+    // Visor Brim Rim
+    drawRoundRect(
+        color = Color(0xFF1E293B),
+        topLeft = Offset(headPos.x + 1f, headPos.y - 5.5f),
+        size = Size(4f, 11f),
+        cornerRadius = CornerRadius(1.5f, 1.5f)
+    )
+    // Determined Eyes peering under visor
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(headPos.x + 3f, headPos.y - 3.5f),
+        size = Size(2.5f, 7f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+    drawCircle(Color.White, radius = 1.2f, center = Offset(headPos.x + 4.5f, headPos.y - 1.8f))
+    drawCircle(Color.White, radius = 1.2f, center = Offset(headPos.x + 4.5f, headPos.y + 1.8f))
+
+    // Hit Reaction Flash
+    if (enemy.isHitFlashing) {
+        drawCircle(Color(0xEEFFFFFF), radius = 16f, center = center)
+        drawCircle(Color(0xFF67E8F9), radius = 12f, center = center)
+    }
+}
+
+private fun shieldInnerY(y: Float): Float = y
+
+/**
+ * 3. Heavy Enemy: Hulking Ironclad Juggernaut (1.35x scale).
+ * Massive trapezoidal bulk, spiked iron pauldrons flaring outward, bolted dark-crimson cuirass,
+ * horned iron greathelm with glowing ember eye slit, colossal two-handed spiked iron slab war maul.
+ */
+private fun DrawScope.drawHeavyEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 0.6f)
+
+    // Colossal Spiked Sabatons & Greaves (heavy lumbering footsteps)
+    val ironDark = Color(0xFF0F172A)
+    val plateSteel = Color(0xFF334155)
+    // Left Foot
+    val leftFootX = center.x - 6f + stride * 7f
+    val leftFootY = center.y - 14f
+    drawRoundRect(ironDark, topLeft = Offset(leftFootX - 4f, leftFootY - 4f), size = Size(12f, 8f), cornerRadius = CornerRadius(3f, 3f))
+    drawRoundRect(plateSteel, topLeft = Offset(leftFootX - 3f, leftFootY - 3f), size = Size(10f, 6f), cornerRadius = CornerRadius(2f, 2f))
+    // Left boot forward spike
+    drawLine(Color(0xFFCBD5E1), Offset(leftFootX + 8f, leftFootY), Offset(leftFootX + 11f, leftFootY), strokeWidth = 2.5f, cap = StrokeCap.Round)
+    // Right Foot
+    val rightFootX = center.x - 6f - stride * 7f
+    val rightFootY = center.y + 14f
+    drawRoundRect(ironDark, topLeft = Offset(rightFootX - 4f, rightFootY - 4f), size = Size(12f, 8f), cornerRadius = CornerRadius(3f, 3f))
+    drawRoundRect(plateSteel, topLeft = Offset(rightFootX - 3f, rightFootY - 3f), size = Size(10f, 6f), cornerRadius = CornerRadius(2f, 2f))
+    // Right boot forward spike
+    drawLine(Color(0xFFCBD5E1), Offset(rightFootX + 8f, rightFootY), Offset(rightFootX + 11f, rightFootY), strokeWidth = 2.5f, cap = StrokeCap.Round)
+
+    // Colossal Spiked Shoulder Pauldrons (Flaring far out laterally)
+    // Left Pauldron
+    val leftPauldronPos = Offset(center.x - 1f, center.y - 18f)
+    drawRoundRect(
+        color = Color(0xFF1E293B),
+        topLeft = Offset(leftPauldronPos.x - 7f, leftPauldronPos.y - 6f),
+        size = Size(14f, 12f),
+        cornerRadius = CornerRadius(4f, 4f)
+    )
+    drawRoundRect(
+        color = Color(0xFF7F1D1D),
+        topLeft = Offset(leftPauldronPos.x - 5f, leftPauldronPos.y - 4f),
+        size = Size(10f, 8f),
+        cornerRadius = CornerRadius(2f, 2f)
+    )
+    // Pauldron Iron Spikes
+    drawLine(Color(0xFFCBD5E1), Offset(leftPauldronPos.x + 3f, leftPauldronPos.y - 4f), Offset(leftPauldronPos.x + 10f, leftPauldronPos.y - 9f), strokeWidth = 3f, cap = StrokeCap.Round)
+    drawLine(Color(0xFFCBD5E1), Offset(leftPauldronPos.x - 3f, leftPauldronPos.y - 5f), Offset(leftPauldronPos.x - 5f, leftPauldronPos.y - 11f), strokeWidth = 3f, cap = StrokeCap.Round)
+
+    // Right Pauldron
+    val rightPauldronPos = Offset(center.x - 1f, center.y + 18f)
+    drawRoundRect(
+        color = Color(0xFF1E293B),
+        topLeft = Offset(rightPauldronPos.x - 7f, rightPauldronPos.y - 6f),
+        size = Size(14f, 12f),
+        cornerRadius = CornerRadius(4f, 4f)
+    )
+    drawRoundRect(
+        color = Color(0xFF7F1D1D),
+        topLeft = Offset(rightPauldronPos.x - 5f, rightPauldronPos.y - 4f),
+        size = Size(10f, 8f),
+        cornerRadius = CornerRadius(2f, 2f)
+    )
+    // Pauldron Iron Spikes
+    drawLine(Color(0xFFCBD5E1), Offset(rightPauldronPos.x + 3f, rightPauldronPos.y + 4f), Offset(rightPauldronPos.x + 10f, rightPauldronPos.y + 9f), strokeWidth = 3f, cap = StrokeCap.Round)
+    drawLine(Color(0xFFCBD5E1), Offset(rightPauldronPos.x - 3f, rightPauldronPos.y + 5f), Offset(rightPauldronPos.x - 5f, rightPauldronPos.y + 11f), strokeWidth = 3f, cap = StrokeCap.Round)
+
+    // Hulking Torso (Layered Rust-Crimson Iron Armor Cuirass)
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(center.x - 12f, center.y - 14f),
+        size = Size(20f, 28f),
+        cornerRadius = CornerRadius(6f, 6f)
+    )
+    drawRoundRect(
+        color = Color(0xFF991B1B),
+        topLeft = Offset(center.x - 10f, center.y - 12f),
+        size = Size(16f, 24f),
+        cornerRadius = CornerRadius(4f, 4f)
+    )
+    // Bolted Cross Girders & Iron Rivets
+    drawLine(Color(0xFF334155), Offset(center.x - 9f, center.y - 10f), Offset(center.x + 5f, center.y + 10f), strokeWidth = 3.5f)
+    drawLine(Color(0xFF334155), Offset(center.x - 9f, center.y + 10f), Offset(center.x + 5f, center.y - 10f), strokeWidth = 3.5f)
+    drawCircle(Color(0xFFE2E8F0), radius = 2f, center = Offset(center.x - 6f, center.y - 7f))
+    drawCircle(Color(0xFFE2E8F0), radius = 2f, center = Offset(center.x - 6f, center.y + 7f))
+    drawCircle(Color(0xFFE2E8F0), radius = 2f, center = Offset(center.x + 3f, center.y - 7f))
+    drawCircle(Color(0xFFE2E8F0), radius = 2f, center = Offset(center.x + 3f, center.y + 7f))
+
+    // Colossal Spiked Iron Slab War Maul (Held forward across both armored gauntlets)
+    val maulHaftX = center.x + 5f + stride * 3f
+    // Heavy iron haft
+    drawLine(Color(0xFF1E293B), Offset(maulHaftX - 8f, center.y - 8f), Offset(maulHaftX + 16f, center.y - 8f), strokeWidth = 4f, cap = StrokeCap.Round)
+    // Massive Spiked Slab Hammer Head
+    val hammerHeadX = maulHaftX + 16f
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(hammerHeadX - 4f, center.y - 16f),
+        size = Size(9f, 16f),
+        cornerRadius = CornerRadius(2f, 2f)
+    )
+    drawRoundRect(
+        color = Color(0xFF475569),
+        topLeft = Offset(hammerHeadX - 3f, center.y - 14f),
+        size = Size(7f, 12f),
+        cornerRadius = CornerRadius(1.5f, 1.5f)
+    )
+    // Spikes on hammer head face
+    drawLine(Color(0xFFCBD5E1), Offset(hammerHeadX + 5f, center.y - 13f), Offset(hammerHeadX + 9f, center.y - 13f), strokeWidth = 2.5f, cap = StrokeCap.Round)
+    drawLine(Color(0xFFCBD5E1), Offset(hammerHeadX + 5f, center.y - 9f), Offset(hammerHeadX + 9f, center.y - 9f), strokeWidth = 2.5f, cap = StrokeCap.Round)
+
+    // Horned Iron Greathelm & Head (+X forward)
+    val headPos = Offset(center.x + 5f, center.y)
+    // Curved Iron Battle Horns flaring from helmet
+    val leftHorn = Path().apply {
+        moveTo(headPos.x - 2f, headPos.y - 6f)
+        cubicTo(headPos.x - 4f, headPos.y - 12f, headPos.x + 4f, headPos.y - 16f, headPos.x + 10f, headPos.y - 14f)
+        lineTo(headPos.x + 1f, headPos.y - 7f)
+        close()
+    }
+    drawPath(leftHorn, Color(0xFFCBD5E1))
+    val rightHorn = Path().apply {
+        moveTo(headPos.x - 2f, headPos.y + 6f)
+        cubicTo(headPos.x - 4f, headPos.y + 12f, headPos.x + 4f, headPos.y + 16f, headPos.x + 10f, headPos.y + 14f)
+        lineTo(headPos.x + 1f, headPos.y + 7f)
+        close()
+    }
+    drawPath(rightHorn, Color(0xFFCBD5E1))
+
+    // Greathelm Dome
+    drawRoundRect(
+        color = Color(0xFF1E293B),
+        topLeft = Offset(headPos.x - 5f, headPos.y - 8f),
+        size = Size(12f, 16f),
+        cornerRadius = CornerRadius(4f, 4f)
+    )
+    drawRoundRect(
+        color = Color(0xFF475569),
+        topLeft = Offset(headPos.x - 3f, headPos.y - 6f),
+        size = Size(8f, 12f),
+        cornerRadius = CornerRadius(2f, 2f)
+    )
+    // Horizontal Visor Grille with Glowing Ember/Orange Eye Slit
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(headPos.x + 3f, headPos.y - 6f),
+        size = Size(3.5f, 12f),
+        cornerRadius = CornerRadius(1.5f, 1.5f)
+    )
+    drawRoundRect(
+        color = Color(0xFFF97316),
+        topLeft = Offset(headPos.x + 4.5f, headPos.y - 4.5f),
+        size = Size(2f, 9f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+    drawCircle(Color(0xFFFDE047), radius = 1f, center = Offset(headPos.x + 5.5f, headPos.y - 2.5f))
+    drawCircle(Color(0xFFFDE047), radius = 1f, center = Offset(headPos.x + 5.5f, headPos.y + 2.5f))
+
+    // Hit Reaction Flash
+    if (enemy.isHitFlashing) {
+        drawCircle(Color(0xEEFFFFFF), radius = 24f, center = center)
+        drawCircle(Color(0xFFF97316), radius = 18f, center = center)
+    }
+}
+
+/**
+ * 4. Runner Enemy: Shadowblade Windstrider Assassin (0.85x scale, elongated silhouette).
+ * Low aerodynamic forward sprint, midnight-cyan stealth garb, waving twin scarf ribbons,
+ * wind hood with glowing speed goggles, twin reverse-grip daggers swept back, high-speed scissor legs.
+ */
+private fun DrawScope.drawRunnerEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 2.5f)
+
+    // High-Velocity Scissor Legs
+    val bootColor = Color(0xFF0C4A6E)
+    val legColor = Color(0xFF0284C7)
+    // Left Leg (extended forward / back)
+    val leftLegX = center.x - 4f + stride * 9f
+    val leftLegY = center.y - 6f
+    drawLine(legColor, Offset(center.x - 3f, center.y - 4f), Offset(leftLegX, leftLegY), strokeWidth = 3f, cap = StrokeCap.Round)
+    drawOval(bootColor, topLeft = Offset(leftLegX - 2f, leftLegY - 2f), size = Size(7f, 4f))
+    // Winglet on heel
+    drawLine(Color(0xFF38BDF8), Offset(leftLegX - 2f, leftLegY), Offset(leftLegX - 6f, leftLegY - 2f), strokeWidth = 1.5f)
+
+    // Right Leg
+    val rightLegX = center.x - 4f - stride * 9f
+    val rightLegY = center.y + 6f
+    drawLine(legColor, Offset(center.x - 3f, center.y + 4f), Offset(rightLegX, rightLegY), strokeWidth = 3f, cap = StrokeCap.Round)
+    drawOval(bootColor, topLeft = Offset(rightLegX - 2f, rightLegY - 2f), size = Size(7f, 4f))
+    // Winglet on heel
+    drawLine(Color(0xFF38BDF8), Offset(rightLegX - 2f, rightLegY), Offset(rightLegX - 6f, rightLegY + 2f), strokeWidth = 1.5f)
+
+    // Dynamic Trailing Scarf / Cowl Ribbons waving behind into the wind (-X direction)
+    val ribbonWave = sin(time * 14f) * 3f
+    val ribbon1 = Path().apply {
+        moveTo(center.x - 6f, center.y - 3f)
+        quadraticTo(center.x - 14f, center.y - 5f + ribbonWave, center.x - 22f, center.y - 8f - ribbonWave)
+        lineTo(center.x - 20f, center.y - 6f - ribbonWave)
+        quadraticTo(center.x - 13f, center.y - 3f + ribbonWave, center.x - 6f, center.y - 1f)
+        close()
+    }
+    drawPath(ribbon1, Color(0xFF38BDF8))
+
+    val ribbon2 = Path().apply {
+        moveTo(center.x - 6f, center.y + 3f)
+        quadraticTo(center.x - 14f, center.y + 5f - ribbonWave, center.x - 22f, center.y + 8f + ribbonWave)
+        lineTo(center.x - 20f, center.y + 6f + ribbonWave)
+        quadraticTo(center.x - 13f, center.y + 3f - ribbonWave, center.x - 6f, center.y + 1f)
+        close()
+    }
+    drawPath(ribbon2, Color(0xFF0284C7))
+
+    // Sleek Form-Fitting Body / Ninja Tunic
+    drawOval(
+        color = Color(0xFF0369A1),
+        topLeft = Offset(center.x - 8f, center.y - 6f),
+        size = Size(16f, 12f)
+    )
+    drawOval(
+        color = Color(0xFF0284C7),
+        topLeft = Offset(center.x - 6f, center.y - 4.5f),
+        size = Size(12f, 9f)
+    )
+
+    // Swept-Back Arms holding twin reverse-grip razor daggers
+    // Left Dagger & Arm
+    val leftArmX = center.x - 2f - stride * 3f
+    drawLine(Color(0xFF0C4A6E), Offset(center.x, center.y - 5f), Offset(leftArmX, center.y - 9f), strokeWidth = 2.5f, cap = StrokeCap.Round)
+    // Reverse-grip blade pointing backwards
+    drawLine(Color(0xFFE0F2FE), Offset(leftArmX, center.y - 9f), Offset(leftArmX - 10f, center.y - 13f), strokeWidth = 2f, cap = StrokeCap.Round)
+    drawLine(Color(0xFF38BDF8), Offset(leftArmX - 1f, center.y - 9f), Offset(leftArmX - 7f, center.y - 12f), strokeWidth = 1f)
+
+    // Right Dagger & Arm
+    val rightArmX = center.x - 2f + stride * 3f
+    drawLine(Color(0xFF0C4A6E), Offset(center.x, center.y + 5f), Offset(rightArmX, center.y + 9f), strokeWidth = 2.5f, cap = StrokeCap.Round)
+    // Reverse-grip blade pointing backwards
+    drawLine(Color(0xFFE0F2FE), Offset(rightArmX, center.y + 9f), Offset(rightArmX - 10f, center.y + 13f), strokeWidth = 2f, cap = StrokeCap.Round)
+    drawLine(Color(0xFF38BDF8), Offset(rightArmX - 1f, center.y + 9f), Offset(rightArmX - 7f, center.y + 12f), strokeWidth = 1f)
+
+    // Aerodynamic Wind Hood & Head (+X forward)
+    val headPos = Offset(center.x + 6f, center.y)
+    drawOval(Color(0xFF075985), topLeft = Offset(headPos.x - 4f, headPos.y - 4.5f), size = Size(9f, 9f))
+    // Glowing Electric Speed Goggles
+    drawRoundRect(
+        color = Color(0xFF38BDF8),
+        topLeft = Offset(headPos.x + 2f, headPos.y - 3.5f),
+        size = Size(2.5f, 7f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+    drawCircle(Color.White, radius = 1.2f, center = Offset(headPos.x + 3.2f, headPos.y - 1.8f))
+    drawCircle(Color.White, radius = 1.2f, center = Offset(headPos.x + 3.2f, headPos.y + 1.8f))
+
+    // Tiny sprint speed trail lines behind boots
+    drawLine(Color(0x6638BDF8), Offset(center.x - 10f, center.y - 6f), Offset(center.x - 18f, center.y - 6f), strokeWidth = 1.5f)
+    drawLine(Color(0x6638BDF8), Offset(center.x - 10f, center.y + 6f), Offset(center.x - 18f, center.y + 6f), strokeWidth = 1.5f)
+
+    // Hit Reaction Flash
+    if (enemy.isHitFlashing) {
+        drawCircle(Color(0xEEFFFFFF), radius = 14f, center = center)
+        drawCircle(Color(0xFF38BDF8), radius = 10f, center = center)
+    }
+}
+
+/**
+ * 5. Boss Enemy: The Dread Warlord Overlord / Siege Titan (2.5x+ visual scale).
+ * COMPLETELY NON-CIRCULAR, ASYMMETRICAL, INTIMIDATING 2D CARTOON WARLORD SILHOUETTE:
+ * - Massive segmented plate cuirass (royal crimson & dark iron) with pulsing chest furnace core & rear exhaust chimneys.
+ * - Left Shoulder: Towering Fortress Bulwark Pauldron with triple layered siege armor and forward fortress spikes!
+ * - Right Arm: Hydraulic armored gauntlet wielding a colossal Jagged Siege War Axe with glowing runic core!
+ * - Regal shredded battle-torn crimson war cape billowing behind the warlord.
+ * - Horned dread-helm with towering battle horns, golden crown brow, and glowing demonic eyes.
+ * - Armored greaves and spiked siege boots that thunderously stomp the ground.
+ */
+private fun DrawScope.drawBossEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 0.45f)
+
+    // Billowing Ragged Regal War Cape (-X direction behind the warlord)
+    val capeWave = sin(enemy.animWobbleTime * 0.9f) * 4f
+    val capePath = Path().apply {
+        moveTo(center.x - 8f, center.y - 18f)
+        cubicTo(
+            center.x - 22f, center.y - 24f + capeWave,
+            center.x - 36f, center.y - 26f - capeWave,
+            center.x - 44f, center.y - 14f
+        )
+        lineTo(center.x - 42f, center.y - 4f)
+        lineTo(center.x - 46f, center.y + 6f)
+        lineTo(center.x - 40f, center.y + 16f)
+        cubicTo(
+            center.x - 34f, center.y + 24f + capeWave,
+            center.x - 20f, center.y + 22f - capeWave,
+            center.x - 8f, center.y + 18f
+        )
+        close()
+    }
+    drawPath(capePath, Color(0xFF4C0519))
+    drawPath(capePath, Color(0xFFF59E0B), style = Stroke(width = 1.8f))
+
+    // Massive Armored Greaves & Spiked Siege Boots
+    val bootBase = Color(0xFF0F172A)
+    val bootSteel = Color(0xFF1E293B)
+    // Left Boot
+    val leftBootX = center.x - 8f + stride * 9f
+    val leftBootY = center.y - 20f
+    drawRoundRect(bootBase, topLeft = Offset(leftBootX - 6f, leftBootY - 7f), size = Size(18f, 14f), cornerRadius = CornerRadius(4f, 4f))
+    drawRoundRect(bootSteel, topLeft = Offset(leftBootX - 4f, leftBootY - 5f), size = Size(14f, 10f), cornerRadius = CornerRadius(2.5f, 2.5f))
+    // Forward iron spike on left boot
+    drawLine(Color(0xFFCBD5E1), Offset(leftBootX + 12f, leftBootY), Offset(leftBootX + 18f, leftBootY), strokeWidth = 3.5f, cap = StrokeCap.Round)
+
+    // Right Boot
+    val rightBootX = center.x - 8f - stride * 9f
+    val rightBootY = center.y + 20f
+    drawRoundRect(bootBase, topLeft = Offset(rightBootX - 6f, rightBootY - 7f), size = Size(18f, 14f), cornerRadius = CornerRadius(4f, 4f))
+    drawRoundRect(bootSteel, topLeft = Offset(rightBootX - 4f, rightBootY - 5f), size = Size(14f, 10f), cornerRadius = CornerRadius(2.5f, 2.5f))
+    // Forward iron spike on right boot
+    drawLine(Color(0xFFCBD5E1), Offset(rightBootX + 12f, rightBootY), Offset(rightBootX + 18f, rightBootY), strokeWidth = 3.5f, cap = StrokeCap.Round)
+
+    // Rear Dual Exhaust Chimneys (behind neck)
+    drawRoundRect(Color(0xFF1E293B), topLeft = Offset(center.x - 14f, center.y - 12f), size = Size(6f, 6f), cornerRadius = CornerRadius(1.5f, 1.5f))
+    drawRoundRect(Color(0xFF1E293B), topLeft = Offset(center.x - 14f, center.y + 6f), size = Size(6f, 6f), cornerRadius = CornerRadius(1.5f, 1.5f))
+    // Tiny puff of dark smoke from chimneys
+    val smokeAlpha = (sin(time * 6f) * 0.2f + 0.35f)
+    drawCircle(Color(0xFF475569).copy(alpha = smokeAlpha), radius = 3.5f, center = Offset(center.x - 18f, center.y - 12f))
+    drawCircle(Color(0xFF475569).copy(alpha = smokeAlpha), radius = 3.5f, center = Offset(center.x - 18f, center.y + 6f))
+
+    // ASYMMETRICAL LEFT SIDE: Towering Fortress Bulwark Pauldron (Spiked Siege Shield Pauldron)
+    val leftPauldronPos = Offset(center.x, center.y - 24f)
+    val fortressPauldron = Path().apply {
+        moveTo(leftPauldronPos.x - 12f, leftPauldronPos.y + 4f)
+        lineTo(leftPauldronPos.x - 14f, leftPauldronPos.y - 10f)
+        lineTo(leftPauldronPos.x - 4f, leftPauldronPos.y - 16f)
+        lineTo(leftPauldronPos.x + 12f, leftPauldronPos.y - 12f)
+        lineTo(leftPauldronPos.x + 16f, leftPauldronPos.y + 2f)
+        lineTo(leftPauldronPos.x + 6f, leftPauldronPos.y + 6f)
+        close()
+    }
+    drawPath(fortressPauldron, Color(0xFF0F172A))
+    // Inner plate
+    val fortressInner = Path().apply {
+        moveTo(leftPauldronPos.x - 10f, leftPauldronPos.y + 2f)
+        lineTo(leftPauldronPos.x - 12f, leftPauldronPos.y - 8f)
+        lineTo(leftPauldronPos.x - 3f, leftPauldronPos.y - 13f)
+        lineTo(leftPauldronPos.x + 10f, leftPauldronPos.y - 10f)
+        lineTo(leftPauldronPos.x + 13f, leftPauldronPos.y)
+        close()
+    }
+    drawPath(fortressInner, Color(0xFF881337))
+    drawPath(fortressInner, Color(0xFFF59E0B), style = Stroke(width = 2f))
+    // Jagged Fortress Pauldron Spikes
+    drawLine(Color(0xFFCBD5E1), Offset(leftPauldronPos.x + 8f, leftPauldronPos.y - 11f), Offset(leftPauldronPos.x + 18f, leftPauldronPos.y - 18f), strokeWidth = 4f, cap = StrokeCap.Round)
+    drawLine(Color(0xFFCBD5E1), Offset(leftPauldronPos.x - 2f, leftPauldronPos.y - 14f), Offset(leftPauldronPos.x + 2f, leftPauldronPos.y - 22f), strokeWidth = 4f, cap = StrokeCap.Round)
+    drawLine(Color(0xFFCBD5E1), Offset(leftPauldronPos.x - 11f, leftPauldronPos.y - 9f), Offset(leftPauldronPos.x - 18f, leftPauldronPos.y - 15f), strokeWidth = 3.5f, cap = StrokeCap.Round)
+
+    // Segmented Fortress Cuirass / Chestplate (Royal Crimson & Iron Plate)
+    val chestPath = Path().apply {
+        moveTo(center.x - 14f, center.y - 16f)
+        lineTo(center.x + 8f, center.y - 18f)
+        lineTo(center.x + 14f, center.y - 10f)
+        lineTo(center.x + 14f, center.y + 10f)
+        lineTo(center.x + 8f, center.y + 18f)
+        lineTo(center.x - 14f, center.y + 16f)
+        close()
+    }
+    drawPath(chestPath, Color(0xFF1E1B4B))
+    // Cuirass Inner Plate
+    val chestInner = Path().apply {
+        moveTo(center.x - 12f, center.y - 14f)
+        lineTo(center.x + 6f, center.y - 15f)
+        lineTo(center.x + 11f, center.y - 8f)
+        lineTo(center.x + 11f, center.y + 8f)
+        lineTo(center.x + 6f, center.y + 15f)
+        lineTo(center.x - 12f, center.y + 14f)
+        close()
+    }
+    drawPath(chestInner, Color(0xFF881337))
+    drawPath(chestInner, Color(0xFFF59E0B), style = Stroke(width = 2f))
+
+    // Pulsing Furnace Core / Runic Heart Vent in chest
+    val corePulse = (sin(time * 6f) * 0.25f + 0.75f)
+    val corePos = Offset(center.x - 2f, center.y)
+    drawCircle(Color(0xFF450A0A), radius = 7f, center = corePos)
+    drawCircle(Color(0xFFEF4444), radius = 5.5f * corePulse, center = corePos)
+    drawCircle(Color(0xFFFDE047), radius = 3.2f * corePulse, center = corePos)
+    drawCircle(Color.White, radius = 1.5f * corePulse, center = corePos)
+    // Core iron grille bars
+    drawLine(Color(0xFF1E293B), Offset(corePos.x - 6f, corePos.y), Offset(corePos.x + 6f, corePos.y), strokeWidth = 1.8f)
+    drawLine(Color(0xFF1E293B), Offset(corePos.x, corePos.y - 6f), Offset(corePos.x, corePos.y + 6f), strokeWidth = 1.8f)
+
+    // Colossal War Belt with Carved Demon/Skull Brass Buckle
+    drawRect(Color(0xFF0F172A), topLeft = Offset(center.x - 14f, center.y - 12f), size = Size(4f, 24f))
+    drawRoundRect(Color(0xFFD97706), topLeft = Offset(center.x - 15f, center.y - 5f), size = Size(5f, 10f), cornerRadius = CornerRadius(2f, 2f))
+    drawCircle(Color(0xFFFEF3C7), radius = 1.5f, center = Offset(center.x - 12.5f, center.y))
+
+    // ASYMMETRICAL RIGHT SIDE: Giant Hydraulic Gauntlet & Colossal Jagged Siege War Axe
+    val axeHaftX = center.x + 4f + stride * 5f
+    val axeArmY = center.y + 22f
+    // Right Shoulder Articulated Joint
+    drawCircle(Color(0xFF1E293B), radius = 8f, center = Offset(center.x + 2f, axeArmY))
+    drawCircle(Color(0xFFD97706), radius = 5f, center = Offset(center.x + 2f, axeArmY))
+    // Hydraulic Arm / Gauntlet gripping axe haft
+    drawLine(Color(0xFF334155), Offset(center.x + 2f, axeArmY), Offset(axeHaftX + 8f, axeArmY + 4f), strokeWidth = 6f, cap = StrokeCap.Round)
+    drawCircle(Color(0xFF0F172A), radius = 4f, center = Offset(axeHaftX + 8f, axeArmY + 4f))
+
+    // Colossal Forged Siege Cleaver / War Greataxe
+    val axeHeadX = axeHaftX + 14f
+    val axeHeadY = axeArmY + 4f
+    // Reinforced Iron Shaft
+    drawLine(Color(0xFF18181B), Offset(axeHeadX - 24f, axeHeadY), Offset(axeHeadX + 16f, axeHeadY), strokeWidth = 4.5f, cap = StrokeCap.Round)
+    // Golden pommel & counterweight
+    drawCircle(Color(0xFFF59E0B), radius = 3.5f, center = Offset(axeHeadX - 24f, axeHeadY))
+
+    // Colossal Double-Beveled Axe Blade
+    val axeBlade = Path().apply {
+        moveTo(axeHeadX - 6f, axeHeadY - 14f)
+        lineTo(axeHeadX + 14f, axeHeadY - 24f)
+        lineTo(axeHeadX + 18f, axeHeadY - 6f)
+        lineTo(axeHeadX + 14f, axeHeadY)
+        lineTo(axeHeadX + 18f, axeHeadY + 6f)
+        lineTo(axeHeadX + 14f, axeHeadY + 24f)
+        lineTo(axeHeadX - 6f, axeHeadY + 14f)
+        close()
+    }
+    drawPath(axeBlade, Color(0xFF0F172A))
+    // Blade Steel Core
+    val axeInner = Path().apply {
+        moveTo(axeHeadX - 4f, axeHeadY - 11f)
+        lineTo(axeHeadX + 11f, axeHeadY - 19f)
+        lineTo(axeHeadX + 14f, axeHeadY - 4f)
+        lineTo(axeHeadX + 11f, axeHeadY)
+        lineTo(axeHeadX + 14f, axeHeadY + 4f)
+        lineTo(axeHeadX + 11f, axeHeadY + 19f)
+        lineTo(axeHeadX - 4f, axeHeadY + 11f)
+        close()
+    }
+    drawPath(axeInner, Color(0xFF64748B))
+    // Glowing Runic Blade Edge
+    drawLine(Color(0xFFF59E0B), Offset(axeHeadX + 12f, axeHeadY - 22f), Offset(axeHeadX + 17f, axeHeadY), strokeWidth = 2f)
+    drawLine(Color(0xFFF59E0B), Offset(axeHeadX + 17f, axeHeadY), Offset(axeHeadX + 12f, axeHeadY + 22f), strokeWidth = 2f)
+    drawCircle(Color(0xFFFDE047), radius = 2.5f, center = Offset(axeHeadX + 4f, axeHeadY))
+
+    // Horned Warlord Dread-Helm & Head (+X forward)
+    val headPos = Offset(center.x + 9f, center.y)
+
+    // Colossal Curved Warlord Battle Horns
+    val leftHorn = Path().apply {
+        moveTo(headPos.x - 3f, headPos.y - 8f)
+        cubicTo(headPos.x - 4f, headPos.y - 18f, headPos.x + 8f, headPos.y - 26f, headPos.x + 18f, headPos.y - 24f)
+        lineTo(headPos.x + 4f, headPos.y - 10f)
+        close()
+    }
+    drawPath(leftHorn, Color(0xFFCBD5E1))
+    drawPath(leftHorn, Color(0xFF94A3B8), style = Stroke(width = 1.5f))
+
+    val rightHorn = Path().apply {
+        moveTo(headPos.x - 3f, headPos.y + 8f)
+        cubicTo(headPos.x - 4f, headPos.y + 18f, headPos.x + 8f, headPos.y + 26f, headPos.x + 18f, headPos.y + 24f)
+        lineTo(headPos.x + 4f, headPos.y + 10f)
+        close()
+    }
+    drawPath(rightHorn, Color(0xFFCBD5E1))
+    drawPath(rightHorn, Color(0xFF94A3B8), style = Stroke(width = 1.5f))
+
+    // Dread-Helm Base
+    drawRoundRect(
+        color = Color(0xFF1E1B4B),
+        topLeft = Offset(headPos.x - 7f, headPos.y - 11f),
+        size = Size(16f, 22f),
+        cornerRadius = CornerRadius(5f, 5f)
+    )
+    drawRoundRect(
+        color = Color(0xFF4C0519),
+        topLeft = Offset(headPos.x - 5f, headPos.y - 9f),
+        size = Size(12f, 18f),
+        cornerRadius = CornerRadius(3f, 3f)
+    )
+    // 5-Spike Golden Crown Crest on helmet brow
+    val crownX = headPos.x - 2f
+    for (s in -2..2) {
+        val spikeY = headPos.y + (s * 4f)
+        val spikeLen = if (s == 0) 8f else if (Math.abs(s) == 1) 6f else 4f
+        drawLine(Color(0xFFF59E0B), Offset(crownX, spikeY), Offset(crownX + spikeLen, spikeY), strokeWidth = 2.5f, cap = StrokeCap.Round)
+        drawCircle(Color(0xFFEF4444), radius = 1.2f, center = Offset(crownX + spikeLen, spikeY))
+    }
+
+    // Shadowed Visor Slit with Glowing Demonic Eyes
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(headPos.x + 5f, headPos.y - 8f),
+        size = Size(4f, 16f),
+        cornerRadius = CornerRadius(1.5f, 1.5f)
+    )
+    // Piercing Ember/Ruby Eyes
+    drawRoundRect(
+        color = Color(0xFFEF4444),
+        topLeft = Offset(headPos.x + 6.5f, headPos.y - 6f),
+        size = Size(2f, 4f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+    drawRoundRect(
+        color = Color(0xFFEF4444),
+        topLeft = Offset(headPos.x + 6.5f, headPos.y + 2f),
+        size = Size(2f, 4f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+    drawCircle(Color(0xFFFDE047), radius = 0.9f, center = Offset(headPos.x + 7.5f, headPos.y - 4f))
+    drawCircle(Color(0xFFFDE047), radius = 0.9f, center = Offset(headPos.x + 7.5f, headPos.y + 4f))
+
+    // Hit Reaction Flash & Armor Sheen
+    if (enemy.isHitFlashing) {
+        drawCircle(Color(0xEEFFFFFF), radius = 38f, center = center)
+        drawCircle(Color(0xFFFFD166), radius = 30f, center = center)
+    }
+}
+
 private fun DrawScope.drawProjectiles(projectiles: List<Projectile>) {
     for (p in projectiles) {
         if (p.isHit || p.isExpired) continue
 
         val center = Offset(p.currentPosition.x, p.currentPosition.y)
+        val dx = p.currentPosition.x - p.prevPosition.x
+        val dy = p.currentPosition.y - p.prevPosition.y
+        val angle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat()
 
         when (p.type) {
             ProjectileType.BULLET -> {
-                // Cartoon tracer bullet: golden glow, white core, motion streak
-                drawCircle(color = Color(0xFFFFD166), radius = 4.5f, center = center)
-                drawCircle(color = Color.White, radius = 2.5f, center = center)
+                // Cartoon tracer bullet: brass casing, copper jacketed round-nosed bullet, bright tip, motion streak
+                rotate(degrees = angle, pivot = center) {
+                    // Motion streak behind bullet
+                    drawLine(
+                        color = Color(0x88F59E0B),
+                        start = Offset(center.x - 14f, center.y),
+                        end = Offset(center.x - 2f, center.y),
+                        strokeWidth = 3f,
+                        cap = StrokeCap.Round
+                    )
+                    drawLine(
+                        color = Color(0xFFFEF08A),
+                        start = Offset(center.x - 8f, center.y),
+                        end = Offset(center.x, center.y),
+                        strokeWidth = 1.8f,
+                        cap = StrokeCap.Round
+                    )
+
+                    // Solid brass / copper physical bullet body
+                    drawRoundRect(
+                        color = Color(0xFF78350F),
+                        topLeft = Offset(center.x - 5f, center.y - 2.5f),
+                        size = Size(9f, 5f),
+                        cornerRadius = CornerRadius(2f, 2f)
+                    )
+                    drawRoundRect(
+                        color = Color(0xFFD97706),
+                        topLeft = Offset(center.x - 4f, center.y - 2f),
+                        size = Size(7.5f, 4f),
+                        cornerRadius = CornerRadius(1.5f, 1.5f)
+                    )
+                    // Specular highlight line
+                    drawRect(
+                        color = Color(0xFFFEF08A),
+                        topLeft = Offset(center.x - 3f, center.y - 1.5f),
+                        size = Size(4f, 1.2f)
+                    )
+                    // Bright lead/copper nose tip
+                    drawCircle(color = Color(0xFFFDE047), radius = 2f, center = Offset(center.x + 3.5f, center.y))
+                    drawCircle(color = Color.White, radius = 1.2f, center = Offset(center.x + 3.5f, center.y))
+                }
             }
             ProjectileType.CANNONBALL -> {
-                // Heavy cast iron cannonball with specular shine & shadow
-                drawCircle(color = Color(0x50000000), radius = 7f, center = Offset(center.x + 3f, center.y + 4f))
+                // Heavy cast iron cannonball with drop shadow, specular shine, smoke puff trail & sparking fuse
+                rotate(degrees = angle, pivot = center) {
+                    // Trailing smoke puffs behind cannonball flight vector
+                    drawCircle(color = Color(0x4494A3B8), radius = 4.5f, center = Offset(center.x - 15f, center.y))
+                    drawCircle(color = Color(0x6664748B), radius = 6f, center = Offset(center.x - 9f, center.y))
+
+                    // Sparking fuse on rear
+                    drawCircle(color = Color(0xFFEA580C), radius = 3f, center = Offset(center.x - 7.5f, center.y))
+                    drawCircle(color = Color(0xFFFACC15), radius = 1.5f, center = Offset(center.x - 7.5f, center.y))
+                }
+
+                // Drop shadow
+                drawCircle(color = Color(0x45000000), radius = 8f, center = Offset(center.x + 3f, center.y + 5f))
+
+                // Heavy cast iron sphere with 2D cartoon specular rendering
+                drawCircle(color = Color(0xFF0F172A), radius = 8f, center = center)
                 drawCircle(color = Color(0xFF1E293B), radius = 7f, center = center)
-                drawCircle(color = Color(0xFF475569), radius = 3.5f, center = Offset(center.x - 2f, center.y - 2f))
-                drawCircle(color = Color.White, radius = 1.5f, center = Offset(center.x - 2.5f, center.y - 2.5f))
+                drawCircle(color = Color(0xFF334155), radius = 5f, center = Offset(center.x - 2f, center.y - 2f))
+                drawCircle(color = Color(0xFF94A3B8), radius = 2.5f, center = Offset(center.x - 3f, center.y - 3f))
+                drawCircle(color = Color.White, radius = 1.2f, center = Offset(center.x - 3.5f, center.y - 3.5f))
             }
-            ProjectileType.PLASMA_BOLT -> {
-                // Pulsing electric energy bolt
-                drawCircle(color = Color(0x558B5CF6), radius = 10f, center = center)
-                drawCircle(color = Color(0xFFA855F7), radius = 6f, center = center)
-                drawCircle(color = Color(0xFF22D3EE), radius = 3.5f, center = center)
-                drawCircle(color = Color.White, radius = 2f, center = center)
+            ProjectileType.RAPID_SLUG -> {
+                // High-velocity kinetic dart / sabot slug with amber tracer trail and distinct fins
+                rotate(degrees = angle, pivot = center) {
+                    // Tapered amber / orange flame trail
+                    drawLine(
+                        color = Color(0x66EA580C),
+                        start = Offset(center.x - 18f, center.y),
+                        end = Offset(center.x - 2f, center.y),
+                        strokeWidth = 4.5f,
+                        cap = StrokeCap.Round
+                    )
+                    drawLine(
+                        color = Color(0xFFF59E0B),
+                        start = Offset(center.x - 13f, center.y),
+                        end = Offset(center.x, center.y),
+                        strokeWidth = 2.8f,
+                        cap = StrokeCap.Round
+                    )
+                    drawLine(
+                        color = Color(0xFFFEF08A),
+                        start = Offset(center.x - 7f, center.y),
+                        end = Offset(center.x + 2f, center.y),
+                        strokeWidth = 1.6f,
+                        cap = StrokeCap.Round
+                    )
+
+                    // Kinetic tungsten/amber dart body
+                    drawRoundRect(
+                        color = Color(0xFF18181B),
+                        topLeft = Offset(center.x - 6f, center.y - 2.5f),
+                        size = Size(11f, 5f),
+                        cornerRadius = CornerRadius(1.5f, 1.5f)
+                    )
+                    drawRect(
+                        color = Color(0xFFD97706),
+                        topLeft = Offset(center.x - 5f, center.y - 1.8f),
+                        size = Size(7f, 3.6f)
+                    )
+
+                    // Stabilizer fin accents
+                    drawLine(Color(0xFFF59E0B), Offset(center.x - 6f, center.y - 4f), Offset(center.x - 2f, center.y - 2f), strokeWidth = 1.5f)
+                    drawLine(Color(0xFFF59E0B), Offset(center.x - 6f, center.y + 4f), Offset(center.x - 2f, center.y + 2f), strokeWidth = 1.5f)
+
+                    // Needle-sharp tungsten tip
+                    drawCircle(color = Color(0xFFFEF08A), radius = 2.2f, center = Offset(center.x + 4.5f, center.y))
+                    drawCircle(color = Color.White, radius = 1.2f, center = Offset(center.x + 5f, center.y))
+                }
             }
         }
     }
@@ -1721,15 +2602,29 @@ private fun DrawScope.drawVisualEffects(effects: List<VisualEffect>) {
 
         when (fx.type) {
             EffectType.CANNON_EXPLOSION -> {
-                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
-                // Outer expanding smoke cloud puffs
+                val currentR = fx.maxRadius * (0.35f + fx.progress * 0.65f)
+
+                // Ground scorch ring
                 drawCircle(
-                    color = Color(0xFF64748B).copy(alpha = alpha * 0.6f),
-                    radius = currentR,
-                    center = center,
-                    style = Stroke(width = 6f * alpha)
+                    color = Color(0x55000000).copy(alpha = alpha * 0.5f),
+                    radius = currentR * 0.95f,
+                    center = center
                 )
-                // Fire core
+
+                // Billowing expanding smoke puffs at 6 positions
+                for (i in 0..5) {
+                    val ang = i * (Math.PI / 3.0).toFloat() + fx.progress
+                    val dist = currentR * 0.7f
+                    val px = center.x + cos(ang) * dist
+                    val py = center.y + sin(ang) * dist
+                    drawCircle(
+                        color = Color(0xFF64748B).copy(alpha = alpha * 0.6f),
+                        radius = currentR * 0.45f,
+                        center = Offset(px, py)
+                    )
+                }
+
+                // Fireball explosion core layers
                 drawCircle(
                     color = Color(0xFFEA580C).copy(alpha = alpha),
                     radius = currentR * 0.70f,
@@ -1737,43 +2632,120 @@ private fun DrawScope.drawVisualEffects(effects: List<VisualEffect>) {
                 )
                 drawCircle(
                     color = Color(0xFFFACC15).copy(alpha = alpha),
-                    radius = currentR * 0.40f,
+                    radius = currentR * 0.42f,
                     center = center
                 )
                 drawCircle(
                     color = Color.White.copy(alpha = alpha),
-                    radius = currentR * 0.18f,
+                    radius = currentR * 0.20f,
                     center = center
                 )
-                // Flying cartoon spark stars
-                for (s in 0..3) {
-                    val sAng = s * (Math.PI / 2.0).toFloat() + fx.progress * 2f
-                    val sDist = currentR * 0.85f
+
+                // Flying cartoon shrapnel debris & spark stars
+                for (s in 0..4) {
+                    val sAng = s * (Math.PI * 2.0 / 5.0).toFloat() + fx.progress * 3f
+                    val sDist = currentR * (0.8f + fx.progress * 0.6f)
                     val sx = center.x + cos(sAng) * sDist
                     val sy = center.y + sin(sAng) * sDist
-                    drawCircle(color = Color(0xFFFFD166).copy(alpha = alpha), radius = 3f * alpha, center = Offset(sx, sy))
+                    // Metal fleck / star
+                    drawCircle(color = Color(0xFF0F172A).copy(alpha = alpha), radius = 2.5f, center = Offset(sx, sy))
+                    drawCircle(color = Color(0xFFFFD166).copy(alpha = alpha), radius = 1.8f * alpha, center = Offset(sx - 0.5f, sy - 0.5f))
                 }
             }
-            EffectType.HIT_SPARK -> {
-                val currentR = fx.maxRadius * fx.progress
-                // 4-Point Cartoon Star Spark
+            EffectType.MG_HIT_SPARK -> {
+                val currentR = fx.maxRadius * (0.4f + fx.progress * 0.6f)
+
+                // Snappy 4-point cartoon flash
                 drawLine(
                     color = Color(0xFFFDE047).copy(alpha = alpha),
                     start = Offset(center.x - currentR, center.y),
                     end = Offset(center.x + currentR, center.y),
-                    strokeWidth = 3f * alpha,
+                    strokeWidth = 2.8f * alpha,
                     cap = StrokeCap.Round
                 )
                 drawLine(
                     color = Color(0xFFFDE047).copy(alpha = alpha),
                     start = Offset(center.x, center.y - currentR),
                     end = Offset(center.x, center.y + currentR),
-                    strokeWidth = 3f * alpha,
+                    strokeWidth = 2.8f * alpha,
                     cap = StrokeCap.Round
+                )
+
+                // Radiating metal flecks & sparks
+                for (s in 0..3) {
+                    val ang = (s * Math.PI / 2.0 + Math.PI / 4.0).toFloat() + fx.progress
+                    val dist = currentR * 0.9f
+                    val sx = center.x + cos(ang) * dist
+                    val sy = center.y + sin(ang) * dist
+                    drawCircle(color = Color(0xFFF59E0B).copy(alpha = alpha), radius = 2f * alpha, center = Offset(sx, sy))
+                }
+
+                drawCircle(
+                    color = Color.White.copy(alpha = alpha),
+                    radius = currentR * 0.35f,
+                    center = center
+                )
+            }
+            EffectType.RAPID_HIT_SPARK -> {
+                val currentR = fx.maxRadius * (0.5f + fx.progress * 0.5f)
+
+                // High-frequency 6-spike amber/copper crackle
+                for (i in 0..5) {
+                    val ang = i * (Math.PI / 3.0).toFloat()
+                    val len = currentR * (if (i % 2 == 0) 1.1f else 0.7f)
+                    val sx = center.x + cos(ang) * len
+                    val sy = center.y + sin(ang) * len
+                    drawLine(
+                        color = Color(0xFFF59E0B).copy(alpha = alpha),
+                        start = center,
+                        end = Offset(sx, sy),
+                        strokeWidth = 2f * alpha,
+                        cap = StrokeCap.Round
+                    )
+                }
+
+                // Bright point impact center
+                drawCircle(
+                    color = Color(0xFFFEF08A).copy(alpha = alpha),
+                    radius = currentR * 0.45f,
+                    center = center
                 )
                 drawCircle(
                     color = Color.White.copy(alpha = alpha),
-                    radius = currentR * 0.4f,
+                    radius = currentR * 0.22f,
+                    center = center
+                )
+            }
+            EffectType.BOSS_HIT_IMPACT -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+
+                // Heavy armored deflection shockwave ring
+                drawCircle(
+                    color = Color(0xFFF59E0B).copy(alpha = alpha * 0.9f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3.5f * alpha)
+                )
+                drawCircle(
+                    color = Color(0xFFFFD166).copy(alpha = alpha * 0.6f),
+                    radius = currentR * 0.7f,
+                    center = center,
+                    style = Stroke(width = 2f * alpha)
+                )
+
+                // Deflection ricochet sparks bursting sideways
+                for (s in 0..5) {
+                    val ang = s * (Math.PI / 3.0).toFloat() + fx.progress * 2f
+                    val dist = currentR * 1.1f
+                    val sx = center.x + cos(ang) * dist
+                    val sy = center.y + sin(ang) * dist
+                    drawCircle(color = Color(0xFFFDE047).copy(alpha = alpha), radius = 2.5f * alpha, center = Offset(sx, sy))
+                }
+
+                // Intense center impact flash
+                drawCircle(
+                    color = Color.White.copy(alpha = alpha),
+                    radius = currentR * 0.35f,
                     center = center
                 )
             }
@@ -1798,6 +2770,217 @@ private fun DrawScope.drawVisualEffects(effects: List<VisualEffect>) {
                 // Floating golden spark upward
                 val floatY = center.y - fx.progress * 24f
                 drawCircle(color = Color(0xFFFFD166).copy(alpha = alpha), radius = 3.5f, center = Offset(center.x, floatY))
+            }
+            EffectType.SCOUT_DEATH -> {
+                // Light, quick dust pop with tiny scattered satchel/feather fragments
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                for (i in 0..3) {
+                    val ang = i * 1.57f + fx.progress * 1.2f
+                    val px = center.x + cos(ang) * (currentR * 0.6f)
+                    val py = center.y + sin(ang) * (currentR * 0.6f)
+                    drawCircle(
+                        color = Color(0xFFFEF3C7).copy(alpha = alpha * 0.8f),
+                        radius = currentR * 0.35f,
+                        center = Offset(px, py)
+                    )
+                }
+                // Tiny scattered bits
+                for (s in 0..2) {
+                    val ang = s * 2.09f + fx.progress * 3f
+                    val dist = currentR * 0.9f
+                    drawCircle(
+                        color = Color(0xFFB45309).copy(alpha = alpha),
+                        radius = 2f * alpha,
+                        center = Offset(center.x + cos(ang) * dist, center.y + sin(ang) * dist)
+                    )
+                }
+            }
+            EffectType.SOLDIER_DEATH -> {
+                // Medium combat defeat puff with tumbling steel sparks
+                val currentR = fx.maxRadius * (0.35f + fx.progress * 0.65f)
+                for (i in 0..4) {
+                    val ang = i * 1.25f + fx.progress * 0.8f
+                    val px = center.x + cos(ang) * (currentR * 0.65f)
+                    val py = center.y + sin(ang) * (currentR * 0.65f)
+                    drawCircle(
+                        color = Color(0xFFCBD5E1).copy(alpha = alpha * 0.75f),
+                        radius = currentR * 0.40f,
+                        center = Offset(px, py)
+                    )
+                    drawCircle(
+                        color = Color(0xFF64748B).copy(alpha = alpha * 0.35f),
+                        radius = currentR * 0.40f,
+                        center = Offset(px, py),
+                        style = Stroke(width = 1.2f)
+                    )
+                }
+                // Tumbling metallic glints
+                for (s in 0..3) {
+                    val ang = s * 1.57f + fx.progress * 2.5f
+                    val dist = currentR * 0.85f
+                    drawCircle(
+                        color = Color(0xFF38BDF8).copy(alpha = alpha),
+                        radius = 2.5f * alpha,
+                        center = Offset(center.x + cos(ang) * dist, center.y + sin(ang) * dist)
+                    )
+                }
+            }
+            EffectType.HEAVY_DEATH -> {
+                // Heavy armor shatter: dense dark smoke bursts, fiery orange embers, and flying iron fragments
+                val currentR = fx.maxRadius * (0.35f + fx.progress * 0.65f)
+                // Dark smoke clouds
+                for (i in 0..5) {
+                    val ang = i * 1.04f + fx.progress * 0.6f
+                    val px = center.x + cos(ang) * (currentR * 0.6f)
+                    val py = center.y + sin(ang) * (currentR * 0.6f)
+                    drawCircle(
+                        color = Color(0xFF334155).copy(alpha = alpha * 0.85f),
+                        radius = currentR * 0.45f,
+                        center = Offset(px, py)
+                    )
+                }
+                // Center fiery flash
+                drawCircle(
+                    color = Color(0xFFEA580C).copy(alpha = alpha),
+                    radius = currentR * 0.5f,
+                    center = center
+                )
+                drawCircle(
+                    color = Color(0xFFFACC15).copy(alpha = alpha),
+                    radius = currentR * 0.28f,
+                    center = center
+                )
+                // Flying jagged iron shrapnel
+                for (s in 0..4) {
+                    val ang = s * 1.25f + fx.progress * 1.8f
+                    val dist = currentR * (0.5f + fx.progress * 0.6f)
+                    val sx = center.x + cos(ang) * dist
+                    val sy = center.y + sin(ang) * dist
+                    drawRoundRect(
+                        color = Color(0xFF0F172A).copy(alpha = alpha),
+                        topLeft = Offset(sx - 3f, sy - 2f),
+                        size = Size(6f, 4f),
+                        cornerRadius = CornerRadius(1f, 1f)
+                    )
+                }
+            }
+            EffectType.BOSS_DEATH -> {
+                // Epic multi-ring shockwave, massive golden-crimson explosion, and radiating champion sparks
+                val currentR = fx.maxRadius * (0.25f + fx.progress * 0.75f)
+
+                // Expanding ground shockwave ring
+                drawCircle(
+                    color = Color(0xFFF59E0B).copy(alpha = alpha * 0.7f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 4f * alpha)
+                )
+                drawCircle(
+                    color = Color(0xFFEF4444).copy(alpha = alpha * 0.5f),
+                    radius = currentR * 0.75f,
+                    center = center,
+                    style = Stroke(width = 3f * alpha)
+                )
+
+                // Billowing heavy blast dust clouds in 8 directions
+                for (i in 0..7) {
+                    val ang = i * 0.785f + fx.progress * 0.5f
+                    val dist = currentR * 0.55f
+                    val px = center.x + cos(ang) * dist
+                    val py = center.y + sin(ang) * dist
+                    drawCircle(
+                        color = Color(0xFF450A0A).copy(alpha = alpha * 0.8f),
+                        radius = currentR * 0.40f,
+                        center = Offset(px, py)
+                    )
+                    drawCircle(
+                        color = Color(0xFF78350F).copy(alpha = alpha * 0.6f),
+                        radius = currentR * 0.28f,
+                        center = Offset(px, py)
+                    )
+                }
+
+                // Core radiant flash
+                drawCircle(
+                    color = Color(0xFFFDE047).copy(alpha = alpha),
+                    radius = currentR * 0.45f,
+                    center = center
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = alpha),
+                    radius = currentR * 0.25f,
+                    center = center
+                )
+
+                // Flying royal armor shrapnel & golden sparks
+                for (s in 0..7) {
+                    val ang = s * 0.785f + fx.progress * 2.2f
+                    val dist = currentR * (0.6f + fx.progress * 0.5f)
+                    val sx = center.x + cos(ang) * dist
+                    val sy = center.y + sin(ang) * dist
+                    drawCircle(
+                        color = Color(0xFFFFD166).copy(alpha = alpha),
+                        radius = 3.5f * alpha,
+                        center = Offset(sx, sy)
+                    )
+                }
+            }
+            EffectType.BOSS_ENTRANCE -> {
+                // Ground slam entrance shockwave: radial dust clouds, ground cracks, and warning aura
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+
+                // Heavy ground impact ring
+                drawCircle(
+                    color = Color(0xFFEF4444).copy(alpha = alpha * 0.65f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 4.5f * alpha)
+                )
+                drawCircle(
+                    color = Color(0xFFF59E0B).copy(alpha = alpha * 0.45f),
+                    radius = currentR * 0.7f,
+                    center = center,
+                    style = Stroke(width = 3f * alpha)
+                )
+
+                // Radiating ground cracks
+                for (c in 0..5) {
+                    val ang = c * 1.047f
+                    val endX = center.x + cos(ang) * (currentR * 0.85f)
+                    val endY = center.y + sin(ang) * (currentR * 0.85f)
+                    drawLine(
+                        color = Color(0xFFF97316).copy(alpha = alpha * 0.8f),
+                        start = center,
+                        end = Offset(endX, endY),
+                        strokeWidth = 2.5f * alpha,
+                        cap = StrokeCap.Round
+                    )
+                }
+
+                // Billowing ground dust clouds in 6 radial positions
+                for (i in 0..5) {
+                    val ang = i * 1.047f + fx.progress * 0.4f
+                    val dist = currentR * 0.65f
+                    val px = center.x + cos(ang) * dist
+                    val py = center.y + sin(ang) * dist
+                    drawCircle(
+                        color = Color(0xFFE2E8F0).copy(alpha = alpha * 0.7f),
+                        radius = currentR * 0.38f,
+                        center = Offset(px, py)
+                    )
+                }
+
+                // Center entrance flare
+                drawCircle(
+                    color = Color(0xFFFDE047).copy(alpha = alpha * 0.85f),
+                    radius = currentR * 0.3f,
+                    center = center
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = alpha),
+                    radius = currentR * 0.15f,
+                    center = center
+                )
             }
         }
     }

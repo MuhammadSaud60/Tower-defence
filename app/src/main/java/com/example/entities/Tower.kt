@@ -130,40 +130,40 @@ data class TowerSpec(
                 TowerType.RAPID_FIRE -> when (level) {
                     1 -> TowerSpec(
                         type = TowerType.RAPID_FIRE,
-                        name = "Rapid Blaster",
+                        name = "Rapid Autocannon",
                         level = 1,
                         cost = GameConfig.RAPID_TOWER_COST,
                         range = GameConfig.RAPID_TOWER_RANGE,
                         damage = GameConfig.RAPID_TOWER_DAMAGE,
                         attackCooldown = GameConfig.RAPID_TOWER_COOLDOWN,
-                        baseColorHex = 0xFF4C1D95,
-                        turretColorHex = 0xFF8B5CF6,
+                        baseColorHex = 0xFF27272A,
+                        turretColorHex = 0xFFD97706,
                         upgradeCost = 55,
                         armorPiercing = 0f
                     )
                     2 -> TowerSpec(
                         type = TowerType.RAPID_FIRE,
-                        name = "Plasma Repeater Mk.II",
+                        name = "Twin Autocannon Mk.II",
                         level = 2,
                         cost = 55,
                         range = 280f,
                         damage = 10f,
                         attackCooldown = 0.10f,
-                        baseColorHex = 0xFF3B0764,
-                        turretColorHex = 0xFFA78BFA,
+                        baseColorHex = 0xFF18181B,
+                        turretColorHex = 0xFFF59E0B,
                         upgradeCost = 90,
                         armorPiercing = 0f
                     )
                     else -> TowerSpec(
                         type = TowerType.RAPID_FIRE,
-                        name = "Singularity Pulse Mk.III",
+                        name = "Storm Battery Mk.III",
                         level = 3,
                         cost = 90,
                         range = 315f,
                         damage = 16f,
                         attackCooldown = 0.08f,
-                        baseColorHex = 0xFF2E0854,
-                        turretColorHex = 0xFFC4B5FD,
+                        baseColorHex = 0xFF09090B,
+                        turretColorHex = 0xFFFBBF24,
                         upgradeCost = 0,
                         armorPiercing = 0f
                     )
@@ -189,9 +189,21 @@ data class Tower(
     val canAttack: Boolean get() = cooldownTimer <= 0f
     val isMaxLevel: Boolean get() = spec.level >= 3
     val sellRefundCoins: Int get() = (totalCoinsInvested * 0.7f).toInt().coerceAtLeast(10)
-    val isFiring: Boolean get() = cooldownTimer > (spec.attackCooldown - 0.08f)
+    val isFiring: Boolean get() {
+        val flashDuration = when (spec.type) {
+            TowerType.MACHINE_GUN -> 0.055f
+            TowerType.CANNON -> 0.18f
+            TowerType.RAPID_FIRE -> 0.038f
+        }
+        return cooldownTimer > (spec.attackCooldown - flashDuration)
+    }
+
     val recoilFraction: Float get() {
-        val window = 0.12f
+        val window = when (spec.type) {
+            TowerType.MACHINE_GUN -> 0.08f
+            TowerType.CANNON -> 0.32f
+            TowerType.RAPID_FIRE -> 0.05f
+        }
         val elapsed = spec.attackCooldown - cooldownTimer
         return if (elapsed in 0f..window) {
             (1f - (elapsed / window)).coerceIn(0f, 1f)

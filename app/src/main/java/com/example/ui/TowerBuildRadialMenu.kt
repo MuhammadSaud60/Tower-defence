@@ -162,7 +162,7 @@ fun TowerBuildRadialMenu(
             tag = "RAPID_FIRE",
             cost = rapidSpec.cost,
             playerCoins = playerCoins,
-            accentGradient = listOf(Color(0xFF8B5CF6), Color(0xFF6D28D9)),
+            accentGradient = listOf(Color(0xFFF59E0B), Color(0xFFD97706)),
             centerX = clampedCenterX + radialDistancePx,
             centerY = clampedCenterY,
             maxWidthPx = maxWidthPx,

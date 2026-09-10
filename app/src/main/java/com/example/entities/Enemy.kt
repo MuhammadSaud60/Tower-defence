@@ -130,7 +130,8 @@ data class Enemy(
     val isShielded: Boolean = false,
     val shieldTimer: Float = 0f,
     val shieldCooldown: Float = 8.0f,
-    val isInTunnel: Boolean = false
+    val isInTunnel: Boolean = false,
+    val headingAngle: Float = 0f
 ) {
     val healthPercentage: Float get() = (currentHp / maxHp).coerceIn(0f, 1f)
     val isHitFlashing: Boolean get() = hitFlashTimer > 0f
@@ -218,6 +219,13 @@ data class Enemy(
             y = p1.y + (p2.y - p1.y) * fraction
         )
 
+        val dx = p2.x - p1.x
+        val dy = p2.y - p1.y
+        val targetAngle = (kotlin.math.atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat()
+        // Smooth angle rotation to prevent abrupt snapping on sharp path turns
+        val angleDiff = (targetAngle - headingAngle + 540f) % 360f - 180f
+        val newAngle = headingAngle + angleDiff * kotlin.math.min(1f, dt * 14f)
+
         val progress = path.calculateProgressDistance(newSegmentIndex, newDistanceOnSegment)
 
         return copy(
@@ -230,7 +238,8 @@ data class Enemy(
             hitFlashTimer = updatedFlashTimer,
             isShielded = newShielded,
             shieldTimer = newShieldTimer,
-            shieldCooldown = newShieldCooldown
+            shieldCooldown = newShieldCooldown,
+            headingAngle = newAngle
         )
     }
 }

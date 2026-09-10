@@ -4,8 +4,19 @@ import java.util.UUID
 
 enum class EffectType {
     CANNON_EXPLOSION,
-    HIT_SPARK,
-    ENEMY_DEATH_POOF
+    MG_HIT_SPARK,
+    RAPID_HIT_SPARK,
+    BOSS_HIT_IMPACT,
+    ENEMY_DEATH_POOF,
+    SCOUT_DEATH,
+    SOLDIER_DEATH,
+    HEAVY_DEATH,
+    BOSS_DEATH,
+    BOSS_ENTRANCE;
+
+    companion object {
+        @JvmField val HIT_SPARK = MG_HIT_SPARK
+    }
 }
 
 data class VisualEffect(

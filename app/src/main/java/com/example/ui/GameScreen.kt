@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -133,12 +134,10 @@ fun GameScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Fixed Top HUD Bar and Tutorial Overlay (World moves underneath it)
+        // 2. Fixed Top HUD Bar touching screen borders directly (World moves underneath it)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 4.dp)
                 .align(Alignment.TopCenter)
         ) {
             GameHudBar(
@@ -159,7 +158,7 @@ fun GameScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 70.dp)
+                    .padding(top = 48.dp)
             ) {
                 PreparationCountdownBanner(
                     countdownSeconds = ceil(gameState.preparationCountdown).toInt().coerceAtLeast(1)
@@ -172,7 +171,7 @@ fun GameScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 70.dp)
+                    .padding(top = 48.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
@@ -274,10 +273,10 @@ private fun GameHudBar(
     onToggleSpeed: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xDD0F172A),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x5538BDF8)),
-        shadowElevation = 6.dp,
+        shape = RectangleShape,
+        color = Color(0xF20B132B),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x3338BDF8)),
+        shadowElevation = 8.dp,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("game_hud_bar")
@@ -285,7 +284,7 @@ private fun GameHudBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {

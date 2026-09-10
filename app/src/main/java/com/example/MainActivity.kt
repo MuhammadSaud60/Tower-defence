@@ -20,9 +20,11 @@ import com.example.ui.GameViewModel
 import com.example.ui.MainMenuScreen
 import com.example.ui.MapSelectionScreen
 import com.example.ui.SettingsDialog
+import com.example.ui.SplashScreen
 import com.example.ui.theme.MyApplicationTheme
 
 enum class AppScreen {
+    SPLASH,
     MAIN_MENU,
     MAP_SELECT,
     GAME
@@ -45,7 +47,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun TowerDefenseApp(gameViewModel: GameViewModel) {
-    var currentScreen by remember { mutableStateOf(AppScreen.MAIN_MENU) }
+    var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
     var showSettingsDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -53,6 +55,14 @@ fun TowerDefenseApp(gameViewModel: GameViewModel) {
         modifier = Modifier.fillMaxSize()
     ) { _ ->
         when (currentScreen) {
+            AppScreen.SPLASH -> {
+                SplashScreen(
+                    onSplashFinished = {
+                        currentScreen = AppScreen.MAIN_MENU
+                    }
+                )
+            }
+
             AppScreen.MAIN_MENU -> {
                 MainMenuScreen(
                     progressionManager = gameViewModel.progressionManager,

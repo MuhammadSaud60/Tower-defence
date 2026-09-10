@@ -72,158 +72,166 @@ fun MainMenuScreen(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(
+        Row(
             modifier = Modifier
-                .widthIn(max = 520.dp)
+                .widthIn(max = 760.dp)
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Defense Fortress Badge
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .background(Color(0xFF1E293B), CircleShape)
-                    .border(3.dp, Color(0xFF38BDF8), CircleShape),
-                contentAlignment = Alignment.Center
+            // Left Column: Branding, Title, Stars
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = "Defense Logo",
-                    tint = Color(0xFF38BDF8),
-                    modifier = Modifier.size(50.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(22.dp))
-
-            // Game Title
-            Text(
-                text = "Tower Defense",
-                fontSize = 34.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color.White,
-                letterSpacing = 1.sp
-            )
-
-            // Version 2 Subtitle
-            Text(
-                text = "Frontline Fortress • 20 Waves",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF38BDF8),
-                modifier = Modifier.padding(top = 4.dp)
-            )
-
-            // Total Stars Earned Badge
-            Surface(
-                color = Color(0xFF1E293B),
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier.padding(top = 10.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                // Defense Fortress Badge
+                Box(
+                    modifier = Modifier
+                        .size(76.dp)
+                        .background(Color(0xFF1E293B), CircleShape)
+                        .border(3.dp, Color(0xFF38BDF8), CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Stars",
-                        tint = Color(0xFFFFD166),
-                        modifier = Modifier.size(18.dp)
+                        imageVector = Icons.Default.Security,
+                        contentDescription = "Defense Logo",
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(40.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "$totalStars / 9 Stars Earned",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Game Title
+                Text(
+                    text = "Tower Defense",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White,
+                    letterSpacing = 1.sp
+                )
+
+                // Version Subtitle
+                Text(
+                    text = "Frontline Fortress • 20 Waves",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF38BDF8),
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+
+                // Total Stars Earned Badge
+                Surface(
+                    color = Color(0xFF1E293B),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Stars",
+                            tint = Color(0xFFFFD166),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "$totalStars / 9 Stars Earned",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(36.dp))
-
-            // Play / Mission Select Button
-            Button(
-                onClick = onPlayClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF22C55E),
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp)
-                    .testTag("play_button")
+            // Right Column: Action Buttons
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "SELECT MISSION",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Settings Button
-            OutlinedButton(
-                onClick = onSettingsClick,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE2E8F0)),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = Brush.horizontalGradient(
-                        listOf(Color(0xFF38BDF8), Color(0xFF0284C7))
+                // Play / Mission Select Button
+                Button(
+                    onClick = onPlayClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF22C55E),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("play_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
                     )
-                ),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("settings_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "SETTINGS",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "SELECT MISSION",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                // Settings Button
+                OutlinedButton(
+                    onClick = onSettingsClick,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE2E8F0)),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = Brush.horizontalGradient(
+                            listOf(Color(0xFF38BDF8), Color(0xFF0284C7))
+                        )
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .testTag("settings_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "SETTINGS",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
 
-            // How To Play Button
-            OutlinedButton(
-                onClick = { showHowToPlay = true },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("how_to_play_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "TACTICAL GUIDE",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                // How To Play Button
+                OutlinedButton(
+                    onClick = { showHowToPlay = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .testTag("how_to_play_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "TACTICAL GUIDE",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }

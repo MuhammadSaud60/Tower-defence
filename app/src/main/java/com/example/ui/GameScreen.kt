@@ -96,13 +96,51 @@ fun GameScreen(
             .fillMaxSize()
             .background(Color(0xFF0F172A))
     ) {
+        // 1. Full-Screen Battlefield Canvas Area (Uses entire available screen)
+        GameCanvas(
+            gameState = gameState,
+            onCanvasTap = { vx, vy ->
+                val tapPoint = Point2D(vx, vy)
+                // 1. Check if tapped on existing tower
+                val tappedTower = gameState.towers.firstOrNull {
+                    it.position.distanceTo(tapPoint) <= it.spec.size * 0.95f
+                }
+                if (tappedTower != null) {
+                    viewModel.selectBuildPosition(null)
+                    viewModel.selectExistingTower(tappedTower)
+                } else {
+                    // 2. Check if tapped empty buildable ground
+                    if (viewModel.isBuildableLocation(tapPoint)) {
+                        viewModel.selectExistingTower(null)
+                        viewModel.selectBuildPosition(tapPoint)
+                    } else {
+                        // 3. Tapped unbuildable area (road, water, rocks, base) -> close all menus
+                        viewModel.clearSelection()
+                    }
+                }
+            },
+            onUpgradeTower = { viewModel.upgradeSelectedTower() },
+            onSellTower = { viewModel.sellSelectedTower() },
+            onStrategyChange = { strategy -> viewModel.setStrategyForSelectedTower(strategy) },
+            onDeselectTower = { viewModel.selectExistingTower(null) },
+            onSelectBuildTower = { type ->
+                val pos = gameState.selectedBuildPos
+                if (pos != null) {
+                    viewModel.placeTowerAt(type, pos.x, pos.y)
+                }
+            },
+            onCloseBuildMenu = { viewModel.selectBuildPosition(null) },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // 2. Fixed Top HUD Bar and Tutorial Overlay (World moves underneath it)
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .statusBarsPadding()
-                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .align(Alignment.TopCenter)
         ) {
-            // 1. Top HUD Bar (Fixed height and layout)
             GameHudBar(
                 gameState = gameState,
                 onPauseClick = { viewModel.pause() },
@@ -114,82 +152,40 @@ fun GameScreen(
                 gameState = gameState,
                 progressionManager = viewModel.progressionManager
             )
+        }
 
-            // 2. Full-Screen Battlefield Canvas Area
+        // 3. 5-Second Preparation Phase Countdown Banner ("GET READY")
+        if (gameState.gameStatus == GameStatus.PREPARATION) {
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = 70.dp)
             ) {
-                GameCanvas(
-                    gameState = gameState,
-                    onCanvasTap = { vx, vy ->
-                        val tapPoint = Point2D(vx, vy)
-                        // 1. Check if tapped on existing tower
-                        val tappedTower = gameState.towers.firstOrNull {
-                            it.position.distanceTo(tapPoint) <= it.spec.size * 0.95f
-                        }
-                        if (tappedTower != null) {
-                            viewModel.selectBuildPosition(null)
-                            viewModel.selectExistingTower(tappedTower)
-                        } else {
-                            // 2. Check if tapped empty buildable ground
-                            if (viewModel.isBuildableLocation(tapPoint)) {
-                                viewModel.selectExistingTower(null)
-                                viewModel.selectBuildPosition(tapPoint)
-                            } else {
-                                // 3. Tapped unbuildable area (road, water, rocks, base) -> close all menus
-                                viewModel.clearSelection()
-                            }
-                        }
-                    },
-                    onUpgradeTower = { viewModel.upgradeSelectedTower() },
-                    onSellTower = { viewModel.sellSelectedTower() },
-                    onStrategyChange = { strategy -> viewModel.setStrategyForSelectedTower(strategy) },
-                    onDeselectTower = { viewModel.selectExistingTower(null) },
-                    onSelectBuildTower = { type ->
-                        val pos = gameState.selectedBuildPos
-                        if (pos != null) {
-                            viewModel.placeTowerAt(type, pos.x, pos.y)
-                        }
-                    },
-                    onCloseBuildMenu = { viewModel.selectBuildPosition(null) }
+                PreparationCountdownBanner(
+                    countdownSeconds = ceil(gameState.preparationCountdown).toInt().coerceAtLeast(1)
                 )
+            }
+        }
 
-                // 3. 5-Second Preparation Phase Countdown Banner ("GET READY")
-                if (gameState.gameStatus == GameStatus.PREPARATION) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 16.dp)
-                    ) {
-                        PreparationCountdownBanner(
-                            countdownSeconds = ceil(gameState.preparationCountdown).toInt().coerceAtLeast(1)
-                        )
-                    }
-                }
-
-                // 4. Placement Notice / Wave Transition Alert Banner
-                if (gameState.placementNotice != null && gameState.gameStatus != GameStatus.PREPARATION) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 12.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = Color(0xEE0F172A),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38BDF8))
-                        ) {
-                            Text(
-                                text = gameState.placementNotice.orEmpty(),
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
+        // 4. Placement Notice / Wave Transition Alert Banner
+        if (gameState.placementNotice != null && gameState.gameStatus != GameStatus.PREPARATION) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 70.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xEE0F172A),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38BDF8))
+                ) {
+                    Text(
+                        text = gameState.placementNotice.orEmpty(),
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
             }
         }
@@ -277,112 +273,114 @@ private fun GameHudBar(
     onPauseClick: () -> Unit,
     onToggleSpeed: () -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xDD0F172A),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x5538BDF8)),
+        shadowElevation = 6.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 6.dp)
+            .testTag("game_hud_bar")
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Base Health Indicator
-                Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Base Health Indicator
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Security,
+                    contentDescription = "Base Health",
+                    tint = if (gameState.base.healthPercentage > 0.4f) Color(0xFF22C55E) else Color(0xFFEF4444),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${(gameState.base.healthPercentage * 100).toInt()}%",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            // Coins Counter
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.MonetizationOn,
+                    contentDescription = "Coins",
+                    tint = Color(0xFFFFD166),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${gameState.coins}",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFD166)
+                )
+            }
+
+            // Wave Counter
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "WAVE ",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF94A3B8)
+                )
+                Text(
+                    text = "${gameState.currentWave}/${gameState.maxWaves}",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF38BDF8)
+                )
+            }
+
+            // Enemies Remaining
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "ENEMIES: ",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF94A3B8)
+                )
+                Text(
+                    text = "${gameState.enemiesRemaining}",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF43F5E)
+                )
+            }
+
+            // Speed and Pause controls
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onToggleSpeed,
+                    modifier = Modifier.size(36.dp).testTag("speed_toggle_button")
+                ) {
+                    Text(
+                        text = "${gameState.gameSpeedMultiplier.toInt()}x",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (gameState.gameSpeedMultiplier > 1f) Color(0xFF38BDF8) else Color(0xFF94A3B8)
+                    )
+                }
+
+                IconButton(
+                    onClick = onPauseClick,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("pause_button")
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Security,
-                        contentDescription = "Base Health",
-                        tint = if (gameState.base.healthPercentage > 0.4f) Color(0xFF22C55E) else Color(0xFFEF4444),
-                        modifier = Modifier.size(18.dp)
+                        imageVector = Icons.Default.Pause,
+                        contentDescription = "Pause",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${(gameState.base.healthPercentage * 100).toInt()}%",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-
-                // Coins Counter
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.MonetizationOn,
-                        contentDescription = "Coins",
-                        tint = Color(0xFFFFD166),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${gameState.coins}",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFFD166)
-                    )
-                }
-
-                // Wave Counter
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "WAVE ",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF94A3B8)
-                    )
-                    Text(
-                        text = "${gameState.currentWave}/${gameState.maxWaves}",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF38BDF8)
-                    )
-                }
-
-                // Enemies Remaining
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "ENEMIES: ",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF94A3B8)
-                    )
-                    Text(
-                        text = "${gameState.enemiesRemaining}",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF43F5E)
-                    )
-                }
-
-                // Speed and Pause controls
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onToggleSpeed,
-                        modifier = Modifier.size(36.dp).testTag("speed_toggle_button")
-                    ) {
-                        Text(
-                            text = "${gameState.gameSpeedMultiplier.toInt()}x",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (gameState.gameSpeedMultiplier > 1f) Color(0xFF38BDF8) else Color(0xFF94A3B8)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onPauseClick,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .testTag("pause_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Pause,
-                            contentDescription = "Pause",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
                 }
             }
         }

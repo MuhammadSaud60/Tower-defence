@@ -305,8 +305,8 @@ private fun MapThumbnail(
             // Terrain Background
             drawRect(color = terrainColor)
 
-            val scaleX = canvasW / GameConfig.VIRTUAL_WIDTH
-            val scaleY = canvasH / GameConfig.VIRTUAL_HEIGHT
+            val scaleX = canvasW / map.worldWidth
+            val scaleY = canvasH / map.worldHeight
 
             // Draw paths as stylized mini roads
             for (p in map.paths) {

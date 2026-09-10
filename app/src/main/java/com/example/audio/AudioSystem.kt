@@ -192,8 +192,16 @@ class AndroidAudioPlayer : AudioPlayer {
         }
     }
 
+    companion object {
+        var isGlobalMuted: Boolean = false
+        fun isSoundEnabled(): Boolean = !isGlobalMuted
+        fun setSoundEnabled(enabled: Boolean) {
+            isGlobalMuted = !enabled
+        }
+    }
+
     override fun playSound(sound: GameSound) {
-        if (isMuted) return
+        if (isMuted || isGlobalMuted) return
 
         // Event-based cooldown throttling to prevent audio congestion and buzzing
         val now = System.currentTimeMillis()

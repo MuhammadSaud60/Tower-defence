@@ -9,8 +9,8 @@ object GameConfig {
     const val VIRTUAL_HEIGHT = 1400f
 
     // Economy
-    const val STARTING_COINS = 120
-    const val WAVE_CLEAR_BONUS_COINS = 25
+    const val STARTING_COINS = 85
+    const val WAVE_CLEAR_BONUS_COINS = 12
 
     // Base Fortress
     const val BASE_MAX_HP = 100
@@ -41,15 +41,24 @@ object GameConfig {
     const val CANNON_TOWER_COOLDOWN = 1.5f
     const val CANNON_SPLASH_RADIUS = 90f
 
-    // Rapid Fire Tower stats
+    // Rapid Fire Tower stats - High damage + fast firing rate
     const val RAPID_TOWER_COST = 70
-    const val RAPID_TOWER_RANGE = 250f
-    const val RAPID_TOWER_DAMAGE = 6f
-    const val RAPID_TOWER_COOLDOWN = 0.12f
+    const val RAPID_TOWER_RANGE = 260f
+    const val RAPID_TOWER_DAMAGE = 14f
+    const val RAPID_TOWER_COOLDOWN = 0.08f
+
+    // Cryo / Frost Tower stats (Slows down enemies)
+    const val FROST_TOWER_COST = 60
+    const val FROST_TOWER_RANGE = 230f
+    const val FROST_TOWER_DAMAGE = 6f
+    const val FROST_TOWER_COOLDOWN = 0.75f
+    const val FROST_TOWER_SLOW_FACTOR = 0.45f
+    const val FROST_TOWER_SLOW_DURATION = 2.5f
 
     // Projectiles
     const val BULLET_SPEED = 900f
     const val CANNONBALL_SPEED = 500f
     const val PLASMA_SPEED = 850f
+    const val CRYO_SPEED = 750f
     const val PROJECTILE_HIT_RADIUS = 16f
 }

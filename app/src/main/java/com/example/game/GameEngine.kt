@@ -5,7 +5,9 @@ import com.example.audio.AudioPlayer
 import com.example.audio.GameSound
 import com.example.data.GameConfig
 import com.example.data.GameMap
+import com.example.data.EnvironmentType
 import com.example.entities.Base
+import com.example.entities.DestructibleObject
 import com.example.entities.EffectType
 import com.example.entities.Enemy
 import com.example.entities.Point2D
@@ -28,18 +30,28 @@ import kotlin.math.min
  * Core game engine coordinating maps, waves, combat, tower placement, upgrades, and audio.
  */
 class GameEngine(
-    val audioPlayer: AudioPlayer = AndroidAudioPlayer()
+    val audioPlayer: AudioPlayer = AndroidAudioPlayer.getInstance()
 ) {
-    private var currentMap: GameMap = GameMap.createGreenValleyMap()
-    private var waveManager = WaveManager(maxWaves = GameConfig.TOTAL_WAVES, paths = currentMap.paths)
+    internal var currentMap: GameMap = GameMap.createGreenValleyMap()
+    private var waveManager = WaveManager(
+        maxWaves = GameConfig.TOTAL_WAVES,
+        paths = currentMap.paths,
+        isSnowValley = currentMap.environmentType == EnvironmentType.SNOW_VALLEY,
+        isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS
+    )
     private val combatSystem = CombatSystem()
     private val economySystem = EconomySystem()
 
     private var base = Base(position = currentMap.basePosition)
-    private val towers = mutableListOf<Tower>()
+    internal val towers = mutableListOf<Tower>()
     private val enemies = mutableListOf<Enemy>()
+    internal val destructibles = mutableListOf<DestructibleObject>().apply { addAll(currentMap.destructibles) }
     private val projectiles = mutableListOf<Projectile>()
     private val visualEffects = mutableListOf<VisualEffect>()
+
+    init {
+        audioPlayer.updateMapAmbience(currentMap.environmentType)
+    }
 
     private var gameStatus = GameStatus.PREPARATION
     private var preparationCountdown = 5.0f
@@ -50,6 +62,7 @@ class GameEngine(
     private var previewPlacementPos: Point2D? = null
     private var isValidPlacement = false
     private var selectedExistingTower: Tower? = null
+    private var selectedDestructibleId: String? = null
     private var placementNotice: String? = null
     private var placementNoticeTimer = 0f
     private var waveTransitionTimer = 0f
@@ -90,12 +103,6 @@ class GameEngine(
         // 2. PREPARATION Phase (Exactly 5 seconds countdown before wave starts)
         if (gameStatus == GameStatus.PREPARATION) {
             preparationCountdown -= clampedDt
-            // Advance visual effects if any
-            val updatedEffects = visualEffects
-                .map { it.advance(clampedDt) }
-                .filter { !it.isFinished }
-            visualEffects.clear()
-            visualEffects.addAll(updatedEffects)
 
             if (preparationCountdown <= 0f) {
                 preparationCountdown = 0f
@@ -103,6 +110,7 @@ class GameEngine(
                 waveManager.startCurrentWave()
                 audioPlayer.playSound(GameSound.WAVE_START)
             }
+            processCombatUpdate(clampedDt)
             publishState()
             return
         }
@@ -111,18 +119,17 @@ class GameEngine(
         if (gameStatus == GameStatus.WAVE_COMPLETE) {
             waveTransitionTimer -= clampedDt
             val nextWaveNum = waveManager.currentWave + 1
+            val nextWavesCleared = waveManager.currentWave
+            val hpBonusPct = ((waveManager.scalingSystem.getHpMultiplier(nextWavesCleared) - 1f) * 100f).toInt()
             if (waveTransitionTimer > 1.2f) {
                 placementNotice = "WAVE ${waveManager.currentWave} COMPLETE! +${GameConfig.WAVE_CLEAR_BONUS_COINS}🪙"
             } else {
-                placementNotice = "WAVE $nextWaveNum INCOMING..."
+                if (hpBonusPct > 0) {
+                    placementNotice = "WAVE $nextWaveNum INCOMING (Threat +$hpBonusPct% HP)..."
+                } else {
+                    placementNotice = "WAVE $nextWaveNum INCOMING..."
+                }
             }
-
-            // Keep visual effects updating smoothly
-            val updatedEffects = visualEffects
-                .map { it.advance(clampedDt) }
-                .filter { !it.isFinished }
-            visualEffects.clear()
-            visualEffects.addAll(updatedEffects)
 
             if (waveTransitionTimer <= 0f) {
                 val advanced = waveManager.advanceToNextWave()
@@ -133,8 +140,11 @@ class GameEngine(
                 } else {
                     gameStatus = GameStatus.VICTORY
                     audioPlayer.playSound(GameSound.VICTORY)
+                    publishState()
+                    return
                 }
             }
+            processCombatUpdate(clampedDt)
             publishState()
             return
         }
@@ -219,57 +229,7 @@ class GameEngine(
         enemies.addAll(activeEnemies)
 
         // 8. Combat Update
-        val combatResult = combatSystem.update(
-            clampedDt,
-            towers,
-            enemies,
-            projectiles,
-            visualEffects
-        )
-
-        towers.clear()
-        towers.addAll(combatResult.updatedTowers)
-
-        enemies.clear()
-        enemies.addAll(combatResult.updatedEnemies.filter { it.isAlive && !it.reachedBase })
-
-        projectiles.clear()
-        projectiles.addAll(combatResult.updatedProjectiles)
-
-        visualEffects.clear()
-        visualEffects.addAll(combatResult.updatedEffects)
-
-        // Discrete weapon fire sound events
-        if (combatResult.firedTowerTypes.contains(TowerType.MACHINE_GUN)) {
-            audioPlayer.machineGunFire()
-        }
-        if (combatResult.firedTowerTypes.contains(TowerType.CANNON)) {
-            audioPlayer.cannonFire()
-        }
-        if (combatResult.firedTowerTypes.contains(TowerType.RAPID_FIRE)) {
-            audioPlayer.rapidFire()
-        }
-
-        // Discrete impact sound events
-        if (combatResult.hasCannonImpact) {
-            audioPlayer.cannonImpact()
-        } else if (combatResult.hasBossImpact) {
-            audioPlayer.bossImpact()
-        } else if (combatResult.hasEnemyHit) {
-            audioPlayer.enemyHit()
-        }
-
-        if (combatResult.coinsEarned > 0) {
-            economySystem.addCoins(combatResult.coinsEarned)
-        }
-        if (combatResult.enemiesKilled > 0) {
-            enemiesKilledTotal += combatResult.enemiesKilled
-            audioPlayer.enemyDeath()
-        }
-
-        if (combatResult.bossDefeated) {
-            showNotice("BOSS DEFEATED! Massive Coin Reward!")
-        }
+        processCombatUpdate(clampedDt)
 
         // Instant check if last enemy was eliminated during this combat tick
         if (waveManager.currentQueueIndex >= waveManager.totalEnemiesThisWave &&
@@ -299,6 +259,101 @@ class GameEngine(
         }
 
         publishState()
+    }
+
+    private fun processCombatUpdate(clampedDt: Float) {
+        val combatResult = combatSystem.update(
+            clampedDt,
+            towers,
+            enemies,
+            destructibles,
+            projectiles,
+            visualEffects
+        )
+
+        towers.clear()
+        towers.addAll(combatResult.updatedTowers)
+
+        enemies.clear()
+        enemies.addAll(combatResult.updatedEnemies.filter { it.isAlive && !it.reachedBase })
+
+        destructibles.clear()
+        destructibles.addAll(combatResult.updatedDestructibles.filter { it.isAlive })
+
+        // Clear manual target if selected destructible was destroyed
+        if (selectedDestructibleId != null && (destructibles.none { it.id == selectedDestructibleId } || combatResult.destroyedDestructibleIds.contains(selectedDestructibleId))) {
+            selectedDestructibleId = null
+        }
+
+        // Synchronize selectedExistingTower state
+        if (selectedExistingTower != null) {
+            selectedExistingTower = towers.firstOrNull { it.id == selectedExistingTower?.id }
+        }
+
+        projectiles.clear()
+        projectiles.addAll(combatResult.updatedProjectiles)
+
+        visualEffects.clear()
+        visualEffects.addAll(combatResult.updatedEffects)
+
+        // Discrete weapon fire sound events
+        if (combatResult.firedTowerTypes.contains(TowerType.MACHINE_GUN)) {
+            audioPlayer.machineGunFire()
+        }
+        if (combatResult.firedTowerTypes.contains(TowerType.CANNON)) {
+            audioPlayer.cannonFire()
+        }
+        if (combatResult.firedTowerTypes.contains(TowerType.RAPID_FIRE)) {
+            audioPlayer.rapidFire()
+        }
+        if (combatResult.firedTowerTypes.contains(TowerType.FROST_GUN)) {
+            audioPlayer.frostFire()
+        }
+
+        // Discrete impact sound events
+        if (combatResult.hasCannonImpact) {
+            audioPlayer.cannonImpact()
+        }
+        if (combatResult.hasFrostImpact) {
+            audioPlayer.frostImpact()
+        }
+        if (combatResult.hasBossImpact) {
+            audioPlayer.bossImpact()
+        }
+        if (combatResult.hasHeavyEnemyHit) {
+            audioPlayer.heavyEnemyHit()
+        } else if (combatResult.hasSmallEnemyHit || combatResult.hasEnemyHit) {
+            audioPlayer.enemyHit()
+        }
+
+        // Destructibles sound events
+        if (combatResult.hasTreeDestroyed) {
+            audioPlayer.treeDestroyed()
+        } else if (combatResult.hasStoneDestroyed) {
+            audioPlayer.stoneDestroyed()
+        } else if (combatResult.hasObjectDestroyed) {
+            audioPlayer.objectDestroy()
+        } else if (combatResult.hasTreeHit) {
+            audioPlayer.treeHit()
+        } else if (combatResult.hasStoneHit) {
+            audioPlayer.stoneHit()
+        } else if (combatResult.hasObjectHit) {
+            audioPlayer.objectHit()
+        }
+
+        if (combatResult.coinsEarned > 0) {
+            economySystem.addCoins(combatResult.coinsEarned)
+            audioPlayer.coinReward()
+        }
+        if (combatResult.enemiesKilled > 0) {
+            enemiesKilledTotal += combatResult.enemiesKilled
+            audioPlayer.enemyDeath()
+        }
+
+        if (combatResult.bossDefeated) {
+            showNotice("BOSS DEFEATED! Massive Coin Reward!")
+            audioPlayer.bossDefeated()
+        }
     }
 
     fun startWave() {
@@ -364,6 +419,89 @@ class GameEngine(
         publishState()
     }
 
+    @Synchronized
+    fun selectDestructible(id: String?) {
+        selectedDestructibleId = id
+        publishState()
+    }
+
+    @Synchronized
+    fun setTowerManualTarget(towerId: String, targetId: String?, type: com.example.entities.TargetType? = null): Boolean {
+        val idx = towers.indexOfFirst { it.id == towerId }
+        if (idx < 0) return false
+        val tower = towers[idx]
+        if (targetId != null) {
+            val destObj = destructibles.firstOrNull { it.id == targetId && it.isAlive }
+            val enemyObj = enemies.firstOrNull { it.id == targetId && it.isAlive }
+            val inRange = when {
+                destObj != null -> tower.isObjectInRange(destObj.position, destObj.radius)
+                enemyObj != null -> tower.isEnemyInRange(enemyObj.position)
+                else -> false
+            }
+            if (!inRange) {
+                showNotice("Target is out of range!")
+                audioPlayer.invalidPlacement()
+                return false
+            }
+            val resolvedType = type ?: if (destObj != null) com.example.entities.TargetType.DESTRUCTIBLE else com.example.entities.TargetType.ENEMY
+            val updated = tower.setManualTarget(targetId, resolvedType)
+            towers[idx] = updated
+            if (selectedExistingTower?.id == towerId) {
+                selectedExistingTower = updated
+            }
+            if (destObj != null) {
+                selectedDestructibleId = destObj.id
+                showNotice("Targeting ${destObj.type.displayName}!")
+            } else if (enemyObj != null) {
+                showNotice("Targeting ${enemyObj.spec.name}!")
+            }
+        } else {
+            val updated = tower.clearManualTarget()
+            towers[idx] = updated
+            if (selectedExistingTower?.id == towerId) {
+                selectedExistingTower = updated
+            }
+        }
+        publishState()
+        return true
+    }
+
+    @Synchronized
+    fun clearTowerManualTarget(towerId: String): Boolean {
+        return setTowerManualTarget(towerId, null)
+    }
+
+    @Synchronized
+    fun stopTargetingDestructible(id: String) {
+        if (selectedDestructibleId == id) {
+            selectedDestructibleId = null
+        }
+        for (i in towers.indices) {
+            if (towers[i].manualTargetId == id) {
+                val cleared = towers[i].clearManualTarget()
+                towers[i] = cleared
+                if (selectedExistingTower?.id == cleared.id) {
+                    selectedExistingTower = cleared
+                }
+            }
+        }
+        val dest = destructibles.firstOrNull { it.id == id }
+        val name = dest?.type?.displayName ?: "Object"
+        showNotice("Stopped targeting $name")
+        publishState()
+    }
+
+    @Synchronized
+    fun clearSelection() {
+        selectedExistingTower = null
+        selectedBuildPos = null
+        selectedDestructibleId = null
+        isBuildingTower = false
+        selectedTowerSpec = null
+        previewPlacementPos = null
+        publishState()
+    }
+
     fun upgradeSelectedTower(): Boolean {
         val tower = selectedExistingTower ?: return false
         if (tower.isMaxLevel) {
@@ -373,6 +511,7 @@ class GameEngine(
         val cost = tower.spec.upgradeCost
         if (!economySystem.canAfford(cost)) {
             showNotice("Need $cost coins to upgrade!")
+            audioPlayer.invalidPlacement()
             return false
         }
 
@@ -384,7 +523,7 @@ class GameEngine(
             towers[idx] = upgraded
             selectedExistingTower = upgraded
             showNotice("${upgraded.spec.name} upgraded!")
-            audioPlayer.playSound(GameSound.BUILD_TOWER)
+            audioPlayer.towerUpgraded()
             publishState()
             return true
         }
@@ -398,7 +537,7 @@ class GameEngine(
         towers.removeAll { it.id == tower.id }
         selectedExistingTower = null
         showNotice("Tower sold for +$refund coins!")
-        audioPlayer.playSound(GameSound.ENEMY_DEATH)
+        audioPlayer.towerSold()
         publishState()
         return true
     }
@@ -414,13 +553,66 @@ class GameEngine(
         }
     }
 
-    fun isBuildableLocation(point: Point2D): Boolean {
-        val radius = GameConfig.TOWER_SIZE / 2f
-        if (!currentMap.canPlaceAt(point, radius)) return false
+    /**
+     * Single source of truth for tower placement validation across all systems:
+     * - Normal tower placement
+     * - Radial build preview / validation
+     * - Tutorial build marker beacon
+     * - Preview / ghost tower
+     */
+    fun isValidTowerPlacement(
+        worldX: Float,
+        worldY: Float,
+        towerRadius: Float = GameConfig.TOWER_SIZE / 2f
+    ): Boolean {
+        val point = Point2D(worldX, worldY)
+        // 1. Check boundary and impassable map tiles (road, water, base)
+        if (!currentMap.canPlaceAt(point, towerRadius)) {
+            return false
+        }
+        // 2. Existing towers
         val tooCloseToOther = towers.any {
             it.position.distanceTo(point) < GameConfig.MIN_DISTANCE_BETWEEN_TOWERS
         }
-        return !tooCloseToOther
+        if (tooCloseToOther) {
+            return false
+        }
+        // 3. Destructible environment objects (Trees, Stones, Rocks, Crates)
+        val overlapsDestructible = destructibles.any {
+            it.isAlive && it.position.distanceTo(point) < (towerRadius + it.radius + 6f)
+        }
+        if (overlapsDestructible) {
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Finds the nearest valid empty buildable location around a preferred position.
+     * Used by the Level 1 tutorial marker to dynamically ensure it points to a valid spot.
+     */
+    fun findNearestValidBuildLocation(
+        preferred: Point2D = Point2D(340f, 400f),
+        towerRadius: Float = GameConfig.TOWER_SIZE / 2f
+    ): Point2D {
+        if (isValidTowerPlacement(preferred.x, preferred.y, towerRadius)) {
+            return preferred
+        }
+        for (r in 15..600 step 15) {
+            for (deg in 0 until 360 step 15) {
+                val rad = Math.toRadians(deg.toDouble())
+                val candX = (preferred.x + kotlin.math.cos(rad) * r).toFloat()
+                val candY = (preferred.y + kotlin.math.sin(rad) * r).toFloat()
+                if (isValidTowerPlacement(candX, candY, towerRadius)) {
+                    return Point2D(candX, candY)
+                }
+            }
+        }
+        return preferred
+    }
+
+    fun isBuildableLocation(point: Point2D): Boolean {
+        return isValidTowerPlacement(point.x, point.y, GameConfig.TOWER_SIZE / 2f)
     }
 
     @Synchronized
@@ -433,15 +625,27 @@ class GameEngine(
     @Synchronized
     fun placeTowerAt(type: TowerType, virtualX: Float, virtualY: Float): Boolean {
         val spec = TowerSpec.create(type, 1)
+        val radius = spec.size / 2f
         val targetPoint = Point2D(virtualX, virtualY)
 
-        if (!isBuildableLocation(targetPoint)) {
+        val obstacle = destructibles.firstOrNull {
+            it.isAlive && it.position.distanceTo(targetPoint) < (radius + it.radius + 6f)
+        }
+        if (obstacle != null) {
+            showNotice("Cannot build: Blocked by ${obstacle.type.displayName}!")
+            audioPlayer.invalidPlacement()
+            return false
+        }
+
+        if (!isValidTowerPlacement(virtualX, virtualY, radius)) {
             showNotice("Cannot build here! Check paths, water, or obstacles.")
+            audioPlayer.invalidPlacement()
             return false
         }
 
         if (!economySystem.spend(spec.cost)) {
             showNotice("Not enough coins! Need ${spec.cost}🪙")
+            audioPlayer.invalidPlacement()
             return false
         }
 
@@ -455,16 +659,17 @@ class GameEngine(
         selectedTowerSpec = null
         isBuildingTower = false
         showNotice("${spec.name} deployed!")
-        audioPlayer.playSound(GameSound.BUILD_TOWER)
+        audioPlayer.towerPlaced()
         publishState()
         return true
     }
 
     fun validatePlacement(virtualX: Float, virtualY: Float): Pair<Boolean, String?> {
         val spec = selectedTowerSpec ?: TowerSpec.create(TowerType.MACHINE_GUN, 1)
+        val radius = spec.size / 2f
         val targetPoint = Point2D(virtualX, virtualY)
 
-        if (!currentMap.canPlaceAt(targetPoint, spec.size / 2f)) {
+        if (!currentMap.canPlaceAt(targetPoint, radius)) {
             return false to "Cannot build here! Check road, water, or base."
         }
 
@@ -475,8 +680,15 @@ class GameEngine(
             return false to "Too close to another tower!"
         }
 
+        val obstacle = destructibles.firstOrNull {
+            it.isAlive && it.position.distanceTo(targetPoint) < (radius + it.radius + 6f)
+        }
+        if (obstacle != null) {
+            return false to "Blocked by ${obstacle.type.displayName}!"
+        }
+
         if (!economySystem.canAfford(spec.cost)) {
-            return false to "Not enough coins! Need ${spec.cost}"
+            return false to "Not enough coins! Need ${spec.cost}🪙"
         }
 
         return true to null
@@ -486,6 +698,7 @@ class GameEngine(
         val (isValid, reason) = validatePlacement(virtualX, virtualY)
         if (!isValid) {
             if (reason != null) showNotice(reason)
+            audioPlayer.invalidPlacement()
             return false
         }
 
@@ -493,7 +706,8 @@ class GameEngine(
         val targetPoint = Point2D(virtualX, virtualY)
 
         if (!economySystem.spend(spec.cost)) {
-            showNotice("Not enough coins! Need ${spec.cost}")
+            showNotice("Not enough coins! Need ${spec.cost}🪙")
+            audioPlayer.invalidPlacement()
             return false
         }
 
@@ -507,13 +721,14 @@ class GameEngine(
         selectedTowerSpec = null
         previewPlacementPos = null
         showNotice("${spec.name} deployed!")
-        audioPlayer.playSound(GameSound.BUILD_TOWER)
+        audioPlayer.towerPlaced()
         publishState()
         return true
     }
 
     fun loadMap(map: GameMap) {
         currentMap = map
+        audioPlayer.updateMapAmbience(map.environmentType)
         restart(isNewMission = true)
     }
 
@@ -522,6 +737,7 @@ class GameEngine(
         if (gameStatus != GameStatus.PAUSED && gameStatus != GameStatus.GAME_OVER && gameStatus != GameStatus.VICTORY) {
             stateBeforePause = gameStatus
             changeGameState(GameStatus.PAUSED)
+            audioPlayer.pauseAmbienceAndMusic()
         }
     }
 
@@ -529,6 +745,7 @@ class GameEngine(
     fun resume() {
         if (gameStatus == GameStatus.PAUSED) {
             changeGameState(stateBeforePause)
+            audioPlayer.resumeAmbienceAndMusic()
         }
     }
 
@@ -546,9 +763,16 @@ class GameEngine(
         base = Base(position = currentMap.basePosition)
         towers.clear()
         enemies.clear()
+        destructibles.clear()
+        destructibles.addAll(currentMap.destructibles)
         projectiles.clear()
         visualEffects.clear()
-        waveManager = WaveManager(maxWaves = GameConfig.TOTAL_WAVES, paths = currentMap.paths)
+        waveManager = WaveManager(
+            maxWaves = GameConfig.TOTAL_WAVES,
+            paths = currentMap.paths,
+            isSnowValley = currentMap.environmentType == EnvironmentType.SNOW_VALLEY,
+            isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS
+        )
         economySystem.reset()
         if (isNewMission) {
             gameStatus = GameStatus.PREPARATION
@@ -566,6 +790,7 @@ class GameEngine(
         previewPlacementPos = null
         isValidPlacement = false
         selectedExistingTower = null
+        selectedDestructibleId = null
         placementNotice = null
         placementNoticeTimer = 0f
         waveTransitionTimer = 0f
@@ -577,7 +802,7 @@ class GameEngine(
         publishState()
     }
 
-    private fun showNotice(message: String) {
+    fun showNotice(message: String) {
         placementNotice = message
         placementNoticeTimer = 2.0f
         publishState()
@@ -597,6 +822,9 @@ class GameEngine(
         }
         val score = (economySystem.totalCoinsEarned * 10) + (enemiesKilledTotal * 25) + (stars * 500)
         val activeBoss = enemies.find { it.spec.isBoss && it.isAlive }
+        val tutPlot = if (currentMap.id == "green_valley" && towers.isEmpty()) {
+            findNearestValidBuildLocation(Point2D(340f, 400f), GameConfig.TOWER_SIZE / 2f)
+        } else null
 
         return GameState(
             gameStatus = gameStatus,
@@ -608,11 +836,15 @@ class GameEngine(
             totalCoinsEarned = economySystem.totalCoinsEarned,
             currentWave = waveManager.currentWave,
             maxWaves = waveManager.maxWaves,
+            wavesCleared = waveManager.wavesCleared,
+            enemyHpMultiplier = waveManager.currentHpMultiplier,
+            enemySpeedMultiplier = waveManager.currentSpeedMultiplier,
             waveStatus = waveManager.status,
             enemiesRemaining = enemies.size,
             nextWaveCountdown = waveManager.nextWaveCountdown,
             towers = towers.toList(),
             enemies = enemies.toList(),
+            destructibles = destructibles.toList(),
             projectiles = projectiles.toList(),
             effects = visualEffects.toList(),
             isBuildingTower = isBuildingTower,
@@ -620,13 +852,15 @@ class GameEngine(
             previewPlacementPos = previewPlacementPos,
             isValidPlacement = isValidPlacement,
             selectedExistingTower = selectedExistingTower,
+            selectedDestructibleId = selectedDestructibleId,
             placementNotice = placementNotice,
             enemiesKilledTotal = enemiesKilledTotal,
             gameSpeedMultiplier = gameSpeedMultiplier,
             activeBoss = activeBoss,
             starsEarned = stars,
             finalScore = score,
-            gameTime = gameTime
+            gameTime = gameTime,
+            tutorialRecommendedPlot = tutPlot
         )
     }
 }

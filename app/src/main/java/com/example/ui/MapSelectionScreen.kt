@@ -89,6 +89,14 @@ fun MapSelectionScreen(
         GameMap.createDragonsCoilMap(
             isUnlocked = progressionManager.isMapUnlocked("map_5_loop"),
             stars = progressionManager.getStarsForMap("map_5_loop")
+        ),
+        GameMap.createSnowValleyMap(
+            isUnlocked = progressionManager.isMapUnlocked("snow_valley") || progressionManager.isMapUnlocked("map_8_snow"),
+            stars = maxOf(progressionManager.getStarsForMap("snow_valley"), progressionManager.getStarsForMap("map_8_snow"))
+        ),
+        GameMap.createNightFortressMap(
+            isUnlocked = progressionManager.isMapUnlocked("night_fortress") || progressionManager.isMapUnlocked("map_9_night"),
+            stars = maxOf(progressionManager.getStarsForMap("night_fortress"), progressionManager.getStarsForMap("map_9_night"))
         )
     )
 
@@ -300,10 +308,23 @@ private fun MapThumbnail(
                 com.example.data.EnvironmentType.FOREST_CROSSROADS -> Color(0xFF2D5A27) to Color(0xFF7A6B53)
                 com.example.data.EnvironmentType.OBSIDIAN_TUNNEL -> Color(0xFF1E293B) to Color(0xFF64748B)
                 com.example.data.EnvironmentType.DRAGON_COIL -> Color(0xFF3F3B37) to Color(0xFF8C7A6B)
+                com.example.data.EnvironmentType.SNOW_VALLEY -> Color(0xFFE2E8F0) to Color(0xFF475569)
+                com.example.data.EnvironmentType.NIGHT_FORTRESS -> Color(0xFF0A1128) to Color(0xFF38BDF8)
             }
 
             // Terrain Background
             drawRect(color = terrainColor)
+
+            // Night sky stars in thumbnail if Night Fortress
+            if (map.environmentType == com.example.data.EnvironmentType.NIGHT_FORTRESS) {
+                drawCircle(Color(0xFFFEF08A), 1.2f, Offset(canvasW * 0.15f, canvasH * 0.2f))
+                drawCircle(Color(0xFFFFFFFF), 1.0f, Offset(canvasW * 0.35f, canvasH * 0.15f))
+                drawCircle(Color(0xFFBAE6FD), 1.2f, Offset(canvasW * 0.65f, canvasH * 0.25f))
+                drawCircle(Color(0xFFFEF08A), 1.0f, Offset(canvasW * 0.85f, canvasH * 0.18f))
+                // Crescent moon
+                drawCircle(Color(0xFFFEF08A), 4.5f, Offset(canvasW * 0.82f, canvasH * 0.28f))
+                drawCircle(Color(0xFF0A1128), 3.5f, Offset(canvasW * 0.80f, canvasH * 0.26f))
+            }
 
             val scaleX = canvasW / map.worldWidth
             val scaleY = canvasH / map.worldHeight

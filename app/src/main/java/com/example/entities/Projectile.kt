@@ -6,33 +6,40 @@ import java.util.UUID
 enum class ProjectileType {
     BULLET,
     CANNONBALL,
-    RAPID_SLUG;
+    RAPID_SLUG,
+    CRYO_ORB;
 
     companion object {
         @JvmField val PLASMA_BOLT = RAPID_SLUG
+        @JvmField val FROST_BOLT = CRYO_ORB
     }
 }
 
 /**
- * Ballistic projectile entity moving toward an enemy target.
+ * Ballistic projectile entity moving toward an enemy or destructible target.
  */
 data class Projectile(
     val id: String = UUID.randomUUID().toString(),
     val type: ProjectileType = ProjectileType.BULLET,
     val currentPosition: Point2D,
     val prevPosition: Point2D = currentPosition,
-    val targetEnemyId: String,
-    val targetLastKnownPosition: Point2D,
+    val targetId: String = "",
+    val targetType: TargetType = TargetType.ENEMY,
+    val targetWorldPosition: Point2D = currentPosition,
+    val targetEnemyId: String = targetId,
+    val targetLastKnownPosition: Point2D = targetWorldPosition,
     val damage: Float,
     val splashRadius: Float = 0f,
     val armorPiercing: Float = 0f,
+    val slowFactor: Float = 0f,
+    val slowDuration: Float = 0f,
     val speed: Float = GameConfig.BULLET_SPEED,
     val isHit: Boolean = false,
     val isExpired: Boolean = false,
     val lifetime: Float = 0f,
     val maxLifetime: Float = 3f
 ) {
-    fun advance(dt: Float, currentEnemyPosition: Point2D?): Projectile {
+    fun advance(dt: Float, currentTargetPosition: Point2D? = null): Projectile {
         if (isHit || isExpired) return this
 
         val newLifetime = lifetime + dt
@@ -40,8 +47,8 @@ data class Projectile(
             return copy(isExpired = true, lifetime = newLifetime)
         }
 
-        // Aim at enemy current position or last known coordinates
-        val destination = currentEnemyPosition ?: targetLastKnownPosition
+        // Aim at target's current world coordinates or destination
+        val destination = currentTargetPosition ?: targetWorldPosition
         val distance = currentPosition.distanceTo(destination)
         val step = speed * dt
 
@@ -62,6 +69,7 @@ data class Projectile(
             copy(
                 prevPosition = currentPosition,
                 currentPosition = nextPos,
+                targetWorldPosition = destination,
                 targetLastKnownPosition = destination,
                 lifetime = newLifetime
             )

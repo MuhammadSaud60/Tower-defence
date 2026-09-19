@@ -7,7 +7,8 @@ import kotlin.math.max
 enum class TowerType {
     MACHINE_GUN,
     CANNON,
-    RAPID_FIRE
+    RAPID_FIRE,
+    FROST_GUN
 }
 
 enum class TargetingStrategy {
@@ -33,7 +34,9 @@ data class TowerSpec(
     val turretColorHex: Long = 0xFF0466C8,
     val upgradeCost: Int = 35,
     val splashRadius: Float = 0f,
-    val armorPiercing: Float = 0f
+    val armorPiercing: Float = 0f,
+    val slowFactor: Float = 0f,
+    val slowDuration: Float = 0f
 ) {
     val attacksPerSecond: Float get() = if (attackCooldown > 0f) 1f / attackCooldown else 0f
 
@@ -146,31 +149,90 @@ data class TowerSpec(
                         name = "Twin Autocannon Mk.II",
                         level = 2,
                         cost = 55,
-                        range = 280f,
-                        damage = 10f,
-                        attackCooldown = 0.10f,
+                        range = 290f,
+                        damage = 22f,
+                        attackCooldown = 0.07f,
                         baseColorHex = 0xFF18181B,
                         turretColorHex = 0xFFF59E0B,
                         upgradeCost = 90,
-                        armorPiercing = 0f
+                        armorPiercing = 0.10f
                     )
                     else -> TowerSpec(
                         type = TowerType.RAPID_FIRE,
                         name = "Storm Battery Mk.III",
                         level = 3,
                         cost = 90,
-                        range = 315f,
-                        damage = 16f,
-                        attackCooldown = 0.08f,
+                        range = 330f,
+                        damage = 35f,
+                        attackCooldown = 0.05f,
                         baseColorHex = 0xFF09090B,
                         turretColorHex = 0xFFFBBF24,
                         upgradeCost = 0,
-                        armorPiercing = 0f
+                        armorPiercing = 0.20f
+                    )
+                }
+
+                TowerType.FROST_GUN -> when (level) {
+                    1 -> TowerSpec(
+                        type = TowerType.FROST_GUN,
+                        name = "Cryo Blaster",
+                        level = 1,
+                        cost = GameConfig.FROST_TOWER_COST,
+                        range = GameConfig.FROST_TOWER_RANGE,
+                        damage = GameConfig.FROST_TOWER_DAMAGE,
+                        attackCooldown = GameConfig.FROST_TOWER_COOLDOWN,
+                        baseColorHex = 0xFF0F172A,
+                        turretColorHex = 0xFF06B6D4,
+                        upgradeCost = 50,
+                        splashRadius = 0f,
+                        armorPiercing = 0.10f,
+                        slowFactor = GameConfig.FROST_TOWER_SLOW_FACTOR,
+                        slowDuration = GameConfig.FROST_TOWER_SLOW_DURATION
+                    )
+                    2 -> TowerSpec(
+                        type = TowerType.FROST_GUN,
+                        name = "Glacial Cannon Mk.II",
+                        level = 2,
+                        cost = 50,
+                        range = 265f,
+                        damage = 14f,
+                        attackCooldown = 0.65f,
+                        baseColorHex = 0xFF082F49,
+                        turretColorHex = 0xFF0EA5E9,
+                        upgradeCost = 80,
+                        splashRadius = 60f,
+                        armorPiercing = 0.20f,
+                        slowFactor = 0.55f,
+                        slowDuration = 3.2f
+                    )
+                    else -> TowerSpec(
+                        type = TowerType.FROST_GUN,
+                        name = "Blizzard Mortar Mk.III",
+                        level = 3,
+                        cost = 80,
+                        range = 300f,
+                        damage = 26f,
+                        attackCooldown = 0.55f,
+                        baseColorHex = 0xFF042F2E,
+                        turretColorHex = 0xFF38BDF8,
+                        upgradeCost = 0,
+                        splashRadius = 85f,
+                        armorPiercing = 0.30f,
+                        slowFactor = 0.68f,
+                        slowDuration = 4.0f
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * Type of target currently acquired or manually designated for a tower.
+ */
+enum class TargetType {
+    ENEMY,
+    DESTRUCTIBLE
 }
 
 /**
@@ -182,10 +244,16 @@ data class Tower(
     val position: Point2D,
     val cooldownTimer: Float = 0f,
     val rotationAngle: Float = 0f,
-    val targetEnemyId: String? = null,
+    val targetType: TargetType = TargetType.ENEMY,
+    val targetId: String? = null,
+    val targetEnemyId: String? = targetId,
+    val manualTargetId: String? = null,
+    val manualTargetType: TargetType? = null,
     val targetingStrategy: TargetingStrategy = TargetingStrategy.FIRST,
     val totalCoinsInvested: Int = spec.cost
 ) {
+    val currentTargetId: String? get() = manualTargetId ?: targetId ?: targetEnemyId
+    val currentTargetType: TargetType get() = manualTargetType ?: targetType
     val canAttack: Boolean get() = cooldownTimer <= 0f
     val isMaxLevel: Boolean get() = spec.level >= 3
     val sellRefundCoins: Int get() = (totalCoinsInvested * 0.7f).toInt().coerceAtLeast(10)
@@ -194,6 +262,7 @@ data class Tower(
             TowerType.MACHINE_GUN -> 0.055f
             TowerType.CANNON -> 0.18f
             TowerType.RAPID_FIRE -> 0.038f
+            TowerType.FROST_GUN -> 0.12f
         }
         return cooldownTimer > (spec.attackCooldown - flashDuration)
     }
@@ -203,6 +272,7 @@ data class Tower(
             TowerType.MACHINE_GUN -> 0.08f
             TowerType.CANNON -> 0.32f
             TowerType.RAPID_FIRE -> 0.05f
+            TowerType.FROST_GUN -> 0.16f
         }
         val elapsed = spec.attackCooldown - cooldownTimer
         return if (elapsed in 0f..window) {
@@ -219,17 +289,51 @@ data class Tower(
         return copy(cooldownTimer = spec.attackCooldown)
     }
 
-    fun aimAt(targetPosition: Point2D, targetId: String?): Tower {
+    fun aimAt(targetPosition: Point2D, targetId: String?, type: TargetType = TargetType.ENEMY): Tower {
         val angle = position.angleTo(targetPosition)
-        return copy(rotationAngle = angle, targetEnemyId = targetId)
+        return copy(
+            rotationAngle = angle,
+            targetId = targetId,
+            targetEnemyId = targetId,
+            targetType = type
+        )
     }
 
     fun clearTarget(): Tower {
-        return copy(targetEnemyId = null)
+        return copy(
+            targetId = null,
+            targetEnemyId = null,
+            targetType = TargetType.ENEMY
+        )
+    }
+
+    fun setManualTarget(targetId: String?, type: TargetType? = if (targetId != null) TargetType.DESTRUCTIBLE else null): Tower {
+        return copy(
+            manualTargetId = targetId,
+            manualTargetType = type,
+            targetId = targetId,
+            targetEnemyId = targetId,
+            targetType = type ?: TargetType.ENEMY
+        )
+    }
+
+    fun clearManualTarget(): Tower {
+        return copy(
+            manualTargetId = null,
+            manualTargetType = null,
+            targetId = null,
+            targetEnemyId = null,
+            targetType = TargetType.ENEMY
+        )
     }
 
     fun isEnemyInRange(enemyPosition: Point2D): Boolean {
         return position.distanceTo(enemyPosition) <= spec.range
+    }
+
+    fun isObjectInRange(objectPosition: Point2D, objectRadius: Float = 0f): Boolean {
+        val dist = position.distanceTo(objectPosition)
+        return (dist - objectRadius) <= spec.range
     }
 
     fun upgrade(): Tower? {

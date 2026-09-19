@@ -30,6 +30,8 @@ class ProgressionManager(context: Context) {
             "map_4_tunnel", "canyon_tunnel" -> getStarsForMap("split_routes") >= 1 || getStarsForMap("forest_pass") >= 1 || totalStars >= 7
             "the_crossing", "map_6_crossing" -> getStarsForMap("map_4_tunnel") >= 1 || getStarsForMap("canyon_tunnel") >= 1 || totalStars >= 9
             "map_5_loop", "dragons_coil" -> getStarsForMap("the_crossing") >= 1 || getStarsForMap("map_4_tunnel") >= 1 || totalStars >= 11
+            "snow_valley", "map_8_snow" -> getStarsForMap("map_5_loop") >= 1 || getStarsForMap("dragons_coil") >= 1 || totalStars >= 13
+            "night_fortress", "map_9_night" -> getStarsForMap("snow_valley") >= 1 || getStarsForMap("map_8_snow") >= 1 || totalStars >= 15
             else -> false
         }
     }
@@ -62,6 +64,9 @@ class ProgressionManager(context: Context) {
                 getStarsForMap("desert_outpost") +
                 getStarsForMap("forest_pass") +
                 getStarsForMap("map_4_tunnel") +
-                getStarsForMap("map_5_loop")
+                getStarsForMap("the_crossing") +
+                getStarsForMap("map_5_loop") +
+                getStarsForMap("snow_valley") +
+                getStarsForMap("night_fortress")
     }
 }

@@ -45,10 +45,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun selectBuildPosition(point: com.example.entities.Point2D?) = gameEngine.selectBuildPosition(point)
     fun placeTowerAt(type: TowerType, virtualX: Float, virtualY: Float) = gameEngine.placeTowerAt(type, virtualX, virtualY)
     fun isBuildableLocation(point: com.example.entities.Point2D) = gameEngine.isBuildableLocation(point)
+    fun isValidTowerPlacement(worldX: Float, worldY: Float, towerRadius: Float = com.example.data.GameConfig.TOWER_SIZE / 2f) =
+        gameEngine.isValidTowerPlacement(worldX, worldY, towerRadius)
     fun clearSelection() {
-        gameEngine.selectExistingTower(null)
-        gameEngine.selectBuildPosition(null)
+        gameEngine.clearSelection()
     }
+    fun selectDestructible(id: String?) = gameEngine.selectDestructible(id)
+    fun stopTargetingDestructible(id: String) = gameEngine.stopTargetingDestructible(id)
+    fun setTowerManualTarget(towerId: String, targetId: String?, type: com.example.entities.TargetType? = null) =
+        gameEngine.setTowerManualTarget(towerId, targetId, type)
+    fun clearTowerManualTarget(towerId: String) = gameEngine.clearTowerManualTarget(towerId)
+    fun showNotice(message: String) = gameEngine.showNotice(message)
+    fun invalidTargetFeedback() = gameEngine.audioPlayer.invalidPlacement()
     fun selectExistingTower(tower: Tower?) = gameEngine.selectExistingTower(tower)
     fun upgradeSelectedTower() = gameEngine.upgradeSelectedTower()
     fun sellSelectedTower() = gameEngine.sellSelectedTower()
@@ -68,12 +76,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         progressionManager.saveStarsForMap(mapId, state.starsEarned)
         progressionManager.recordWaveReached(mapId, state.currentWave)
         when (mapId) {
-            "green_valley" -> progressionManager.unlockMap("desert_outpost")
-            "desert_outpost" -> progressionManager.unlockMap("forest_pass")
-            "forest_pass" -> progressionManager.unlockMap("split_routes")
-            "split_routes" -> progressionManager.unlockMap("canyon_tunnel")
+            "green_valley", "map_1_valley" -> progressionManager.unlockMap("desert_outpost")
+            "desert_outpost", "map_2_canyon" -> progressionManager.unlockMap("forest_pass")
+            "forest_pass", "map_3_crossroads" -> progressionManager.unlockMap("split_routes")
+            "split_routes", "map_4_split" -> progressionManager.unlockMap("canyon_tunnel")
             "canyon_tunnel", "map_4_tunnel" -> progressionManager.unlockMap("the_crossing")
-            "the_crossing" -> progressionManager.unlockMap("map_5_loop")
+            "the_crossing", "map_6_crossing" -> progressionManager.unlockMap("map_5_loop")
+            "map_5_loop", "dragons_coil" -> progressionManager.unlockMap("snow_valley")
+            "snow_valley", "map_8_snow" -> progressionManager.unlockMap("night_fortress")
+        }
+    }
+
+    fun getNextMap(): GameMap? {
+        val currentId = gameState.value.currentMap.id
+        return when (currentId) {
+            "green_valley", "map_1_valley" -> GameMap.createDesertOutpostMap(isUnlocked = true, stars = progressionManager.getStarsForMap("desert_outpost"))
+            "desert_outpost", "map_2_canyon" -> GameMap.createForestPassMap(isUnlocked = true, stars = progressionManager.getStarsForMap("forest_pass"))
+            "forest_pass", "map_3_crossroads" -> GameMap.createSplitRoutesMap(isUnlocked = true, stars = progressionManager.getStarsForMap("split_routes"))
+            "split_routes", "map_4_split" -> GameMap.createCanyonTunnelMap(isUnlocked = true, stars = progressionManager.getStarsForMap("canyon_tunnel"))
+            "canyon_tunnel", "map_4_tunnel" -> GameMap.createTheCrossingMap(isUnlocked = true, stars = progressionManager.getStarsForMap("the_crossing"))
+            "the_crossing", "map_6_crossing" -> GameMap.createDragonsCoilMap(isUnlocked = true, stars = progressionManager.getStarsForMap("map_5_loop"))
+            "map_5_loop", "dragons_coil" -> GameMap.createSnowValleyMap(isUnlocked = true, stars = progressionManager.getStarsForMap("snow_valley"))
+            "snow_valley", "map_8_snow" -> GameMap.createNightFortressMap(isUnlocked = true, stars = progressionManager.getStarsForMap("night_fortress"))
+            else -> null
+        }
+    }
+
+    fun loadNextMap() {
+        val next = getNextMap()
+        if (next != null) {
+            loadMap(next)
+        } else {
+            restart()
         }
     }
 }

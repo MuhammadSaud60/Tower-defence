@@ -250,6 +250,14 @@ fun TowerUpgradePanel(
                         color = Color(0xFFA855F7)
                     )
                 }
+                if (tower.spec.slowFactor > 0f) {
+                    StatItem(
+                        label = "SLOW",
+                        value = "${(tower.spec.slowFactor * 100).toInt()}%",
+                        icon = Icons.Default.Speed,
+                        color = Color(0xFF38BDF8)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(6.dp))

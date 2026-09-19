@@ -98,11 +98,12 @@ fun TowerBuildRadialMenu(
     val cannonSpec = remember { TowerSpec.create(TowerType.CANNON, 1) }
     val gunnerSpec = remember { TowerSpec.create(TowerType.MACHINE_GUN, 1) }
     val rapidSpec = remember { TowerSpec.create(TowerType.RAPID_FIRE, 1) }
+    val frostSpec = remember { TowerSpec.create(TowerType.FROST_GUN, 1) }
 
     Box(
         modifier = modifier.testTag("tower_build_radial_menu")
     ) {
-        // 1. Center Reticle/Marker at exact build point
+        // 1. Center Reticle/Marker at exact build point - tap to dismiss
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
@@ -115,13 +116,14 @@ fun TowerBuildRadialMenu(
                 .size(40.dp)
                 .background(Color(0x3338BDF8), CircleShape)
                 .border(2.dp, Color(0xFF38BDF8), CircleShape)
+                .clickable(onClick = onClose)
                 .testTag("build_reticle")
         ) {
             Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Build Location",
+                imageVector = Icons.Default.Close,
+                contentDescription = "Cancel Build",
                 tint = Color(0xFF38BDF8),
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(20.dp)
             )
         }
 
@@ -171,10 +173,25 @@ fun TowerBuildRadialMenu(
             onClick = { onSelectTower(TowerType.RAPID_FIRE) }
         )
 
-        // 5. CANCEL (Bottom - 6:00)
-        RadialCloseButton(
+        // 5. CRYO SLOW GUN (Bottom - 6:00)
+        RadialBuildButton(
+            label = "CRYO",
+            tag = "FROST_GUN",
+            cost = frostSpec.cost,
+            playerCoins = playerCoins,
+            accentGradient = listOf(Color(0xFF06B6D4), Color(0xFF0284C7)),
             centerX = clampedCenterX,
-            centerY = clampedCenterY + radialDistancePx * 0.85f,
+            centerY = clampedCenterY + radialDistancePx,
+            maxWidthPx = maxWidthPx,
+            maxHeightPx = maxHeightPx,
+            scale = animProgress,
+            onClick = { onSelectTower(TowerType.FROST_GUN) }
+        )
+
+        // 6. CANCEL (Bottom Right)
+        RadialCloseButton(
+            centerX = clampedCenterX + radialDistancePx * 0.75f,
+            centerY = clampedCenterY + radialDistancePx * 0.75f,
             maxWidthPx = maxWidthPx,
             maxHeightPx = maxHeightPx,
             scale = animProgress,

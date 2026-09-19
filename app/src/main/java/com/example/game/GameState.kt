@@ -3,6 +3,7 @@ package com.example.game
 import com.example.data.GameConfig
 import com.example.data.GameMap
 import com.example.entities.Base
+import com.example.entities.DestructibleObject
 import com.example.entities.Enemy
 import com.example.entities.Point2D
 import com.example.entities.Projectile
@@ -39,11 +40,15 @@ data class GameState(
     val totalCoinsEarned: Int = GameConfig.STARTING_COINS,
     val currentWave: Int = 1,
     val maxWaves: Int = GameConfig.TOTAL_WAVES,
+    val wavesCleared: Int = 0,
+    val enemyHpMultiplier: Float = 1.0f,
+    val enemySpeedMultiplier: Float = 1.0f,
     val waveStatus: WaveStatus = WaveStatus.READY_TO_START,
     val enemiesRemaining: Int = 0,
     val nextWaveCountdown: Float = 0f,
     val towers: List<Tower> = emptyList(),
     val enemies: List<Enemy> = emptyList(),
+    val destructibles: List<DestructibleObject> = emptyList(),
     val projectiles: List<Projectile> = emptyList(),
     val effects: List<VisualEffect> = emptyList(),
     val isBuildingTower: Boolean = false,
@@ -51,11 +56,16 @@ data class GameState(
     val previewPlacementPos: Point2D? = null,
     val isValidPlacement: Boolean = false,
     val selectedExistingTower: Tower? = null,
+    val selectedDestructibleId: String? = null,
     val placementNotice: String? = null,
     val enemiesKilledTotal: Int = 0,
     val gameSpeedMultiplier: Float = 1.0f,
     val activeBoss: Enemy? = null,
     val starsEarned: Int = 0,
     val finalScore: Int = 0,
-    val gameTime: Float = 0f
-)
+    val gameTime: Float = 0f,
+    val tutorialRecommendedPlot: Point2D? = null
+) {
+    val selectedDestructible: DestructibleObject?
+        get() = destructibles.firstOrNull { it.id == selectedDestructibleId && it.isAlive }
+}

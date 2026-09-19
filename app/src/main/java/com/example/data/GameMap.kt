@@ -1,5 +1,7 @@
 package com.example.data
 
+import com.example.entities.DestructibleObject
+import com.example.entities.DestructibleType
 import com.example.entities.GamePath
 import com.example.entities.Point2D
 
@@ -8,7 +10,9 @@ enum class EnvironmentType {
     DESERT_CANYON,
     FOREST_CROSSROADS,
     OBSIDIAN_TUNNEL,
-    DRAGON_COIL
+    DRAGON_COIL,
+    SNOW_VALLEY,
+    NIGHT_FORTRESS
 }
 
 enum class DecorationType {
@@ -20,7 +24,11 @@ enum class DecorationType {
     FLOWER_PATCH,
     CACTUS,
     CRYSTAL,
-    SIGNPOST
+    SIGNPOST,
+    SNOW_PILE,
+    FROZEN_BUSH,
+    GLOW_MUSHROOM,
+    LANTERN_POST
 }
 
 data class MapDecoration(
@@ -63,6 +71,7 @@ data class GameMap(
     val waterPondRadius: Float = 0f,
     val tunnelRegion: TunnelRegion? = null,
     val blockedAreas: List<BlockedArea> = emptyList(),
+    val destructibles: List<DestructibleObject> = emptyList(),
     val worldWidth: Float = 2000f,
     val worldHeight: Float = 1500f,
     val startingCameraCenter: Point2D = Point2D(460f, 440f),
@@ -83,6 +92,7 @@ data class GameMap(
         waterPondRadius: Float = 0f,
         tunnelRegion: TunnelRegion? = null,
         blockedAreas: List<BlockedArea> = emptyList(),
+        destructibles: List<DestructibleObject> = emptyList(),
         worldWidth: Float = 2000f,
         worldHeight: Float = 1500f,
         startingCameraCenter: Point2D = Point2D(460f, 440f),
@@ -101,6 +111,7 @@ data class GameMap(
         waterPondRadius = waterPondRadius,
         tunnelRegion = tunnelRegion,
         blockedAreas = blockedAreas,
+        destructibles = destructibles,
         worldWidth = worldWidth,
         worldHeight = worldHeight,
         startingCameraCenter = startingCameraCenter,
@@ -175,7 +186,188 @@ data class GameMap(
         return true
     }
 
+    /**
+     * Prevents environment objects (trees, stones, large stones, crates) from spawning on or near roads.
+     * Road clearance area: path + (roadWidth / 2) + object collision radius + extra safety margin.
+     * Also verifies map boundaries, water ponds, tunnels, blocked areas, and base fortress.
+     */
+    fun canSpawnEnvironmentObject(
+        candidate: Point2D,
+        collisionRadius: Float,
+        roadSafetyMargin: Float = 25f
+    ): Boolean {
+        // 1. Must be comfortably within world boundaries
+        val borderMargin = collisionRadius + 30f
+        if (candidate.x < borderMargin || candidate.x > worldWidth - borderMargin ||
+            candidate.y < borderMargin || candidate.y > worldHeight - borderMargin
+        ) {
+            return false
+        }
+
+        // 2. Road clearance check: Distance from EVERY path segment
+        // Must be >= (pathWidth / 2) + collisionRadius + roadSafetyMargin
+        for (p in paths) {
+            val minAllowedDist = (p.pathWidth / 2f) + collisionRadius + roadSafetyMargin
+            if (p.distanceToPath(candidate) < minAllowedDist) {
+                return false
+            }
+        }
+
+        // 3. Water body clearance
+        if (waterPondCenter != null && waterPondRadius > 0f) {
+            if (candidate.distanceTo(waterPondCenter) < (waterPondRadius + collisionRadius + 15f)) {
+                return false
+            }
+        }
+
+        // 4. Solid cavern mountain obstruction for tunnel map
+        if (tunnelRegion != null) {
+            val t = tunnelRegion
+            if (candidate.x in (t.boundsLeft - collisionRadius)..(t.boundsRight + collisionRadius) &&
+                candidate.y in (t.boundsTop - collisionRadius)..(t.boundsBottom + collisionRadius)
+            ) {
+                return false
+            }
+        }
+
+        // 5. Blocked terrain areas
+        for (block in blockedAreas) {
+            if (candidate.x in (block.left - collisionRadius)..(block.right + collisionRadius) &&
+                candidate.y in (block.top - collisionRadius)..(block.bottom + collisionRadius)
+            ) {
+                return false
+            }
+        }
+
+        // 6. Base fortress collision
+        val baseClearX = GameConfig.BASE_WIDTH / 2f + collisionRadius + 20f
+        val baseClearY = GameConfig.BASE_HEIGHT / 2f + collisionRadius + 20f
+        if (candidate.x in (basePosition.x - baseClearX)..(basePosition.x + baseClearX) &&
+            candidate.y in (basePosition.y - baseClearY)..(basePosition.y + baseClearY)
+        ) {
+            return false
+        }
+
+        return true
+    }
+
+    /**
+     * Finds a valid natural position near desiredPos that satisfies all road clearance
+     * and obstacle clearance constraints without overlapping existing objects.
+     */
+    fun findValidNaturalPosition(
+        desiredPos: Point2D,
+        collisionRadius: Float,
+        existingObjects: List<DestructibleObject> = emptyList(),
+        roadSafetyMargin: Float = 25f
+    ): Point2D? {
+        if (canSpawnEnvironmentObject(desiredPos, collisionRadius, roadSafetyMargin)) {
+            val overlapsExisting = existingObjects.any {
+                it.position.distanceTo(desiredPos) < (collisionRadius + it.collisionRadius + 8f)
+            }
+            if (!overlapsExisting) return desiredPos
+        }
+
+        // Search outward in concentric rings
+        val searchAngles = floatArrayOf(0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f)
+        for (dist in listOf(40f, 80f, 120f, 160f, 200f)) {
+            for (angleDeg in searchAngles) {
+                val rad = Math.toRadians(angleDeg.toDouble())
+                val testPos = Point2D(
+                    desiredPos.x + (kotlin.math.cos(rad) * dist).toFloat(),
+                    desiredPos.y + (kotlin.math.sin(rad) * dist).toFloat()
+                )
+                if (canSpawnEnvironmentObject(testPos, collisionRadius, roadSafetyMargin)) {
+                    val overlaps = existingObjects.any {
+                        it.position.distanceTo(testPos) < (collisionRadius + it.collisionRadius + 8f)
+                    }
+                    if (!overlaps) return testPos
+                }
+            }
+        }
+        return null
+    }
+
     companion object {
+        /**
+         * Ensures all trees, stones, and crates are valid DestructibleObjects positioned
+         * strictly off the enemy road corridor with an extra safety margin.
+         * Also strips or repositions any decorative objects that might intersect the road.
+         */
+        fun buildNaturalEnvironmentForMap(
+            map: GameMap,
+            candidateDestructibles: List<DestructibleObject>,
+            candidateDecorations: List<MapDecoration>
+        ): Pair<List<DestructibleObject>, List<MapDecoration>> {
+            val validatedDestructibles = mutableListOf<DestructibleObject>()
+            val allCandidates = mutableListOf<DestructibleObject>()
+            allCandidates.addAll(candidateDestructibles)
+
+            // Convert decorative trees and boulders to real interactable DestructibleObjects
+            for (dec in candidateDecorations) {
+                when (dec.type) {
+                    DecorationType.OAK_TREE -> {
+                        allCandidates.add(
+                            DestructibleObject(
+                                id = "d_tree_${dec.id}",
+                                type = DestructibleType.TREE,
+                                position = dec.position
+                            )
+                        )
+                    }
+                    DecorationType.PINE_TREE -> {
+                        allCandidates.add(
+                            DestructibleObject(
+                                id = "d_pine_${dec.id}",
+                                type = DestructibleType.TREE,
+                                position = dec.position
+                            )
+                        )
+                    }
+                    DecorationType.BOULDER -> {
+                        allCandidates.add(
+                            DestructibleObject(
+                                id = "d_stone_${dec.id}",
+                                type = if (dec.size > 45f) DestructibleType.LARGE_STONE else DestructibleType.STONE,
+                                position = dec.position
+                            )
+                        )
+                    }
+                    else -> { /* Retained as micro-decoration below */ }
+                }
+            }
+
+            // Road clearance check for every destructible object
+            for (cand in allCandidates) {
+                val validPos = map.findValidNaturalPosition(
+                    desiredPos = cand.position,
+                    collisionRadius = cand.collisionRadius,
+                    existingObjects = validatedDestructibles,
+                    roadSafetyMargin = 25f
+                )
+                if (validPos != null) {
+                    validatedDestructibles.add(cand.copy(position = validPos))
+                }
+            }
+
+            // Filter micro-decorations (bushes, flowers, cacti, crystals) to ensure NONE overlap the road
+            val validatedDecorations = mutableListOf<MapDecoration>()
+            for (dec in candidateDecorations) {
+                if (dec.type == DecorationType.OAK_TREE || dec.type == DecorationType.PINE_TREE || dec.type == DecorationType.BOULDER) {
+                    continue
+                }
+                val roadMargin = (dec.size / 2f) + 12f
+                val overlapsRoad = map.paths.any { p ->
+                    p.distanceToPath(dec.position) < ((p.pathWidth / 2f) + roadMargin)
+                }
+                if (!overlapsRoad) {
+                    validatedDecorations.add(dec)
+                }
+            }
+
+            return validatedDestructibles to validatedDecorations
+        }
+
         fun getPresetMaps(
             isMapUnlocked: (String) -> Boolean = { it == "green_valley" || it == "map_1_valley" },
             getStars: (String) -> Int = { 0 }
@@ -208,6 +400,14 @@ data class GameMap(
                 createDragonsCoilMap(
                     isUnlocked = isMapUnlocked("map_5_loop") || isMapUnlocked("dragons_coil"),
                     stars = maxOf(getStars("map_5_loop"), getStars("dragons_coil"))
+                ),
+                createSnowValleyMap(
+                    isUnlocked = isMapUnlocked("snow_valley") || isMapUnlocked("map_8_snow"),
+                    stars = maxOf(getStars("snow_valley"), getStars("map_8_snow"))
+                ),
+                createNightFortressMap(
+                    isUnlocked = isMapUnlocked("night_fortress") || isMapUnlocked("map_9_night"),
+                    stars = maxOf(getStars("night_fortress"), getStars("map_9_night"))
                 )
             )
         }
@@ -264,6 +464,16 @@ data class GameMap(
                 MapDecoration("f4", DecorationType.FLOWER_PATCH, Point2D(1480f, 740f), size = 24f)
             )
 
+            val destructiblesList = listOf(
+                DestructibleObject("d_tree_1", DestructibleType.OAK_TREE, Point2D(360f, 400f)),
+                DestructibleObject("d_rock_1", DestructibleType.SMALL_STONE, Point2D(650f, 480f)),
+                DestructibleObject("d_crate_1", DestructibleType.WOODEN_CRATE, Point2D(880f, 650f)),
+                DestructibleObject("d_rock_2", DestructibleType.LARGE_BOULDER, Point2D(1280f, 1000f)),
+                DestructibleObject("d_crate_2", DestructibleType.WOODEN_CRATE, Point2D(420f, 740f)),
+                DestructibleObject("d_tree_2", DestructibleType.PINE_TREE, Point2D(950f, 920f)),
+                DestructibleObject("d_crate_3", DestructibleType.WOODEN_CRATE, Point2D(1350f, 680f))
+            )
+
             val map = GameMap(
                 id = "green_valley",
                 name = "Verdant Valley",
@@ -276,13 +486,20 @@ data class GameMap(
                 decorations = decor,
                 waterPondCenter = pondCenter,
                 waterPondRadius = pondRadius,
+                destructibles = destructiblesList,
                 worldWidth = 2200f,
                 worldHeight = 1600f,
                 startingCameraCenter = Point2D(650f, 500f),
                 defaultZoom = 0.95f
             )
-            validateMap(map)
-            return map
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = destructiblesList,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
         }
 
         // ==========================================
@@ -323,6 +540,15 @@ data class GameMap(
                 MapDecoration("b3", DecorationType.BUSH, Point2D(1350f, 1250f), size = 24f)
             )
 
+            val desertDestructibles = listOf(
+                DestructibleObject("d_des_rock_1", DestructibleType.LARGE_BOULDER, Point2D(650f, 400f)),
+                DestructibleObject("d_des_stone_1", DestructibleType.SMALL_STONE, Point2D(950f, 420f)),
+                DestructibleObject("d_des_crate_1", DestructibleType.WOODEN_CRATE, Point2D(480f, 760f)),
+                DestructibleObject("d_des_stone_2", DestructibleType.SMALL_STONE, Point2D(1120f, 780f)),
+                DestructibleObject("d_des_rock_2", DestructibleType.LARGE_BOULDER, Point2D(800f, 1120f)),
+                DestructibleObject("d_des_crate_2", DestructibleType.WOODEN_CRATE, Point2D(1250f, 1140f))
+            )
+
             val map = GameMap(
                 id = "desert_outpost",
                 name = "Switchback Canyon",
@@ -333,13 +559,20 @@ data class GameMap(
                 paths = listOf(path),
                 basePosition = basePos,
                 decorations = decor,
+                destructibles = desertDestructibles,
                 worldWidth = 2600f,
                 worldHeight = 1700f,
                 startingCameraCenter = Point2D(650f, 450f),
                 defaultZoom = 0.90f
             )
-            validateMap(map)
-            return map
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = desertDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
         }
 
         // ==========================================
@@ -385,6 +618,15 @@ data class GameMap(
                 MapDecoration("f1", DecorationType.FLOWER_PATCH, Point2D(400f, 660f), size = 24f)
             )
 
+            val forestDestructibles = listOf(
+                DestructibleObject("d_for_tree_1", DestructibleType.OAK_TREE, Point2D(250f, 420f)),
+                DestructibleObject("d_for_rock_1", DestructibleType.SMALL_STONE, Point2D(700f, 420f)),
+                DestructibleObject("d_for_crate_1", DestructibleType.WOODEN_CRATE, Point2D(800f, 800f)),
+                DestructibleObject("d_for_tree_2", DestructibleType.PINE_TREE, Point2D(350f, 1200f)),
+                DestructibleObject("d_for_rock_2", DestructibleType.LARGE_BOULDER, Point2D(1000f, 1200f)),
+                DestructibleObject("d_for_crate_2", DestructibleType.WOODEN_CRATE, Point2D(1680f, 1200f))
+            )
+
             val map = GameMap(
                 id = "forest_pass",
                 name = "Forest Pass",
@@ -395,13 +637,20 @@ data class GameMap(
                 paths = listOf(path),
                 basePosition = basePos,
                 decorations = decor,
+                destructibles = forestDestructibles,
                 worldWidth = 2800f,
                 worldHeight = 1900f,
                 startingCameraCenter = Point2D(650f, 450f),
                 defaultZoom = 0.85f
             )
-            validateMap(map)
-            return map
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = forestDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
         }
 
         // ==========================================
@@ -453,6 +702,15 @@ data class GameMap(
                 MapDecoration("f1", DecorationType.FLOWER_PATCH, Point2D(420f, 720f), size = 24f)
             )
 
+            val splitDestructibles = listOf(
+                DestructibleObject("d_spl_tree_1", DestructibleType.TREE, Point2D(800f, 1000f)),
+                DestructibleObject("d_spl_tree_2", DestructibleType.TREE, Point2D(860f, 1040f)),
+                DestructibleObject("d_spl_rock_1", DestructibleType.LARGE_STONE, Point2D(1400f, 1000f)),
+                DestructibleObject("d_spl_stone_1", DestructibleType.STONE, Point2D(1460f, 960f)),
+                DestructibleObject("d_spl_crate_1", DestructibleType.WOODEN_CRATE, Point2D(1800f, 1000f)),
+                DestructibleObject("d_spl_crate_2", DestructibleType.WOODEN_CRATE, Point2D(2200f, 1000f))
+            )
+
             val map = GameMap(
                 id = "split_routes",
                 name = "Split Routes",
@@ -463,13 +721,20 @@ data class GameMap(
                 paths = listOf(pathNorth, pathSouth),
                 basePosition = basePos,
                 decorations = decor,
+                destructibles = splitDestructibles,
                 worldWidth = 3000f,
                 worldHeight = 2000f,
                 startingCameraCenter = Point2D(700f, 1000f),
                 defaultZoom = 0.80f
             )
-            validateMap(map)
-            return map
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = splitDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
         }
 
         // Backward-compatible alias
@@ -521,6 +786,15 @@ data class GameMap(
                 MapDecoration("b2", DecorationType.BUSH, Point2D(180f, 1180f), size = 24f)
             )
 
+            val tunnelDestructibles = listOf(
+                DestructibleObject("d_tun_rock_1", DestructibleType.LARGE_STONE, Point2D(250f, 600f)),
+                DestructibleObject("d_tun_stone_1", DestructibleType.STONE, Point2D(310f, 640f)),
+                DestructibleObject("d_tun_crate_1", DestructibleType.WOODEN_CRATE, Point2D(200f, 850f)),
+                DestructibleObject("d_tun_tree_1", DestructibleType.TREE, Point2D(1150f, 1000f)),
+                DestructibleObject("d_tun_stone_2", DestructibleType.STONE, Point2D(1220f, 1050f)),
+                DestructibleObject("d_tun_crate_2", DestructibleType.WOODEN_CRATE, Point2D(1650f, 1050f))
+            )
+
             val map = GameMap(
                 id = "canyon_tunnel",
                 name = "Obsidian Canyon",
@@ -531,14 +805,21 @@ data class GameMap(
                 paths = listOf(path),
                 basePosition = basePos,
                 decorations = decor,
+                destructibles = tunnelDestructibles,
                 tunnelRegion = tunnel,
                 worldWidth = 2400f,
                 worldHeight = 1600f,
                 startingCameraCenter = Point2D(650f, 450f),
                 defaultZoom = 0.90f
             )
-            validateMap(map)
-            return map
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = tunnelDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
         }
 
         // Backward-compatible alias
@@ -590,6 +871,15 @@ data class GameMap(
                 MapDecoration("b2", DecorationType.BUSH, Point2D(980f, 500f), size = 26f)
             )
 
+            val crossingDestructibles = listOf(
+                DestructibleObject("d_cro_tree_1", DestructibleType.TREE, Point2D(300f, 650f)),
+                DestructibleObject("d_cro_tree_2", DestructibleType.TREE, Point2D(360f, 680f)),
+                DestructibleObject("d_cro_stone_1", DestructibleType.STONE, Point2D(750f, 400f)),
+                DestructibleObject("d_cro_rock_1", DestructibleType.LARGE_STONE, Point2D(1350f, 650f)),
+                DestructibleObject("d_cro_crate_1", DestructibleType.WOODEN_CRATE, Point2D(1100f, 1100f)),
+                DestructibleObject("d_cro_crate_2", DestructibleType.WOODEN_CRATE, Point2D(1650f, 1300f))
+            )
+
             val map = GameMap(
                 id = "the_crossing",
                 name = "The Crossing",
@@ -600,13 +890,20 @@ data class GameMap(
                 paths = listOf(routeWest, routeNorth),
                 basePosition = basePos,
                 decorations = decor,
+                destructibles = crossingDestructibles,
                 worldWidth = 2600f,
                 worldHeight = 1700f,
                 startingCameraCenter = Point2D(1000f, 750f),
                 defaultZoom = 0.90f
             )
-            validateMap(map)
-            return map
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = crossingDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
         }
 
         // ==========================================
@@ -637,6 +934,15 @@ data class GameMap(
                 MapDecoration("cry2", DecorationType.CRYSTAL, Point2D(750f, 850f), size = 32f)
             )
 
+            val coilDestructibles = listOf(
+                DestructibleObject("d_coil_rock_1", DestructibleType.LARGE_STONE, Point2D(1000f, 800f)),
+                DestructibleObject("d_coil_stone_1", DestructibleType.STONE, Point2D(1080f, 820f)),
+                DestructibleObject("d_coil_tree_1", DestructibleType.TREE, Point2D(800f, 450f)),
+                DestructibleObject("d_coil_tree_2", DestructibleType.TREE, Point2D(860f, 480f)),
+                DestructibleObject("d_coil_crate_1", DestructibleType.WOODEN_CRATE, Point2D(1350f, 800f)),
+                DestructibleObject("d_coil_crate_2", DestructibleType.WOODEN_CRATE, Point2D(700f, 1150f))
+            )
+
             val map = GameMap(
                 id = "map_5_loop",
                 name = "Dragon's Coil",
@@ -647,13 +953,20 @@ data class GameMap(
                 paths = listOf(path),
                 basePosition = basePos,
                 decorations = decor,
+                destructibles = coilDestructibles,
                 worldWidth = 2600f,
                 worldHeight = 1700f,
                 startingCameraCenter = Point2D(1200f, 950f),
                 defaultZoom = 0.90f
             )
-            validateMap(map)
-            return map
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = coilDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
         }
 
         // Aliases for Map 4 and Map 5
@@ -662,6 +975,220 @@ data class GameMap(
 
         fun createDragonCoilMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap =
             createDragonsCoilMap(isUnlocked, stars)
+
+        // ==========================================
+        // MAP 8 — SNOW VALLEY (Winter Battlefield)
+        // Sweeping mountain snow pass with frozen switchbacks, glacial lake,
+        // snow-covered pine forests, ice rocks, and strategic defense choke points.
+        // ==========================================
+        fun createSnowValleyMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2350f, 1550f)
+            val waypoints = listOf(
+                Point2D(-60f, 320f),
+                Point2D(650f, 320f),
+                Point2D(650f, 750f),
+                Point2D(1250f, 750f),
+                Point2D(1250f, 380f),
+                Point2D(2050f, 380f),
+                Point2D(2050f, 1150f),
+                Point2D(1100f, 1150f),
+                Point2D(1100f, 1550f),
+                Point2D(2350f, 1550f)
+            )
+            val path = GamePath(id = "snow_valley_pass", waypoints = waypoints, pathWidth = GameConfig.PATH_WIDTH)
+            val pondCenter = Point2D(1650f, 750f)
+            val pondRadius = 130f
+
+            val decor = listOf(
+                MapDecoration("sp1", DecorationType.SNOW_PILE, Point2D(350f, 220f), size = 36f),
+                MapDecoration("sp2", DecorationType.SNOW_PILE, Point2D(950f, 240f), size = 42f),
+                MapDecoration("sp3", DecorationType.SNOW_PILE, Point2D(1700f, 280f), size = 38f),
+                MapDecoration("sp4", DecorationType.SNOW_PILE, Point2D(520f, 850f), size = 40f),
+                MapDecoration("sp5", DecorationType.SNOW_PILE, Point2D(1450f, 1050f), size = 46f),
+                MapDecoration("sp6", DecorationType.SNOW_PILE, Point2D(1850f, 1420f), size = 44f),
+                MapDecoration("fb1", DecorationType.FROZEN_BUSH, Point2D(480f, 420f), size = 28f),
+                MapDecoration("fb2", DecorationType.FROZEN_BUSH, Point2D(820f, 860f), size = 30f),
+                MapDecoration("fb3", DecorationType.FROZEN_BUSH, Point2D(1420f, 520f), size = 32f),
+                MapDecoration("fb4", DecorationType.FROZEN_BUSH, Point2D(1880f, 960f), size = 30f),
+                MapDecoration("fb5", DecorationType.FROZEN_BUSH, Point2D(950f, 1380f), size = 28f),
+                MapDecoration("cry1", DecorationType.CRYSTAL, Point2D(1650f, 570f), size = 26f),
+                MapDecoration("cry2", DecorationType.CRYSTAL, Point2D(1650f, 930f), size = 26f),
+                MapDecoration("r1", DecorationType.BOULDER, Point2D(380f, 540f), size = 48f),
+                MapDecoration("r2", DecorationType.BOULDER, Point2D(950f, 540f), size = 52f),
+                MapDecoration("r3", DecorationType.BOULDER, Point2D(1550f, 1350f), size = 56f),
+                MapDecoration("r4", DecorationType.BOULDER, Point2D(820f, 1020f), size = 44f),
+                MapDecoration("t1", DecorationType.PINE_TREE, Point2D(300f, 160f), size = 62f),
+                MapDecoration("t2", DecorationType.PINE_TREE, Point2D(950f, 160f), size = 64f),
+                MapDecoration("t3", DecorationType.PINE_TREE, Point2D(1600f, 200f), size = 58f),
+                MapDecoration("t4", DecorationType.PINE_TREE, Point2D(2350f, 320f), size = 66f),
+                MapDecoration("t5", DecorationType.PINE_TREE, Point2D(2350f, 750f), size = 60f),
+                MapDecoration("t6", DecorationType.PINE_TREE, Point2D(600f, 1380f), size = 60f),
+                MapDecoration("t7", DecorationType.PINE_TREE, Point2D(1550f, 960f), size = 56f)
+            )
+
+            val snowDestructibles = listOf(
+                DestructibleObject("d_snow_rock_1", DestructibleType.LARGE_STONE, Point2D(950f, 540f)),
+                DestructibleObject("d_snow_rock_2", DestructibleType.STONE, Point2D(380f, 540f)),
+                DestructibleObject("d_snow_rock_3", DestructibleType.LARGE_BOULDER, Point2D(1550f, 1350f)),
+                DestructibleObject("d_snow_tree_1", DestructibleType.PINE_TREE, Point2D(300f, 160f)),
+                DestructibleObject("d_snow_tree_2", DestructibleType.PINE_TREE, Point2D(950f, 160f)),
+                DestructibleObject("d_snow_tree_3", DestructibleType.PINE_TREE, Point2D(1600f, 200f)),
+                DestructibleObject("d_snow_tree_4", DestructibleType.PINE_TREE, Point2D(600f, 1380f)),
+                DestructibleObject("d_snow_tree_5", DestructibleType.PINE_TREE, Point2D(1550f, 960f)),
+                DestructibleObject("d_snow_crate_1", DestructibleType.WOODEN_CRATE, Point2D(950f, 920f)),
+                DestructibleObject("d_snow_crate_2", DestructibleType.REINFORCED_CRATE, Point2D(1700f, 1350f))
+            )
+
+            val map = GameMap(
+                id = "snow_valley",
+                name = "Snow Valley",
+                description = "Vast snow-covered mountain battlefield with icy switchbacks, frozen glacial ponds, and snow-laden pine groves. Formidable winter defense.",
+                environmentType = EnvironmentType.SNOW_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(path),
+                basePosition = basePos,
+                decorations = decor,
+                waterPondCenter = pondCenter,
+                waterPondRadius = pondRadius,
+                destructibles = snowDestructibles,
+                worldWidth = 2800f,
+                worldHeight = 1800f,
+                startingCameraCenter = Point2D(950f, 750f),
+                defaultZoom = 0.85f
+            )
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = snowDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
+        }
+
+        // ==========================================
+        // MAP 9 — NIGHT FORTRESS (Moonlit Citadel)
+        // Midnight battlefield with moonlit stone paths, bioluminescent plants,
+        // glowing runestones, deep twilight pine groves, and illuminated castle base.
+        // ==========================================
+        fun createNightFortressMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val waypoints = listOf(
+                Point2D(-40f, 380f),
+                Point2D(440f, 380f),
+                Point2D(700f, 540f),
+                Point2D(700f, 980f),
+                Point2D(460f, 1180f),
+                Point2D(460f, 1420f),
+                Point2D(880f, 1420f),
+                Point2D(1140f, 1200f),
+                Point2D(1140f, 740f),
+                Point2D(1480f, 460f),
+                Point2D(1920f, 460f),
+                Point2D(2180f, 720f),
+                Point2D(2180f, 1180f),
+                Point2D(1850f, 1420f)
+            )
+
+            val basePos = Point2D(1850f, 1420f)
+            val pondCenter = Point2D(1640f, 850f)
+            val pondRadius = 135f
+
+            val path = GamePath(id = "night_fortress_pass", waypoints = waypoints, pathWidth = GameConfig.PATH_WIDTH)
+
+            val decor = listOf(
+                // Bioluminescent glow mushrooms
+                MapDecoration("gm1", DecorationType.GLOW_MUSHROOM, Point2D(880f, 620f), size = 26f),
+                MapDecoration("gm2", DecorationType.GLOW_MUSHROOM, Point2D(1350f, 660f), size = 28f),
+                MapDecoration("gm3", DecorationType.GLOW_MUSHROOM, Point2D(1640f, 650f), size = 26f),
+                MapDecoration("gm4", DecorationType.GLOW_MUSHROOM, Point2D(1880f, 850f), size = 30f),
+                MapDecoration("gm5", DecorationType.GLOW_MUSHROOM, Point2D(1000f, 1380f), size = 26f),
+                MapDecoration("gm6", DecorationType.GLOW_MUSHROOM, Point2D(580f, 1340f), size = 26f),
+                MapDecoration("gm7", DecorationType.GLOW_MUSHROOM, Point2D(2020f, 620f), size = 28f),
+
+                // Ancient glowing lantern posts along key scenic lookouts
+                MapDecoration("lp1", DecorationType.LANTERN_POST, Point2D(340f, 290f), size = 32f),
+                MapDecoration("lp2", DecorationType.LANTERN_POST, Point2D(820f, 440f), size = 32f),
+                MapDecoration("lp3", DecorationType.LANTERN_POST, Point2D(600f, 1080f), size = 32f),
+                MapDecoration("lp4", DecorationType.LANTERN_POST, Point2D(1020f, 1080f), size = 32f),
+                MapDecoration("lp5", DecorationType.LANTERN_POST, Point2D(1360f, 380f), size = 32f),
+                MapDecoration("lp6", DecorationType.LANTERN_POST, Point2D(2060f, 380f), size = 32f),
+                MapDecoration("lp7", DecorationType.LANTERN_POST, Point2D(2060f, 1300f), size = 32f),
+
+                // Dark foliage and night bushes
+                MapDecoration("b1", DecorationType.BUSH, Point2D(540f, 280f), size = 30f),
+                MapDecoration("b2", DecorationType.BUSH, Point2D(840f, 860f), size = 32f),
+                MapDecoration("b3", DecorationType.BUSH, Point2D(1420f, 680f), size = 30f),
+                MapDecoration("b4", DecorationType.BUSH, Point2D(1860f, 620f), size = 32f),
+                MapDecoration("b5", DecorationType.BUSH, Point2D(980f, 1460f), size = 28f),
+                MapDecoration("b6", DecorationType.BUSH, Point2D(2280f, 540f), size = 30f),
+
+                // Luminous crystals
+                MapDecoration("cry1", DecorationType.CRYSTAL, Point2D(1480f, 1050f), size = 26f),
+                MapDecoration("cry2", DecorationType.CRYSTAL, Point2D(1780f, 1050f), size = 26f),
+                MapDecoration("cry3", DecorationType.CRYSTAL, Point2D(1640f, 1080f), size = 28f),
+
+                // Dark moonlit stones and boulders
+                MapDecoration("r1", DecorationType.BOULDER, Point2D(280f, 520f), size = 48f),
+                MapDecoration("r2", DecorationType.BOULDER, Point2D(880f, 820f), size = 52f),
+                MapDecoration("r3", DecorationType.BOULDER, Point2D(1350f, 880f), size = 54f),
+                MapDecoration("r4", DecorationType.BOULDER, Point2D(2340f, 960f), size = 52f),
+                MapDecoration("r5", DecorationType.BOULDER, Point2D(700f, 1340f), size = 46f),
+
+                // Forest canopy pines and oaks
+                MapDecoration("t1", DecorationType.PINE_TREE, Point2D(200f, 180f), size = 64f),
+                MapDecoration("t2", DecorationType.PINE_TREE, Point2D(580f, 160f), size = 66f),
+                MapDecoration("t3", DecorationType.OAK_TREE, Point2D(920f, 160f), size = 68f),
+                MapDecoration("t4", DecorationType.PINE_TREE, Point2D(1680f, 220f), size = 64f),
+                MapDecoration("t5", DecorationType.OAK_TREE, Point2D(2250f, 240f), size = 68f),
+                MapDecoration("t6", DecorationType.PINE_TREE, Point2D(2420f, 750f), size = 66f),
+                MapDecoration("t7", DecorationType.PINE_TREE, Point2D(2400f, 1350f), size = 64f),
+                MapDecoration("t8", DecorationType.OAK_TREE, Point2D(280f, 900f), size = 68f),
+                MapDecoration("t9", DecorationType.PINE_TREE, Point2D(260f, 1420f), size = 64f),
+                MapDecoration("t10", DecorationType.PINE_TREE, Point2D(1380f, 1440f), size = 66f)
+            )
+
+            val nightDestructibles = listOf(
+                DestructibleObject("d_night_rock_1", DestructibleType.LARGE_STONE, Point2D(280f, 520f)),
+                DestructibleObject("d_night_rock_2", DestructibleType.STONE, Point2D(880f, 820f)),
+                DestructibleObject("d_night_rock_3", DestructibleType.LARGE_BOULDER, Point2D(1350f, 880f)),
+                DestructibleObject("d_night_rock_4", DestructibleType.LARGE_STONE, Point2D(2340f, 960f)),
+                DestructibleObject("d_night_tree_1", DestructibleType.PINE_TREE, Point2D(200f, 180f)),
+                DestructibleObject("d_night_tree_2", DestructibleType.OAK_TREE, Point2D(920f, 160f)),
+                DestructibleObject("d_night_tree_3", DestructibleType.PINE_TREE, Point2D(1680f, 220f)),
+                DestructibleObject("d_night_tree_4", DestructibleType.PINE_TREE, Point2D(2420f, 750f)),
+                DestructibleObject("d_night_tree_5", DestructibleType.OAK_TREE, Point2D(280f, 900f)),
+                DestructibleObject("d_night_crate_1", DestructibleType.WOODEN_CRATE, Point2D(920f, 980f)),
+                DestructibleObject("d_night_crate_2", DestructibleType.REINFORCED_CRATE, Point2D(1350f, 520f))
+            )
+
+            val map = GameMap(
+                id = "night_fortress",
+                name = "Night Fortress",
+                description = "Moonlit citadel surrounded by dark ancient forests, mystic reflecting waters, and bioluminescent flora. Defend the stronghold against elite night invaders.",
+                environmentType = EnvironmentType.NIGHT_FORTRESS,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(path),
+                basePosition = basePos,
+                decorations = decor,
+                waterPondCenter = pondCenter,
+                waterPondRadius = pondRadius,
+                destructibles = nightDestructibles,
+                worldWidth = 2600f,
+                worldHeight = 1700f,
+                startingCameraCenter = Point2D(1100f, 850f),
+                defaultZoom = 0.82f
+            )
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = nightDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
+        }
 
         /**
          * Defensive map validation ensuring boundaries, base presence, and path integrity.
@@ -692,6 +1219,18 @@ data class GameMap(
                 val distToBase = endPoint.distanceTo(map.basePosition)
                 if (distToBase > 60f) {
                     android.util.Log.w("GameMap", "Path ${path.id} end $endPoint does not connect to base ${map.basePosition} (distance: $distToBase)")
+                }
+            }
+
+            // Verify that no destructible object was spawned on any road corridor
+            for (d in map.destructibles) {
+                for (path in map.paths) {
+                    val dist = path.distanceToPath(d.position)
+                    val minAllowed = (path.pathWidth / 2f) + d.collisionRadius
+                    if (dist < minAllowed) {
+                        android.util.Log.e("GameMap", "Destructible ${d.id} (${d.type}) is on path ${path.id} (dist $dist < $minAllowed)")
+                        throw IllegalStateException("Destructible ${d.id} is placed on road ${path.id}")
+                    }
                 }
             }
         }

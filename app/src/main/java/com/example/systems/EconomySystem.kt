@@ -30,7 +30,7 @@ class EconomySystem(
     }
 
     fun rewardForEnemyKill(count: Int = 1) {
-        addCoins(count * 10)
+        addCoins(count * 5)
     }
 
     fun reset(startingCoins: Int = GameConfig.STARTING_COINS) {

@@ -247,6 +247,46 @@ fun TowerRadialMenu(
                 onClose = { showStatsBubble = false }
             )
         }
+
+        // -------------------------------------------------------------
+        // 6. DISMISS / CLOSE BUTTON (Top-Right of radial cluster)
+        // -------------------------------------------------------------
+        val closeBtnX = centerX + (menuRadiusPx * 0.72f * animProgress)
+        val closeBtnY = centerY - (menuRadiusPx * 0.72f * animProgress)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        (closeBtnX - with(density) { 16.dp.toPx() }).roundToInt(),
+                        (closeBtnY - with(density) { 16.dp.toPx() }).roundToInt()
+                    )
+                }
+                .scale(animProgress)
+                .alpha(animProgress.coerceIn(0f, 1f))
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xEE1E293B),
+                modifier = Modifier
+                    .size(32.dp)
+                    .border(1.dp, Color(0xFF94A3B8), CircleShape)
+                    .clickable(onClick = onClose)
+                    .testTag("radial_action_close")
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Menu",
+                        tint = Color(0xFFE2E8F0),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -444,6 +484,12 @@ private fun CompactStatsTooltip(
                 )
                 if (tower.spec.splashRadius > 0f) {
                     StatChip(label = "SPL", value = tower.spec.splashRadius.toInt().toString(), color = Color(0xFFFB923C))
+                } else if (tower.spec.slowFactor > 0f) {
+                    StatChip(
+                        label = "SLOW",
+                        value = "${(tower.spec.slowFactor * 100).toInt()}%",
+                        color = Color(0xFF38BDF8)
+                    )
                 } else if (tower.spec.armorPiercing > 0f) {
                     StatChip(
                         label = "AP",

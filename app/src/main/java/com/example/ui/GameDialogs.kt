@@ -1,7 +1,11 @@
 package com.example.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -21,38 +25,38 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Dangerous
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Park
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SentimentVeryDissatisfied
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -62,6 +66,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.example.audio.AndroidAudioPlayer
 import com.example.game.GameStatus
+import com.example.ui.components.GameButton
+import com.example.ui.components.GameButtonVariant
+import com.example.ui.components.GamePanel
+import com.example.ui.components.GameStatRow
 
 @Composable
 fun SettingsDialog(
@@ -79,57 +87,21 @@ fun SettingsDialog(
     var ambienceVolume by remember { mutableStateOf(audioPlayer.ambienceVolume) }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-            border = BorderStroke(1.5.dp, Color(0xFF334155)),
+        GamePanel(
+            headerTitle = "AUDIO SETTINGS",
+            headerIcon = Icons.Default.Settings,
+            borderColor = Color(0xFF38BDF8),
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .widthIn(max = 480.dp)
-                .padding(12.dp)
                 .testTag("settings_dialog")
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = Color(0xFF38BDF8),
-                            modifier = Modifier.size(26.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "AUDIO SETTINGS",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.testTag("close_settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = Color(0xFF94A3B8)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
                 // 1. Sound Effects (SFX)
                 AudioControlRow(
                     title = "Sound Effects (SFX)",
@@ -149,8 +121,6 @@ fun SettingsDialog(
                     tagPrefix = "sfx"
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
-
                 // 2. Background Music
                 AudioControlRow(
                     title = "Music",
@@ -164,16 +134,14 @@ fun SettingsDialog(
                         musicVolume = it
                         audioPlayer.musicVolume = it
                     },
-                    icon = Icons.Default.MusicNote,
-                    iconTint = Color(0xFFA855F7),
+                    icon = Icons.Default.VolumeUp,
+                    iconTint = Color(0xFFFBBF24),
                     tagPrefix = "music"
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
-
                 // 3. Ambience
                 AudioControlRow(
-                    title = "Map Ambience",
+                    title = "Battlefield Ambience",
                     enabled = ambienceEnabled,
                     onEnabledChange = {
                         ambienceEnabled = it
@@ -184,28 +152,21 @@ fun SettingsDialog(
                         ambienceVolume = it
                         audioPlayer.ambienceVolume = it
                     },
-                    icon = Icons.Default.Park,
-                    iconTint = Color(0xFF22C55E),
+                    icon = Icons.Default.VolumeUp,
+                    iconTint = Color(0xFF4ADE80),
                     tagPrefix = "ambience"
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                Button(
+                GameButton(
+                    text = "SAVE & CLOSE",
+                    variant = GameButtonVariant.PRIMARY,
+                    height = 42.dp,
                     onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .testTag("settings_done_button")
-                ) {
-                    Text(
-                        text = "DONE",
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "settings_done_button"
+                )
             }
         }
     }
@@ -222,16 +183,14 @@ private fun AudioControlRow(
     iconTint: Color,
     tagPrefix: String
 ) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-        modifier = Modifier.fillMaxWidth()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF090E17), RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -242,13 +201,13 @@ private fun AudioControlRow(
                         imageVector = icon,
                         contentDescription = title,
                         tint = if (enabled) iconTint else Color(0xFF64748B),
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
                         color = if (enabled) Color.White else Color(0xFF94A3B8)
                     )
                 }
@@ -286,7 +245,7 @@ private fun AudioControlRow(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "${(volume * 100).toInt()}%",
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF94A3B8),
                         modifier = Modifier.width(36.dp)
@@ -298,8 +257,8 @@ private fun AudioControlRow(
 }
 
 /**
- * Centered modal Pause dialog.
- * Fixed in screen UI coordinates above the game canvas.
+ * Professional mobile game tactical Pause dialog.
+ * Darkens gameplay with subtle vignette and displays center tactical console.
  */
 @Composable
 fun PauseDialog(
@@ -307,11 +266,13 @@ fun PauseDialog(
     onRestart: () -> Unit,
     onMainMenu: () -> Unit
 ) {
+    var showEmbeddedSettings by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(1000f)
-            .background(Color.Black.copy(alpha = 0.75f))
+            .background(Color.Black.copy(alpha = 0.82f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -321,11 +282,10 @@ fun PauseDialog(
             .padding(horizontal = 24.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-            border = BorderStroke(1.5.dp, Color(0xFF334155)),
+        GamePanel(
+            headerTitle = "MISSION PAUSED",
+            headerIcon = Icons.Default.Pause,
+            borderColor = Color(0xFF38BDF8),
             modifier = Modifier
                 .widthIn(min = 320.dp, max = 460.dp)
                 .fillMaxWidth(0.75f)
@@ -334,77 +294,76 @@ fun PauseDialog(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(20.dp)
             ) {
                 Text(
-                    text = "GAME PAUSED",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    text = "TACTICAL OPERATIONS FROZEN",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
-                    color = Color.White
+                    color = Color(0xFF94A3B8)
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
-                Button(
+                // Resume Operation (Hero button)
+                GameButton(
+                    text = "RESUME OPERATION",
+                    icon = Icons.Default.PlayArrow,
+                    variant = GameButtonVariant.PRIMARY,
+                    height = 46.dp,
                     onClick = onResume,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .testTag("resume_button")
-                ) {
-                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "RESUME", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "resume_button"
+                )
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedButton(
+                // Restart Mission
+                GameButton(
+                    text = "RESTART MISSION",
+                    icon = Icons.Default.Refresh,
+                    variant = GameButtonVariant.SECONDARY,
+                    height = 42.dp,
                     onClick = onRestart,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8)),
-                    border = BorderStroke(1.dp, Color(0xFF38BDF8)),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(42.dp)
-                        .testTag("pause_restart_button")
-                ) {
-                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "RESTART", fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8), fontSize = 13.sp)
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "pause_restart_button"
+                )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                // Audio Settings
+                GameButton(
+                    text = "AUDIO OPTIONS",
+                    icon = Icons.Default.Settings,
+                    variant = GameButtonVariant.SECONDARY,
+                    height = 42.dp,
+                    onClick = { showEmbeddedSettings = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "pause_settings_button"
+                )
 
-                OutlinedButton(
+                // Exit to Campaign
+                GameButton(
+                    text = "ABORT TO CAMPAIGN",
+                    icon = Icons.Default.Home,
+                    variant = GameButtonVariant.DANGER,
+                    height = 42.dp,
                     onClick = onMainMenu,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
-                    border = BorderStroke(1.dp, Color(0xFF475569)),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(42.dp)
-                        .testTag("pause_menu_button")
-                ) {
-                    Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "HOME", fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), fontSize = 13.sp)
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "pause_menu_button"
+                )
             }
         }
+    }
+
+    if (showEmbeddedSettings) {
+        SettingsDialog(onDismiss = { showEmbeddedSettings = false })
     }
 }
 
 /**
- * Centered modal Defeat popup.
- * Fixed in screen UI coordinates above the game canvas.
- * Guaranteed visible buttons within landscape safe areas.
+ * Professional mobile game tactical Defeat / Game Over screen.
+ * Darker military failure atmosphere with battle stats and tactical action buttons.
  */
 @Composable
 fun GameOverDialog(
@@ -416,11 +375,22 @@ fun GameOverDialog(
     onRestart: () -> Unit,
     onMainMenu: () -> Unit
 ) {
+    val audioPlayer = remember { AndroidAudioPlayer.getInstance() }
+    val entranceScale = remember { Animatable(0.85f) }
+
+    LaunchedEffect(Unit) {
+        audioPlayer.defeat()
+        entranceScale.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(350, easing = FastOutSlowInEasing)
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(1000f)
-            .background(Color.Black.copy(alpha = 0.78f))
+            .background(Color.Black.copy(alpha = 0.85f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -430,15 +400,27 @@ fun GameOverDialog(
             .padding(horizontal = 24.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-            border = BorderStroke(1.5.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
+        // Dramatic central failure panel
+        Box(
             modifier = Modifier
+                .scale(entranceScale.value)
                 .widthIn(min = 380.dp, max = 620.dp)
                 .fillMaxWidth(0.85f)
                 .wrapContentHeight()
+                .background(
+                    brush = Brush.verticalGradient(
+                        listOf(Color(0xFF220E12), Color(0xFF13090B), Color(0xFF0A0406))
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .border(2.dp, Color(0xFFEF4444), RoundedCornerShape(16.dp))
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        listOf(Color(0xFFF87171).copy(alpha = 0.5f), Color.Transparent)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
                 .testTag("game_over_dialog")
         ) {
             Column(
@@ -452,113 +434,115 @@ fun GameOverDialog(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Left Column: Defeat title, icon, wave info
+                    // Left Column: Defeat Emblem, Title, Wave Reached
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.weight(0.9f)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.SentimentVeryDissatisfied,
-                            contentDescription = "Defeat",
-                            tint = Color(0xFFEF4444),
-                            modifier = Modifier.size(44.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .background(
+                                    brush = Brush.radialGradient(
+                                        listOf(Color(0x66EF4444), Color.Transparent)
+                                    ),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Dangerous,
+                                contentDescription = "Defeat",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(42.dp)
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "DEFEAT",
-                            fontSize = 24.sp,
+                            text = "MISSION FAILED",
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
+                            letterSpacing = 1.5.sp,
                             color = Color(0xFFEF4444)
                         )
 
                         Text(
-                            text = "Base was destroyed!",
-                            fontSize = 12.sp,
-                            color = Color(0xFF94A3B8)
+                            text = "CITADEL DEFENSE COMPROMISED",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFCA5A5),
+                            letterSpacing = 1.sp
                         )
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        Text(
-                            text = "Wave $currentWave of $totalWaves",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFFFD166)
-                        )
+                        // Wave progress pill
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(Color(0x66000000), RoundedCornerShape(6.dp))
+                                .border(1.dp, Color(0x44EF4444), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "HALTED AT WAVE ",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF94A3B8)
+                            )
+                            Text(
+                                text = "$currentWave OF $totalWaves",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFFFD166)
+                            )
+                        }
                     }
 
-                    // Right Column: Stats breakdown & action buttons
+                    // Right Column: Battle statistics & retry options
                     Column(
                         modifier = Modifier.weight(1.3f)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF0F172A), RoundedCornerShape(10.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .background(Color(0xFF0F0709), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFF2E1218), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(text = "Wave Reached", fontSize = 12.sp, color = Color(0xFF94A3B8))
-                                Text(text = "$currentWave / $totalWaves", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(text = "Enemies Defeated", fontSize = 12.sp, color = Color(0xFF94A3B8))
-                                Text(text = "$enemiesKilled", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFD166))
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(text = "Tokens & Gold Earned", fontSize = 12.sp, color = Color(0xFF94A3B8))
-                                Text(text = "$coinsEarned 🪙", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
-                            }
+                            GameStatRow("Wave Progress", "$currentWave / $totalWaves")
+                            GameStatRow("Invaders Repelled", "$enemiesKilled", valueColor = Color(0xFFFFD166))
+                            GameStatRow("Bounty Collected", "$coinsEarned 🪙", valueColor = Color(0xFF38BDF8))
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Button(
-                                onClick = onRestart,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(42.dp)
-                                    .testTag("game_over_retry_button")
-                            ) {
-                                Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = "RETRY", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
+                        // Retry Mission Hero Button
+                        GameButton(
+                            text = "RETRY MISSION",
+                            icon = Icons.Default.Refresh,
+                            variant = GameButtonVariant.DANGER,
+                            height = 42.dp,
+                            onClick = onRestart,
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "game_over_retry_button"
+                        )
 
-                            OutlinedButton(
-                                onClick = onMainMenu,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
-                                border = BorderStroke(1.dp, Color(0xFF475569)),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(42.dp)
-                                    .testTag("game_over_menu_button")
-                            ) {
-                                Icon(imageVector = Icons.Default.Home, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF94A3B8))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = "HOME", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF94A3B8))
-                            }
-                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Return to Campaign
+                        GameButton(
+                            text = "TACTICAL RETREAT (HOME)",
+                            icon = Icons.Default.Home,
+                            variant = GameButtonVariant.SECONDARY,
+                            height = 40.dp,
+                            onClick = onMainMenu,
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "game_over_menu_button"
+                        )
                     }
                 }
             }
@@ -568,7 +552,6 @@ fun GameOverDialog(
 
 /**
  * Confirmation popup shown when player presses Android back button during gameplay.
- * Prompts "Exit current mission?" with "Continue Game" and "Exit to Home" options.
  */
 @Composable
 fun ExitMissionDialog(
@@ -579,7 +562,7 @@ fun ExitMissionDialog(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(1001f)
-            .background(Color.Black.copy(alpha = 0.78f))
+            .background(Color.Black.copy(alpha = 0.82f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -589,11 +572,10 @@ fun ExitMissionDialog(
             .padding(horizontal = 24.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-            border = BorderStroke(1.5.dp, Color(0xFFF59E0B).copy(alpha = 0.5f)),
+        GamePanel(
+            headerTitle = "ABORT MISSION?",
+            headerIcon = Icons.Default.Warning,
+            borderColor = Color(0xFFF59E0B),
             modifier = Modifier
                 .widthIn(min = 320.dp, max = 460.dp)
                 .fillMaxWidth(0.75f)
@@ -602,74 +584,40 @@ fun ExitMissionDialog(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 18.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = "Warning",
-                    tint = Color(0xFFF59E0B),
-                    modifier = Modifier.size(40.dp)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Exit current mission?",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
                 Text(
                     text = "Current mission progress will be lost.",
                     fontSize = 12.sp,
                     color = Color(0xFF94A3B8)
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    OutlinedButton(
+                    GameButton(
+                        text = "CONTINUE",
+                        variant = GameButtonVariant.PRIMARY,
+                        height = 42.dp,
                         onClick = onContinue,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8)),
-                        border = BorderStroke(1.dp, Color(0xFF38BDF8)),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp)
-                            .testTag("exit_confirm_continue_button")
-                    ) {
-                        Text(
-                            text = "Continue Game",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
+                        modifier = Modifier.weight(1f),
+                        testTag = "exit_confirm_continue_button"
+                    )
 
-                    Button(
+                    GameButton(
+                        text = "EXIT TO HOME",
+                        variant = GameButtonVariant.DANGER,
+                        height = 42.dp,
                         onClick = onExit,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp)
-                            .testTag("exit_confirm_exit_button")
-                    ) {
-                        Text(
-                            text = "Exit to Home",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = Color.White
-                        )
-                    }
+                        modifier = Modifier.weight(1f),
+                        testTag = "exit_confirm_exit_button"
+                    )
                 }
             }
         }

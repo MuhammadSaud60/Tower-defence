@@ -30,8 +30,12 @@ class ProgressionManager(context: Context) {
             "map_4_tunnel", "canyon_tunnel" -> getStarsForMap("split_routes") >= 1 || getStarsForMap("forest_pass") >= 1 || totalStars >= 7
             "the_crossing", "map_6_crossing" -> getStarsForMap("map_4_tunnel") >= 1 || getStarsForMap("canyon_tunnel") >= 1 || totalStars >= 9
             "map_5_loop", "dragons_coil" -> getStarsForMap("the_crossing") >= 1 || getStarsForMap("map_4_tunnel") >= 1 || totalStars >= 11
-            "snow_valley", "map_8_snow" -> getStarsForMap("map_5_loop") >= 1 || getStarsForMap("dragons_coil") >= 1 || totalStars >= 13
-            "night_fortress", "map_9_night" -> getStarsForMap("snow_valley") >= 1 || getStarsForMap("map_8_snow") >= 1 || totalStars >= 15
+            "snow_outpost" -> getStarsForMap("map_5_loop") >= 1 || getStarsForMap("dragons_coil") >= 1 || totalStars >= 13
+            "frozen_valley", "snow_valley", "map_8_snow" -> getStarsForMap("snow_outpost") >= 1 || getStarsForMap("map_5_loop") >= 1 || totalStars >= 13
+            "ice_mountain" -> getStarsForMap("frozen_valley") >= 1 || getStarsForMap("snow_valley") >= 1 || totalStars >= 15
+            "frozen_fortress" -> getStarsForMap("ice_mountain") >= 1 || totalStars >= 17
+            "arctic_base" -> getStarsForMap("frozen_fortress") >= 1 || totalStars >= 19
+            "night_fortress", "map_9_night" -> getStarsForMap("arctic_base") >= 1 || getStarsForMap("frozen_fortress") >= 1 || getStarsForMap("snow_valley") >= 1 || totalStars >= 21
             else -> false
         }
     }
@@ -66,7 +70,12 @@ class ProgressionManager(context: Context) {
                 getStarsForMap("map_4_tunnel") +
                 getStarsForMap("the_crossing") +
                 getStarsForMap("map_5_loop") +
+                getStarsForMap("snow_outpost") +
+                getStarsForMap("frozen_valley") +
                 getStarsForMap("snow_valley") +
+                getStarsForMap("ice_mountain") +
+                getStarsForMap("frozen_fortress") +
+                getStarsForMap("arctic_base") +
                 getStarsForMap("night_fortress")
     }
 }

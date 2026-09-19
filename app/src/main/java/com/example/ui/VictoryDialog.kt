@@ -1,7 +1,16 @@
 package com.example.ui
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -21,38 +30,50 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.example.audio.AndroidAudioPlayer
 import com.example.game.GameState
+import com.example.ui.components.GameButton
+import com.example.ui.components.GameButtonVariant
+import com.example.ui.components.GameStarsRow
+import com.example.ui.components.GameStatRow
 
 /**
- * Centered modal Victory popup.
- * Fixed in screen UI coordinates above the game world, immune to camera pan/zoom.
- * Designed specifically for landscape orientation to guarantee all buttons and rewards
- * remain visible, fully interactive, and within safe area bounds.
+ * Professional mobile game Victory modal screen.
+ * Features:
+ * - Celebration gold particle sparks drifting upward
+ * - Smooth entrance scale animation
+ * - Embossed golden laurel trophy emblem
+ * - Staggered animated 3-star rating reveal
+ * - Loot reward pill (+tokens)
+ * - Tactical battle statistics readout
+ * - Prominent 3D tactile NEXT LEVEL action button & secondary actions
  */
 @Composable
 fun VictoryDialog(
@@ -62,12 +83,34 @@ fun VictoryDialog(
     onRetry: () -> Unit,
     onHome: () -> Unit
 ) {
+    val audioPlayer = remember { AndroidAudioPlayer.getInstance() }
+    val entranceScale = remember { Animatable(0.85f) }
+
+    LaunchedEffect(Unit) {
+        audioPlayer.victory()
+        entranceScale.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(350, easing = FastOutSlowInEasing)
+        )
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "victory_particles")
+    val particleProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "sparks"
+    )
+
     // Full-screen backdrop in screen coordinates, consuming taps to shield the game world
     Box(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(1000f)
-            .background(Color.Black.copy(alpha = 0.78f))
+            .background(Color.Black.copy(alpha = 0.82f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -77,15 +120,48 @@ fun VictoryDialog(
             .padding(horizontal = 24.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-            border = BorderStroke(1.5.dp, Color(0xFFFFD166).copy(alpha = 0.5f)),
+        // Floating celebration particles / gold sparks
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val sparkCount = 18
+
+            for (i in 0 until sparkCount) {
+                val seed = (i * 137) % 1000 / 1000f
+                val x = w * (0.2f + seed * 0.6f) + (if (i % 2 == 0) 1 else -1) * (particleProgress * 40f)
+                val y = h * 0.9f - ((particleProgress + seed) % 1f) * (h * 0.8f)
+                val alpha = (1f - ((particleProgress + seed) % 1f)).coerceIn(0f, 1f)
+                val radius = if (i % 3 == 0) 3.5f else 2f
+
+                drawCircle(
+                    color = if (i % 2 == 0) Color(0xFFFBBF24).copy(alpha = alpha * 0.8f) else Color(0xFF67E8F9).copy(alpha = alpha * 0.6f),
+                    radius = radius,
+                    center = Offset(x, y)
+                )
+            }
+        }
+
+        // Center Tactical Victory Panel
+        Box(
             modifier = Modifier
+                .scale(entranceScale.value)
                 .widthIn(min = 380.dp, max = 660.dp)
                 .fillMaxWidth(0.88f)
                 .wrapContentHeight()
+                .background(
+                    brush = Brush.verticalGradient(
+                        listOf(Color(0xFF1E293B), Color(0xFF0F172A), Color(0xFF090D18))
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .border(2.dp, Color(0xFFF59E0B), RoundedCornerShape(16.dp))
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        listOf(Color(0xFFFEF08A).copy(alpha = 0.6f), Color.Transparent)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
                 .testTag("victory_dialog")
         ) {
             Column(
@@ -100,177 +176,148 @@ fun VictoryDialog(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Left Column: Victory title, map name, stars, score
+                    // Left Column: Golden Trophy, Title, Map Name, Animated Stars, Score
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.weight(0.9f)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.EmojiEvents,
-                            contentDescription = "Victory Trophy",
-                            tint = Color(0xFFFFD166),
-                            modifier = Modifier.size(42.dp)
-                        )
+                        // Golden Laurel Trophy emblem
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .background(
+                                    brush = Brush.radialGradient(
+                                        listOf(Color(0x66F59E0B), Color.Transparent)
+                                    ),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = "Victory Trophy",
+                                tint = Color(0xFFFBBF24),
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
 
                         Text(
-                            text = "VICTORY!",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp,
-                            color = Color.White
+                            text = "VICTORY ACHIEVED",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.5.sp,
+                            color = Color(0xFFFDE68A)
                         )
 
                         Text(
-                            text = "${gameState.currentMap.name} Defended!",
-                            fontSize = 12.sp,
-                            color = Color(0xFF94A3B8)
+                            text = "${gameState.currentMap.name.uppercase()} SECURED",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF38BDF8),
+                            letterSpacing = 0.5.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Animated Star Rating Display
+                        GameStarsRow(
+                            starsEarned = gameState.starsEarned,
+                            totalStars = 3,
+                            starSize = 30.dp,
+                            animated = true
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // Star rating display
+                        // Tactical Score Badge
                         Row(
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(Color(0x66000000), RoundedCornerShape(6.dp))
+                                .border(1.dp, Color(0x44CA8A04), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
-                            for (i in 1..3) {
-                                val isEarned = i <= gameState.starsEarned
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = "Star $i",
-                                    tint = if (isEarned) Color(0xFFFFD166) else Color(0xFF475569),
-                                    modifier = Modifier
-                                        .size(if (i == 2) 32.dp else 26.dp)
-                                        .padding(horizontal = 2.dp)
-                                )
-                            }
+                            Text(
+                                text = "TACTICAL SCORE: ",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF94A3B8)
+                            )
+                            Text(
+                                text = "${gameState.finalScore}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFFFD166)
+                            )
                         }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = "Score: ${gameState.finalScore}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFFD166)
-                        )
                     }
 
-                    // Right Column: Rewards breakdown & responsive action buttons
+                    // Right Column: Battle Report & Action Buttons
                     Column(
                         modifier = Modifier.weight(1.3f)
                     ) {
-                        // Rewards breakdown box
+                        // Tactical Battle Statistics Box
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF0F172A), RoundedCornerShape(10.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .background(Color(0xFF090E17), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            StatRow("Waves Completed", "${gameState.currentWave}/${gameState.maxWaves}")
-                            StatRow("Invaders Defeated", "${gameState.enemiesKilledTotal}")
-                            StatRow("Tokens & Gold Earned", "${gameState.totalCoinsEarned} 🪙")
-                            StatRow("Base HP Preserved", "${gameState.base.currentHp}/${gameState.base.maxHp}")
+                            GameStatRow("Waves Repelled", "${gameState.currentWave}/${gameState.maxWaves}")
+                            GameStatRow("Invaders Eliminated", "${gameState.enemiesKilledTotal}")
+                            GameStatRow("Bounty Collected", "+${gameState.totalCoinsEarned} 🪙", valueColor = Color(0xFFFBBF24))
+                            GameStatRow("Fortress Integrity", "${gameState.base.currentHp}/${gameState.base.maxHp} HP", valueColor = Color(0xFF4ADE80))
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Next Level Button (if next level is available)
+                        // Next Level Hero Action Button (if available)
                         if (hasNextLevel) {
-                            Button(
+                            GameButton(
+                                text = "NEXT MISSION",
+                                icon = Icons.Default.ArrowForward,
+                                variant = GameButtonVariant.PRIMARY,
+                                height = 44.dp,
                                 onClick = onNextLevel,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(42.dp)
-                                    .testTag("victory_next_level_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowForward,
-                                    contentDescription = "Next Level",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "NEXT LEVEL",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 13.sp,
-                                    color = Color.White
-                                )
-                            }
+                                modifier = Modifier.fillMaxWidth(),
+                                testTag = "victory_next_level_button"
+                            )
 
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        // Secondary row: Retry and Home buttons
+                        // Secondary Row: Retry and Home Buttons
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            OutlinedButton(
+                            GameButton(
+                                text = "RETRY",
+                                icon = Icons.Default.Replay,
+                                variant = GameButtonVariant.SECONDARY,
+                                height = 40.dp,
                                 onClick = onRetry,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8)),
-                                border = BorderStroke(1.dp, Color(0xFF38BDF8)),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(40.dp)
-                                    .testTag("victory_retry_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Replay,
-                                    contentDescription = "Retry",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "RETRY",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
-                                )
-                            }
+                                modifier = Modifier.weight(1f),
+                                testTag = "victory_retry_button"
+                            )
 
-                            OutlinedButton(
+                            GameButton(
+                                text = "CAMPAIGN",
+                                icon = Icons.Default.Home,
+                                variant = GameButtonVariant.SECONDARY,
+                                height = 40.dp,
                                 onClick = onHome,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
-                                border = BorderStroke(1.dp, Color(0xFF475569)),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(40.dp)
-                                    .testTag("victory_home_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Home,
-                                    contentDescription = "Home",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "HOME",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
-                                )
-                            }
+                                modifier = Modifier.weight(1f),
+                                testTag = "victory_home_button"
+                            )
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun StatRow(label: String, value: String) {
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(text = label, fontSize = 12.sp, color = Color(0xFF94A3B8))
-        Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
     }
 }

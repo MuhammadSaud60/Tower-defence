@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -46,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
@@ -312,13 +314,36 @@ fun GameScreen(
                     .padding(top = 48.dp)
             ) {
                 PreparationCountdownBanner(
-                    countdownSeconds = ceil(gameState.preparationCountdown).toInt().coerceAtLeast(1)
+                    countdownSeconds = ceil(gameState.preparationCountdown).toInt().coerceAtLeast(1),
+                    isBossWave = gameState.isBossWave,
+                    upcomingBossName = gameState.upcomingBossName
                 )
             }
         }
 
-        // 4. Placement Notice / Wave Transition Alert Banner
-        if (gameState.placementNotice != null && gameState.gameStatus != GameStatus.PREPARATION) {
+        // 4. Boss Health Banner (when an active boss is engaged on the battlefield)
+        val activeBoss = gameState.activeBoss
+        if (activeBoss != null && activeBoss.isAlive) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 46.dp)
+            ) {
+                ActiveBossHealthBanner(boss = activeBoss)
+            }
+        } else if (gameState.isBossWave && gameState.gameStatus == GameStatus.PLAYING && gameState.enemiesRemaining > 0 && gameState.placementNotice == null) {
+            // Early Boss Wave Alert before the boss unit emerges
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 46.dp)
+            ) {
+                BossIncomingAlertBanner(bossName = gameState.upcomingBossName ?: "BOSS")
+            }
+        }
+
+        // 5. Placement Notice / Wave Transition Alert Banner
+        if (gameState.placementNotice != null && gameState.gameStatus != GameStatus.PREPARATION && activeBoss == null) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -392,43 +417,167 @@ fun GameScreen(
 
 /**
  * 5-Second Preparation Phase Banner.
- * Displays "GET READY" countdown at the beginning of each mission.
+ * Displays "TACTICAL DEPLOYMENT PHASE" countdown at the beginning of each mission.
  */
 @Composable
 private fun PreparationCountdownBanner(
-    countdownSeconds: Int
+    countdownSeconds: Int,
+    isBossWave: Boolean = false,
+    upcomingBossName: String? = null
 ) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xEE0B132B),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF38BDF8)),
-        shadowElevation = 10.dp,
-        modifier = Modifier.testTag("preparation_countdown_banner")
+    val borderColor = if (isBossWave) Color(0xFFF43F5E) else Color(0xFF38BDF8)
+    val titleColor = if (isBossWave) Color(0xFFF43F5E) else Color(0xFF38BDF8)
+    val numberColor = if (isBossWave) Color(0xFFFF4D4D) else Color(0xFFFFD166)
+
+    Box(
+        modifier = Modifier
+            .background(
+                brush = Brush.verticalGradient(
+                    if (isBossWave) listOf(Color(0xF02A0812), Color(0xF0120307))
+                    else listOf(Color(0xF00F172A), Color(0xF0070B14))
+                ),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .border(1.5.dp, borderColor, RoundedCornerShape(10.dp))
+            .border(
+                0.5.dp,
+                Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.3f), Color.Transparent)),
+                RoundedCornerShape(10.dp)
+            )
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+            .testTag("preparation_countdown_banner")
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = if (isBossWave) "⚠️ BOSS WAVE INCOMING!" else "PREPARATION PHASE",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.5.sp,
+                color = titleColor
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = "$countdownSeconds",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black,
+                color = numberColor
+            )
+            Text(
+                text = if (isBossWave) "TARGET: ${(upcomingBossName ?: "APEX BOSS").uppercase()} • FORTIFY CHOKEPOINTS"
+                       else "DEPLOY DEFENSE TURRETS ON EMPTY GROUND",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isBossWave) Color(0xFFFDA4AF) else Color(0xFF94A3B8),
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActiveBossHealthBanner(
+    boss: com.example.entities.Enemy,
+    modifier: Modifier = Modifier
+) {
+    val hpPercent = (boss.currentHp.toFloat() / boss.maxHp.toFloat()).coerceIn(0f, 1f)
+    Box(
+        modifier = modifier
+            .background(
+                brush = Brush.verticalGradient(
+                    listOf(Color(0xF0240810), Color(0xF0120208))
+                ),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .border(1.5.dp, Color(0xFFF43F5E), RoundedCornerShape(10.dp))
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("active_boss_health_banner")
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp)
+            modifier = Modifier.widthIn(min = 220.dp, max = 340.dp)
         ) {
-            Text(
-                text = "GET READY",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp,
-                color = Color(0xFF38BDF8)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Boss Threat",
+                        tint = Color(0xFFF43F5E),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = boss.spec.name.uppercase(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.sp
+                    )
+                }
+                Text(
+                    text = "${boss.currentHp} / ${boss.maxHp} HP",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFDA4AF)
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            // Health Bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .background(Color(0xFF3B0B14), RoundedCornerShape(4.dp))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction = hpPercent)
+                        .height(8.dp)
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color(0xFFF43F5E), Color(0xFFFB7185))
+                            ),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BossIncomingAlertBanner(
+    bossName: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xF02A0812),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF43F5E)),
+        modifier = modifier.testTag("boss_incoming_alert")
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = "Boss Threat",
+                tint = Color(0xFFF43F5E),
+                modifier = Modifier.size(14.dp)
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "$countdownSeconds",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFFFFD166)
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "Tap empty ground to place towers",
+                text = "BOSS WAVE: ${bossName.uppercase()}",
+                color = Color(0xFFFFD166),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF94A3B8)
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.5.sp
             )
         }
     }
@@ -440,94 +589,143 @@ private fun GameHudBar(
     onPauseClick: () -> Unit,
     onToggleSpeed: () -> Unit
 ) {
-    Surface(
-        shape = RectangleShape,
-        color = Color(0xF50B132B),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x3338BDF8)),
-        shadowElevation = 8.dp,
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    listOf(Color(0xF80B1220), Color(0xF0050811))
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = Color(0x3338BDF8),
+                shape = RectangleShape
+            )
             .testTag("game_hud_bar")
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .padding(horizontal = 14.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Group: Tokens & Wave Badges
+            // Left Group: Tokens, Base Integrity & Wave Badges
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 1. Tokens / Gold Capsule Badge
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xD90F172A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x66FFD166)),
-                    shadowElevation = 2.dp
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xE60F172A), RoundedCornerShape(6.dp))
+                        .border(1.dp, Color(0xFFCA8A04), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.MonetizationOn,
                             contentDescription = "Tokens",
-                            tint = Color(0xFFFFD166),
-                            modifier = Modifier.size(17.dp)
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = "${gameState.coins}",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFFFD166),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFDE68A),
                             letterSpacing = 0.5.sp
                         )
                     }
                 }
 
-                // 2. Wave Capsule Badge
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xD90F172A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x6638BDF8)),
-                    shadowElevation = 2.dp
+                // 2. Base Fortress Integrity Pill
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xE60F172A), RoundedCornerShape(6.dp))
+                        .border(
+                            1.dp,
+                            if (gameState.base.currentHp <= 5) Color(0xFFEF4444) else Color(0xFF10B981),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = "WAVE",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF94A3B8),
-                            letterSpacing = 1.sp
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = "Base HP",
+                            tint = if (gameState.base.currentHp <= 5) Color(0xFFEF4444) else Color(0xFF34D399),
+                            modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "${gameState.currentWave}/${gameState.maxWaves}",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF38BDF8)
+                            text = "${gameState.base.currentHp}/${gameState.base.maxHp}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (gameState.base.currentHp <= 5) Color(0xFFF87171) else Color(0xFF6EE7B7)
                         )
-                        if (gameState.wavesCleared > 0) {
+                    }
+                }
+
+                // 3. Wave Capsule Badge
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (gameState.isBossWave) Color(0xE62A0812) else Color(0xE60F172A),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .border(
+                            1.dp,
+                            if (gameState.isBossWave) Color(0xFFF43F5E) else Color(0x6638BDF8),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (gameState.isBossWave) "BOSS" else "WAVE",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (gameState.isBossWave) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${gameState.currentWave}/${gameState.maxWaves}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (gameState.isBossWave) Color(0xFFFF4D4D) else Color(0xFF38BDF8)
+                        )
+                        if (gameState.isBossWave) {
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFFF43F5E), RoundedCornerShape(3.dp))
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = "SKULL",
+                                    fontSize = 7.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
+                            }
+                        } else if (gameState.wavesCleared > 0) {
                             val hpBonus = ((gameState.enemyHpMultiplier - 1f) * 100f).toInt()
                             Spacer(modifier = Modifier.width(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = Color(0x33EF4444),
-                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0x88EF4444))
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0x33EF4444), RoundedCornerShape(3.dp))
+                                    .border(0.5.dp, Color(0x88EF4444), RoundedCornerShape(3.dp))
+                                    .padding(horizontal = 3.dp, vertical = 1.dp)
                             ) {
                                 Text(
                                     text = "+$hpBonus% HP",
-                                    fontSize = 9.sp,
+                                    fontSize = 8.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFCA5A5),
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    color = Color(0xFFFCA5A5)
                                 )
                             }
                         }
@@ -538,22 +736,19 @@ private fun GameHudBar(
             // Right Group: Enemies Remaining, Speed Multiplier, and Pause Button
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 3. Enemies Remaining Badge
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xD90F172A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x55F43F5E)),
-                    shadowElevation = 2.dp
+                // 4. Enemies Remaining Badge
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xE60F172A), RoundedCornerShape(6.dp))
+                        .border(1.dp, Color(0x55F43F5E), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "ENEMIES",
-                            fontSize = 10.sp,
+                            text = "FOES",
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Black,
                             color = Color(0xFF94A3B8),
                             letterSpacing = 1.sp
@@ -561,51 +756,64 @@ private fun GameHudBar(
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = "${gameState.enemiesRemaining}",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
                             color = Color(0xFFF43F5E)
                         )
                     }
                 }
 
-                // 4. Speed Multiplier Capsule Toggle
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (gameState.gameSpeedMultiplier > 1f) Color(0x400284C7) else Color(0xD90F172A),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (gameState.gameSpeedMultiplier > 1f) Color(0xFF38BDF8) else Color(0x44475569)
-                    ),
+                // 5. Speed Multiplier Capsule Toggle (with active LED status indicator)
+                val isFast = gameState.gameSpeedMultiplier > 1f
+                Box(
                     modifier = Modifier
+                        .background(
+                            if (isFast) Color(0x400284C7) else Color(0xE60F172A),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .border(
+                            1.dp,
+                            if (isFast) Color(0xFF38BDF8) else Color(0xFF334155),
+                            RoundedCornerShape(6.dp)
+                        )
                         .clickable(onClick = onToggleSpeed)
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                         .testTag("speed_toggle_button")
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // LED indicator dot
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    if (isFast) Color(0xFF38BDF8) else Color(0xFF475569),
+                                    CircleShape
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "${gameState.gameSpeedMultiplier.toInt()}X",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Black,
-                            color = if (gameState.gameSpeedMultiplier > 1f) Color(0xFF38BDF8) else Color(0xFF94A3B8)
+                            color = if (isFast) Color(0xFF38BDF8) else Color(0xFF94A3B8)
                         )
                     }
                 }
 
-                // 5. Pause Button (Circular action button)
-                IconButton(
-                    onClick = onPauseClick,
+                // 6. Tactical Pause Button with 3D press feel
+                Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .background(Color(0xD90F172A), CircleShape)
-                        .border(1.dp, Color(0x44475569), CircleShape)
-                        .testTag("pause_button")
+                        .size(34.dp)
+                        .background(Color(0xFF1E293B), RoundedCornerShape(6.dp))
+                        .border(1.dp, Color(0xFF475569), RoundedCornerShape(6.dp))
+                        .clickable(onClick = onPauseClick)
+                        .testTag("pause_button"),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Pause,
                         contentDescription = "Pause",
-                        tint = Color.White,
+                        tint = Color(0xFFE2E8F0),
                         modifier = Modifier.size(18.dp)
                     )
                 }

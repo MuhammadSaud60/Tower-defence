@@ -34,10 +34,11 @@ class GameEngine(
 ) {
     internal var currentMap: GameMap = GameMap.createGreenValleyMap()
     private var waveManager = WaveManager(
-        maxWaves = GameConfig.TOTAL_WAVES,
+        maxWaves = currentMap.totalWaves,
         paths = currentMap.paths,
         isSnowValley = currentMap.environmentType == EnvironmentType.SNOW_VALLEY,
-        isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS
+        isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS,
+        mapId = currentMap.id
     )
     private val combatSystem = CombatSystem()
     private val economySystem = EconomySystem()
@@ -768,10 +769,11 @@ class GameEngine(
         projectiles.clear()
         visualEffects.clear()
         waveManager = WaveManager(
-            maxWaves = GameConfig.TOTAL_WAVES,
+            maxWaves = currentMap.totalWaves,
             paths = currentMap.paths,
             isSnowValley = currentMap.environmentType == EnvironmentType.SNOW_VALLEY,
-            isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS
+            isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS,
+            mapId = currentMap.id
         )
         economySystem.reset()
         if (isNewMission) {
@@ -857,6 +859,8 @@ class GameEngine(
             enemiesKilledTotal = enemiesKilledTotal,
             gameSpeedMultiplier = gameSpeedMultiplier,
             activeBoss = activeBoss,
+            isBossWave = waveManager.isBossWave(waveManager.currentWave),
+            upcomingBossName = waveManager.getUpcomingBossName(waveManager.currentWave),
             starsEarned = stars,
             finalScore = score,
             gameTime = gameTime,

@@ -28,15 +28,17 @@ class WaveManager(
     val paths: List<GamePath> = listOf(GamePath()),
     val scalingSystem: EnemyScalingSystem = EnemyScalingSystem.DEFAULT,
     val isSnowValley: Boolean = false,
-    val isNightFortress: Boolean = false
+    val isNightFortress: Boolean = false,
+    val mapId: String = ""
 ) {
     constructor(
         maxWaves: Int = GameConfig.TOTAL_WAVES,
         path: GamePath,
         scalingSystem: EnemyScalingSystem = EnemyScalingSystem.DEFAULT,
         isSnowValley: Boolean = false,
-        isNightFortress: Boolean = false
-    ) : this(maxWaves, listOf(path), scalingSystem, isSnowValley, isNightFortress)
+        isNightFortress: Boolean = false,
+        mapId: String = ""
+    ) : this(maxWaves, listOf(path), scalingSystem, isSnowValley, isNightFortress, mapId)
 
     val primaryPath: GamePath get() = paths.first()
     var currentWave: Int = 1
@@ -67,16 +69,38 @@ class WaveManager(
         setupWave(1)
     }
 
-    private fun setupWave(wave: Int) {
-        currentWaveQueue = when {
-            isNightFortress -> generateNightFortressWaveRoster(wave)
-            isSnowValley -> generateSnowValleyWaveRoster(wave)
+    private fun getRosterForWave(wave: Int): List<WaveSpawnItem> {
+        return when {
+            mapId == "snow_outpost" -> generateSnowOutpostWaveRoster(wave)
+            mapId == "frozen_valley" || mapId == "snow_valley" || (isSnowValley && mapId.isEmpty()) -> generateFrozenValleyWaveRoster(wave)
+            mapId == "ice_mountain" -> generateIceMountainWaveRoster(wave)
+            mapId == "frozen_fortress" -> generateFrozenFortressWaveRoster(wave)
+            mapId == "arctic_base" -> generateArcticBaseWaveRoster(wave)
+            isNightFortress || mapId == "night_fortress" -> generateNightFortressWaveRoster(wave)
             else -> generateWaveRoster(wave)
         }
+    }
+
+    private fun setupWave(wave: Int) {
+        currentWaveQueue = getRosterForWave(wave)
         totalEnemiesThisWave = currentWaveQueue.size
         currentQueueIndex = 0
         enemiesSpawnedThisWave = 0
         spawnCooldown = 0.5f
+    }
+
+    /**
+     * Checks if a particular wave contains any boss encounter.
+     */
+    fun isBossWave(wave: Int): Boolean {
+        return getRosterForWave(wave).any { it.spec.isBoss }
+    }
+
+    /**
+     * Returns the name of the upcoming boss for a wave, or null if none.
+     */
+    fun getUpcomingBossName(wave: Int): String? {
+        return getRosterForWave(wave).firstOrNull { it.spec.isBoss }?.spec?.name
     }
 
     private fun generateWaveRoster(wave: Int): List<WaveSpawnItem> {
@@ -203,123 +227,433 @@ class WaveManager(
         return list
     }
 
-    private fun generateSnowValleyWaveRoster(wave: Int): List<WaveSpawnItem> {
-        val list = mutableListOf<WaveSpawnItem>()
+    private fun generateSnowValleyWaveRoster(wave: Int): List<WaveSpawnItem> =
+        generateFrozenValleyWaveRoster(wave)
 
+    // ========================================================
+    // SNOW WORLD LEVEL 1: SNOW OUTPOST (12 Waves)
+    // Mini-Boss: Wave 6 (Ice Beast) | Climax Boss: Wave 12 (Ice Golem)
+    // ========================================================
+    private fun generateSnowOutpostWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
         when (wave) {
             1 -> {
-                // Wave 1: Fast snow wolf scouts probed with vanguard soldiers
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 1.1f)) }
+            }
+            2 -> {
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.9f)) }
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 1.1f)) }
+            }
+            3 -> {
+                // Swarm Wave
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.75f)) }
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 1.0f)) }
+            }
+            4 -> {
+                // Heavy Armor Wave
+                repeat(3) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.4f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.9f)) }
+            }
+            5 -> {
+                // Mixed Vanguard
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.7f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.9f)) }
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
+            }
+            6 -> {
+                // MINI-BOSS 1: Ice Beast (Fast runner-type predator boss)
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(1), 2.5f))
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 1.0f)) }
+            }
+            7 -> {
+                // Heavy Phalanx
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.2f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+            }
+            8 -> {
+                // Speed Blitz
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f)) }
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.2f)) }
+            }
+            9 -> {
+                // Combined Arms
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.0f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f)) }
+            }
+            10 -> {
+                // Siege Column
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.9f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f)) }
+            }
+            11 -> {
+                // Pre-Climax Swarm
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.5f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            }
+            else -> {
+                // Wave 12: CLIMAX BOSS: Ice Golem (Armored juggernaut)
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceGolem(1), 3.0f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+            }
+        }
+        return list
+    }
+
+    // ========================================================
+    // SNOW WORLD LEVEL 2: FROZEN VALLEY (18 Waves)
+    // Mini-Boss: Wave 6 (Ice Beast) | Wave 12 (Frozen Commander) | Climax: Wave 18 (Dual Titan)
+    // ========================================================
+    private fun generateFrozenValleyWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+        when (wave) {
+            1 -> {
                 repeat(6) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 1.0f)) }
                 repeat(3) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 1.2f)) }
             }
             2 -> {
-                // Wave 2: Agile Runners slipping between soldiers
-                repeat(5) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.8f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.8f)) }
                 repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 1.0f)) }
             }
             3 -> {
-                // Wave 3: Early armored heavies testing choke points
-                repeat(2) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.5f)) }
+                repeat(3) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.4f)) }
                 repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.7f)) }
                 repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 1.0f)) }
             }
             4 -> {
-                // Wave 4: Tough armored squad
-                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.3f)) }
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.2f)) }
                 repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.9f)) }
-                repeat(4) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
             }
             5 -> {
-                // Wave 5: BOSS 1 (Iron Golem) escorted by rapid runners
-                repeat(5) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.7f)) }
-                list.add(WaveSpawnItem(EnemySpec.createBoss(5), 2.5f))
-                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.3f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.55f)) }
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.1f)) }
             }
             6 -> {
-                // Wave 6: Heavy vanguard column
-                repeat(5) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.2f)) }
-                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
-                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f)) }
+                // MINI-BOSS 1: Ice Beast
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(1), 2.5f))
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.2f)) }
             }
             7 -> {
-                // Wave 7: Swift flankers followed by siege heavies
-                repeat(12) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f)) }
-                repeat(5) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.1f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.1f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f)) }
             }
             8 -> {
-                // Wave 8: Mixed assault battalion
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f)) }
                 repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.0f)) }
-                repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
-                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f)) }
             }
             9 -> {
-                // Wave 9: Shielded siege march
                 repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.9f)) }
                 repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
             }
             10 -> {
-                // Wave 10: BOSS 2 (Shadow Stalker) with heavy escorts
-                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.0f)) }
-                list.add(WaveSpawnItem(EnemySpec.createBoss(10), 2.5f))
-                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
-                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.0f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.0f)) }
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
             }
             11 -> {
-                // Wave 11: High-speed blizzard rush
-                repeat(16) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
-                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
             }
             12 -> {
-                // Wave 12: Heavy armored assault
-                repeat(10) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
-                repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.5f)) }
+                // MINI-BOSS 2: Frozen Commander (Regenerating tactical leader)
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.9f)) }
+                list.add(WaveSpawnItem(EnemySpec.createFrozenCommander(1), 2.8f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
             }
             13 -> {
-                // Wave 13: Mixed blitz
-                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
-                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+                repeat(18) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.38f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
             }
             14 -> {
-                // Wave 14: Overwhelming force
                 repeat(12) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
-                repeat(12) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.4f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.5f)) }
             }
             15 -> {
-                // Wave 15: BOSS 3 (Mech Behemoth) accompanied by armored guard
-                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
-                list.add(WaveSpawnItem(EnemySpec.createBoss(15), 3.0f))
-                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
-                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.5f)) }
             }
             16 -> {
-                // Wave 16: Relentless assault
                 repeat(14) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
                 repeat(12) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
             }
             17 -> {
-                // Wave 17: Multi-tiered breach
                 repeat(16) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.4f)) }
-                repeat(12) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
-                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+            }
+            else -> {
+                // Wave 18: CLIMAX DUAL TITAN: Ice Beast Alpha + Frost Colossus
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(2), 2.5f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceGolem(2), 3.5f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+            }
+        }
+        return list
+    }
+
+    // ========================================================
+    // SNOW WORLD LEVEL 3: ICE MOUNTAIN (24 Waves)
+    // Mini-Boss: Wave 8 (Ice Beast Alpha) | Wave 16 (Frozen Commander) |
+    // Dual Boss: Wave 20 | Climax: Wave 24 (Frost Colossus Behemoth)
+    // ========================================================
+    private fun generateIceMountainWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+        when (wave) {
+            1 -> {
+                repeat(7) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 1.0f)) }
+                repeat(3) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 1.1f)) }
+            }
+            2 -> {
+                repeat(7) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.75f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.9f)) }
+            }
+            3 -> {
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.3f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
+            }
+            4 -> {
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.1f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+            }
+            5 -> {
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f)) }
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.1f)) }
+            }
+            6 -> {
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.0f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
+            }
+            7 -> {
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.0f)) }
+            }
+            8 -> {
+                // MINI-BOSS 1: Ice Beast Alpha
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(1), 2.5f))
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+            }
+            9 -> {
+                repeat(9) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.9f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.65f)) }
+            }
+            10 -> {
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.9f)) }
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.65f)) }
+            }
+            11 -> {
+                repeat(16) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.85f)) }
+            }
+            12 -> {
+                repeat(11) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
+            }
+            13 -> {
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            }
+            14 -> {
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.75f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.5f)) }
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            }
+            15 -> {
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            }
+            16 -> {
+                // MINI-BOSS 2: Frozen Commander
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createFrozenCommander(1), 2.8f))
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.38f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+            }
+            17 -> {
+                repeat(20) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.32f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.75f)) }
             }
             18 -> {
-                // Wave 18: Armored vanguard flood
-                repeat(18) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.55f)) }
-                repeat(16) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.65f)) }
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.45f)) }
             }
             19 -> {
-                // Wave 19: The Grand Blizzard Army
-                repeat(16) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.35f)) }
-                repeat(14) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.55f)) }
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.65f)) }
+                repeat(16) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+            }
+            20 -> {
+                // DUAL MINI-BOSSES: Ice Beast Alpha + Glacial Warlord
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(2), 2.0f))
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createFrozenCommander(2), 2.8f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            }
+            21 -> {
+                repeat(16) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+            }
+            22 -> {
+                repeat(18) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.55f)) }
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.4f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+            }
+            23 -> {
+                repeat(16) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.55f)) }
                 repeat(18) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.28f)) }
             }
             else -> {
-                // Wave 20: APEX CLIMAX - Dual Boss Siege in Snow Valley
+                // Wave 24: APEX CLIMAX: Frost Colossus Behemoth
                 repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
-                list.add(WaveSpawnItem(EnemySpec.createBoss(18), 3.0f))
-                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
-                list.add(WaveSpawnItem(EnemySpec.createBoss(20), 4.0f))
+                list.add(WaveSpawnItem(EnemySpec.createIceGolem(2), 3.5f))
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
                 repeat(10) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+            }
+        }
+        return list
+    }
+
+    // ========================================================
+    // SNOW WORLD LEVEL 4: FROZEN FORTRESS (30 Waves)
+    // Multi-Boss: Wave 10, Wave 18, Wave 24 | Climax: Wave 30 (Arctic Machine)
+    // ========================================================
+    private fun generateFrozenFortressWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+        when (wave) {
+            in 1..9 -> {
+                val scale = wave
+                repeat(6 + scale) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+                repeat(2 + scale / 2) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.2f)) }
+                repeat(4 + scale) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
+            }
+            10 -> {
+                // BOSS 1: Ice Golem Citadel Breaker
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceGolem(1), 2.5f))
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.0f)) }
+            }
+            in 11..17 -> {
+                val scale = wave - 10
+                repeat(8 + scale) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.9f)) }
+                repeat(10 + scale) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
+            }
+            18 -> {
+                // BOSS 2: Glacial Warlord
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createFrozenCommander(2), 2.8f))
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            }
+            in 19..23 -> {
+                val scale = wave - 18
+                repeat(10 + scale) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.75f)) }
+                repeat(12 + scale) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            }
+            24 -> {
+                // DUAL BOSS STRIKE: Ice Beast Alpha + Frost Colossus
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(2), 2.0f))
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceGolem(2), 3.0f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+            }
+            in 25..29 -> {
+                val scale = wave - 24
+                repeat(14 + scale) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+                repeat(14 + scale) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+            }
+            else -> {
+                // Wave 30: APEX CLIMAX: Arctic Machine (Polar Dreadnought)
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createArcticMachine(1), 3.5f))
+                repeat(14) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.5f)) }
+            }
+        }
+        return list
+    }
+
+    // ========================================================
+    // SNOW WORLD LEVEL 5: ARCTIC BASE (36 Waves)
+    // Multi-Boss: Wave 10, 18, 26, 32 | Ultimate Climax: Wave 36 (Void Arctic Overlord)
+    // ========================================================
+    private fun generateArcticBaseWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+        when (wave) {
+            in 1..9 -> {
+                val scale = wave
+                repeat(7 + scale) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+                repeat(3 + scale / 2) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 1.1f)) }
+                repeat(6 + scale) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f)) }
+            }
+            10 -> {
+                // BOSS 1: Ice Beast Pack Leader
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(1), 2.5f))
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.9f)) }
+            }
+            in 11..17 -> {
+                val scale = wave - 10
+                repeat(9 + scale) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.85f)) }
+                repeat(12 + scale) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.38f)) }
+            }
+            18 -> {
+                // BOSS 2: Frozen Commander Elite
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createFrozenCommander(2), 2.8f))
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            }
+            in 19..25 -> {
+                val scale = wave - 18
+                repeat(12 + scale) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+                repeat(14 + scale) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.32f)) }
+            }
+            26 -> {
+                // DUAL BOSS STRIKE: Frost Colossus & Glacial Warlord
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceGolem(2), 2.5f))
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.3f)) }
+                list.add(WaveSpawnItem(EnemySpec.createFrozenCommander(2), 2.8f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+            }
+            in 27..31 -> {
+                val scale = wave - 26
+                repeat(14 + scale) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+                repeat(16 + scale) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.28f)) }
+            }
+            32 -> {
+                // TRIPLE BOSS STRIKE: 2 Ice Beasts + 1 Frost Colossus
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(2), 2.0f))
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceBeast(2), 2.0f))
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createIceGolem(2), 3.0f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.6f)) }
+            }
+            in 33..35 -> {
+                repeat(18) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.5f)) }
+                repeat(18) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.28f)) }
+            }
+            else -> {
+                // Wave 36: ULTIMATE CAMPAIGN CLIMAX: Void Arctic Overlord & Polar Dreadnought
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.5f)) }
+                list.add(WaveSpawnItem(EnemySpec.createArcticMachine(2), 3.0f))
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.28f)) }
+                list.add(WaveSpawnItem(EnemySpec.createArcticOverlord(), 4.0f))
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.5f)) }
             }
         }
         return list

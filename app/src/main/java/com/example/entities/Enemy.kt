@@ -126,6 +126,105 @@ data class EnemySpec(
                 bulletResistance = resistance
             )
         }
+
+        // ========================================================
+        // SNOW WORLD SPECIALIZED BOSS VARIATIONS
+        // ========================================================
+
+        /**
+         * Ice Golem: Slow, heavily armored juggernaut that deflects 70-75% ballistic bullets.
+         */
+        fun createIceGolem(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier == 1) "Ice Golem" else "Frost Colossus",
+            baseHp = if (tier == 1) 1500f else 3800f,
+            armor = if (tier == 1) 28f else 38f,
+            baseSpeed = 42f,
+            rewardCoins = if (tier == 1) 85 else 190,
+            baseDamage = 25,
+            radius = 42f,
+            primaryColorHex = 0xFF0284C7L, // Deep Glacier Cyan
+            secondaryColorHex = 0xFFE0F2FEL, // Frosted Crystal White
+            isBoss = true,
+            regenRate = 12f,
+            bulletResistance = 0.75f
+        )
+
+        /**
+         * Frozen Commander: Tactical vanguard with active shield regeneration and high speed.
+         */
+        fun createFrozenCommander(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier == 1) "Frozen Commander" else "Glacial Warlord",
+            baseHp = if (tier == 1) 2000f else 4200f,
+            armor = if (tier == 1) 24f else 34f,
+            baseSpeed = 52f,
+            rewardCoins = if (tier == 1) 110 else 220,
+            baseDamage = 25,
+            radius = 40f,
+            primaryColorHex = 0xFF4338CAL, // Royal Indigo Glacier
+            secondaryColorHex = 0xFF38BDF8L, // Electric Cryo Aura
+            isBoss = true,
+            regenRate = 30f,
+            bulletResistance = 0.65f
+        )
+
+        /**
+         * Ice Beast: Swift, agile predatory boss rushing past frontline turrets.
+         */
+        fun createIceBeast(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier == 1) "Ice Beast" else "Ice Beast Alpha",
+            baseHp = if (tier == 1) 1200f else 2600f,
+            armor = if (tier == 1) 14f else 22f,
+            baseSpeed = if (tier == 1) 128f else 145f,
+            rewardCoins = if (tier == 1) 75 else 165,
+            baseDamage = 20,
+            radius = 35f,
+            primaryColorHex = 0xFF06B6D4L, // Neon Blizzard Cyan
+            secondaryColorHex = 0xFFF43F5EL, // Feral Crimson Frost
+            isBoss = true,
+            regenRate = 14f,
+            bulletResistance = 0.40f
+        )
+
+        /**
+         * Arctic Machine: Massive mechanical ice-crawler siege engine with high armor and titanium hull.
+         */
+        fun createArcticMachine(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier == 1) "Arctic Machine" else "Polar Dreadnought",
+            baseHp = if (tier == 1) 5200f else 8200f,
+            armor = if (tier == 1) 40f else 48f,
+            baseSpeed = 35f,
+            rewardCoins = if (tier == 1) 240 else 380,
+            baseDamage = 35,
+            radius = 45f,
+            primaryColorHex = 0xFF334155L, // Gunmetal Titanium Slate
+            secondaryColorHex = 0xFF0EA5E9L, // Cryo Core Reactor Blue
+            isBoss = true,
+            regenRate = 22f,
+            bulletResistance = 0.80f
+        )
+
+        /**
+         * Void Arctic Overlord: Apex endgame polar sovereign with overwhelming health and aurora shields.
+         */
+        fun createArcticOverlord(): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = "Void Arctic Overlord",
+            baseHp = 9800f,
+            armor = 52f,
+            baseSpeed = 34f,
+            rewardCoins = 450,
+            baseDamage = 40,
+            radius = 48f,
+            primaryColorHex = 0xFF4F46E5L, // Cosmic Dark Frost
+            secondaryColorHex = 0xFF00F5D4L, // Polar Aurora Flare
+            isBoss = true,
+            regenRate = 42f,
+            bulletResistance = 0.85f
+        )
     }
 }
 

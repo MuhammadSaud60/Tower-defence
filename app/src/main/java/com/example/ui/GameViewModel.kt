@@ -82,8 +82,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "split_routes", "map_4_split" -> progressionManager.unlockMap("canyon_tunnel")
             "canyon_tunnel", "map_4_tunnel" -> progressionManager.unlockMap("the_crossing")
             "the_crossing", "map_6_crossing" -> progressionManager.unlockMap("map_5_loop")
-            "map_5_loop", "dragons_coil" -> progressionManager.unlockMap("snow_valley")
-            "snow_valley", "map_8_snow" -> progressionManager.unlockMap("night_fortress")
+            "map_5_loop", "dragons_coil" -> progressionManager.unlockMap("snow_outpost")
+            "snow_outpost" -> progressionManager.unlockMap("frozen_valley")
+            "frozen_valley", "snow_valley", "map_8_snow" -> progressionManager.unlockMap("ice_mountain")
+            "ice_mountain" -> progressionManager.unlockMap("frozen_fortress")
+            "frozen_fortress" -> progressionManager.unlockMap("arctic_base")
+            "arctic_base" -> progressionManager.unlockMap("night_fortress")
         }
     }
 
@@ -96,8 +100,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "split_routes", "map_4_split" -> GameMap.createCanyonTunnelMap(isUnlocked = true, stars = progressionManager.getStarsForMap("canyon_tunnel"))
             "canyon_tunnel", "map_4_tunnel" -> GameMap.createTheCrossingMap(isUnlocked = true, stars = progressionManager.getStarsForMap("the_crossing"))
             "the_crossing", "map_6_crossing" -> GameMap.createDragonsCoilMap(isUnlocked = true, stars = progressionManager.getStarsForMap("map_5_loop"))
-            "map_5_loop", "dragons_coil" -> GameMap.createSnowValleyMap(isUnlocked = true, stars = progressionManager.getStarsForMap("snow_valley"))
-            "snow_valley", "map_8_snow" -> GameMap.createNightFortressMap(isUnlocked = true, stars = progressionManager.getStarsForMap("night_fortress"))
+            "map_5_loop", "dragons_coil" -> GameMap.createSnowOutpostMap(isUnlocked = true, stars = progressionManager.getStarsForMap("snow_outpost"))
+            "snow_outpost" -> GameMap.createFrozenValleyMap(isUnlocked = true, stars = progressionManager.getStarsForMap("frozen_valley"))
+            "frozen_valley", "snow_valley", "map_8_snow" -> GameMap.createIceMountainMap(isUnlocked = true, stars = progressionManager.getStarsForMap("ice_mountain"))
+            "ice_mountain" -> GameMap.createFrozenFortressMap(isUnlocked = true, stars = progressionManager.getStarsForMap("frozen_fortress"))
+            "frozen_fortress" -> GameMap.createArcticBaseMap(isUnlocked = true, stars = progressionManager.getStarsForMap("arctic_base"))
+            "arctic_base" -> GameMap.createNightFortressMap(isUnlocked = true, stars = progressionManager.getStarsForMap("night_fortress"))
             else -> null
         }
     }

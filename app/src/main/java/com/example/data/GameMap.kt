@@ -75,7 +75,9 @@ data class GameMap(
     val worldWidth: Float = 2000f,
     val worldHeight: Float = 1500f,
     val startingCameraCenter: Point2D = Point2D(460f, 440f),
-    val defaultZoom: Float = 1.0f
+    val defaultZoom: Float = 1.0f,
+    val totalWaves: Int = GameConfig.TOTAL_WAVES,
+    val missionChapter: String? = null
 ) {
     // Single-path backward-compatible constructor
     constructor(
@@ -96,7 +98,9 @@ data class GameMap(
         worldWidth: Float = 2000f,
         worldHeight: Float = 1500f,
         startingCameraCenter: Point2D = Point2D(460f, 440f),
-        defaultZoom: Float = 1.0f
+        defaultZoom: Float = 1.0f,
+        totalWaves: Int = GameConfig.TOTAL_WAVES,
+        missionChapter: String? = null
     ) : this(
         id = id,
         name = name,
@@ -115,7 +119,9 @@ data class GameMap(
         worldWidth = worldWidth,
         worldHeight = worldHeight,
         startingCameraCenter = startingCameraCenter,
-        defaultZoom = defaultZoom
+        defaultZoom = defaultZoom,
+        totalWaves = totalWaves,
+        missionChapter = missionChapter
     )
 
     val path: GamePath get() = paths.first()
@@ -401,9 +407,26 @@ data class GameMap(
                     isUnlocked = isMapUnlocked("map_5_loop") || isMapUnlocked("dragons_coil"),
                     stars = maxOf(getStars("map_5_loop"), getStars("dragons_coil"))
                 ),
-                createSnowValleyMap(
-                    isUnlocked = isMapUnlocked("snow_valley") || isMapUnlocked("map_8_snow"),
-                    stars = maxOf(getStars("snow_valley"), getStars("map_8_snow"))
+                // Snow World Campaign (5 Levels)
+                createSnowOutpostMap(
+                    isUnlocked = isMapUnlocked("snow_outpost"),
+                    stars = getStars("snow_outpost")
+                ),
+                createFrozenValleyMap(
+                    isUnlocked = isMapUnlocked("frozen_valley") || isMapUnlocked("snow_valley") || isMapUnlocked("map_8_snow"),
+                    stars = maxOf(getStars("frozen_valley"), getStars("snow_valley"), getStars("map_8_snow"))
+                ),
+                createIceMountainMap(
+                    isUnlocked = isMapUnlocked("ice_mountain"),
+                    stars = getStars("ice_mountain")
+                ),
+                createFrozenFortressMap(
+                    isUnlocked = isMapUnlocked("frozen_fortress"),
+                    stars = getStars("frozen_fortress")
+                ),
+                createArcticBaseMap(
+                    isUnlocked = isMapUnlocked("arctic_base"),
+                    stars = getStars("arctic_base")
                 ),
                 createNightFortressMap(
                     isUnlocked = isMapUnlocked("night_fortress") || isMapUnlocked("map_9_night"),
@@ -977,11 +1000,93 @@ data class GameMap(
             createDragonsCoilMap(isUnlocked, stars)
 
         // ==========================================
-        // MAP 8 — SNOW VALLEY (Winter Battlefield)
-        // Sweeping mountain snow pass with frozen switchbacks, glacial lake,
-        // snow-covered pine forests, ice rocks, and strategic defense choke points.
+        // SNOW WORLD CAMPAIGN PROGRESSION (5 UNIQUE LEVELS)
         // ==========================================
-        fun createSnowValleyMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+
+        // ------------------------------------------
+        // SNOW LEVEL 1: SNOW OUTPOST (12 Waves)
+        // Frontier military outpost in the snowbound valley foothills.
+        // Single winding pass with strategic defense chokepoints.
+        // ------------------------------------------
+        fun createSnowOutpostMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2050f, 1300f)
+            val waypoints = listOf(
+                Point2D(-60f, 400f),
+                Point2D(650f, 400f),
+                Point2D(950f, 650f),
+                Point2D(950f, 1050f),
+                Point2D(1500f, 1050f),
+                Point2D(1750f, 1300f),
+                Point2D(2050f, 1300f)
+            )
+            val path = GamePath(id = "snow_outpost_pass", waypoints = waypoints, pathWidth = GameConfig.PATH_WIDTH)
+            val pondCenter = Point2D(1400f, 550f)
+            val pondRadius = 110f
+
+            val decor = listOf(
+                MapDecoration("so_sp1", DecorationType.SNOW_PILE, Point2D(350f, 280f), size = 34f),
+                MapDecoration("so_sp2", DecorationType.SNOW_PILE, Point2D(800f, 260f), size = 38f),
+                MapDecoration("so_sp3", DecorationType.SNOW_PILE, Point2D(1200f, 850f), size = 42f),
+                MapDecoration("so_sp4", DecorationType.SNOW_PILE, Point2D(1800f, 900f), size = 40f),
+                MapDecoration("so_fb1", DecorationType.FROZEN_BUSH, Point2D(500f, 520f), size = 28f),
+                MapDecoration("so_fb2", DecorationType.FROZEN_BUSH, Point2D(1150f, 1200f), size = 30f),
+                MapDecoration("so_fb3", DecorationType.FROZEN_BUSH, Point2D(1600f, 850f), size = 28f),
+                MapDecoration("so_r1", DecorationType.BOULDER, Point2D(400f, 600f), size = 46f),
+                MapDecoration("so_r2", DecorationType.BOULDER, Point2D(1250f, 1250f), size = 52f),
+                MapDecoration("so_r3", DecorationType.BOULDER, Point2D(1850f, 650f), size = 50f),
+                MapDecoration("so_cry1", DecorationType.CRYSTAL, Point2D(1400f, 400f), size = 26f),
+                MapDecoration("so_t1", DecorationType.PINE_TREE, Point2D(250f, 180f), size = 62f),
+                MapDecoration("so_t2", DecorationType.PINE_TREE, Point2D(850f, 160f), size = 64f),
+                MapDecoration("so_t3", DecorationType.PINE_TREE, Point2D(1700f, 250f), size = 60f),
+                MapDecoration("so_t4", DecorationType.PINE_TREE, Point2D(650f, 1250f), size = 64f),
+                MapDecoration("so_t5", DecorationType.PINE_TREE, Point2D(1400f, 1350f), size = 58f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("so_d_rock_1", DestructibleType.LARGE_STONE, Point2D(400f, 600f)),
+                DestructibleObject("so_d_rock_2", DestructibleType.STONE, Point2D(1250f, 1250f)),
+                DestructibleObject("so_d_tree_1", DestructibleType.PINE_TREE, Point2D(250f, 180f)),
+                DestructibleObject("so_d_tree_2", DestructibleType.PINE_TREE, Point2D(850f, 160f)),
+                DestructibleObject("so_d_tree_3", DestructibleType.PINE_TREE, Point2D(650f, 1250f)),
+                DestructibleObject("so_d_crate_1", DestructibleType.WOODEN_CRATE, Point2D(800f, 850f)),
+                DestructibleObject("so_d_crate_2", DestructibleType.REINFORCED_CRATE, Point2D(1600f, 1250f))
+            )
+
+            val map = GameMap(
+                id = "snow_outpost",
+                name = "Snow Outpost",
+                description = "Frontier military garrison in the snowbound valley foothills. Establish defensive chokepoints along the frozen mountain road.",
+                environmentType = EnvironmentType.SNOW_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(path),
+                basePosition = basePos,
+                decorations = decor,
+                waterPondCenter = pondCenter,
+                waterPondRadius = pondRadius,
+                destructibles = destructibles,
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1000f, 850f),
+                defaultZoom = 0.88f,
+                totalWaves = 12,
+                missionChapter = "SNOW CAMPAIGN • MISSION 1"
+            )
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = destructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
+        }
+
+        // ------------------------------------------
+        // SNOW LEVEL 2: FROZEN VALLEY (18 Waves)
+        // Sweeping mountain snow pass with frozen switchbacks and glacial lake.
+        // ------------------------------------------
+        fun createFrozenValleyMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
             val basePos = Point2D(2350f, 1550f)
             val waypoints = listOf(
                 Point2D(-60f, 320f),
@@ -995,7 +1100,7 @@ data class GameMap(
                 Point2D(1100f, 1550f),
                 Point2D(2350f, 1550f)
             )
-            val path = GamePath(id = "snow_valley_pass", waypoints = waypoints, pathWidth = GameConfig.PATH_WIDTH)
+            val path = GamePath(id = "frozen_valley_pass", waypoints = waypoints, pathWidth = GameConfig.PATH_WIDTH)
             val pondCenter = Point2D(1650f, 750f)
             val pondRadius = 130f
 
@@ -1040,8 +1145,8 @@ data class GameMap(
             )
 
             val map = GameMap(
-                id = "snow_valley",
-                name = "Snow Valley",
+                id = "frozen_valley",
+                name = "Frozen Valley",
                 description = "Vast snow-covered mountain battlefield with icy switchbacks, frozen glacial ponds, and snow-laden pine groves. Formidable winter defense.",
                 environmentType = EnvironmentType.SNOW_VALLEY,
                 isUnlocked = isUnlocked,
@@ -1055,11 +1160,288 @@ data class GameMap(
                 worldWidth = 2800f,
                 worldHeight = 1800f,
                 startingCameraCenter = Point2D(950f, 750f),
-                defaultZoom = 0.85f
+                defaultZoom = 0.85f,
+                totalWaves = 18,
+                missionChapter = "SNOW CAMPAIGN • MISSION 2"
             )
             val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
                 map = map,
                 candidateDestructibles = snowDestructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
+        }
+
+        // Backward compatibility alias
+        fun createSnowValleyMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap =
+            createFrozenValleyMap(isUnlocked, stars)
+
+        // ------------------------------------------
+        // SNOW LEVEL 3: ICE MOUNTAIN (24 Waves)
+        // Perilous hairpin zigzag climbing from mountain base to summit stronghold.
+        // Elevated cliff plateaus afford multi-lane defensive coverage.
+        // ------------------------------------------
+        fun createIceMountainMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2200f, 350f)
+            val waypoints = listOf(
+                Point2D(-60f, 1600f),
+                Point2D(750f, 1600f),
+                Point2D(750f, 1150f),
+                Point2D(1950f, 1150f),
+                Point2D(1950f, 750f),
+                Point2D(800f, 750f),
+                Point2D(800f, 350f),
+                Point2D(2200f, 350f)
+            )
+            val path = GamePath(id = "ice_mountain_pass", waypoints = waypoints, pathWidth = GameConfig.PATH_WIDTH)
+            val pondCenter = Point2D(1400f, 950f)
+            val pondRadius = 110f
+
+            val decor = listOf(
+                MapDecoration("im_sp1", DecorationType.SNOW_PILE, Point2D(400f, 1450f), size = 38f),
+                MapDecoration("im_sp2", DecorationType.SNOW_PILE, Point2D(1350f, 1350f), size = 42f),
+                MapDecoration("im_sp3", DecorationType.SNOW_PILE, Point2D(1400f, 550f), size = 44f),
+                MapDecoration("im_sp4", DecorationType.SNOW_PILE, Point2D(1800f, 200f), size = 40f),
+                MapDecoration("im_fb1", DecorationType.FROZEN_BUSH, Point2D(550f, 1750f), size = 30f),
+                MapDecoration("im_fb2", DecorationType.FROZEN_BUSH, Point2D(1050f, 950f), size = 32f),
+                MapDecoration("im_fb3", DecorationType.FROZEN_BUSH, Point2D(1650f, 550f), size = 30f),
+                MapDecoration("im_r1", DecorationType.BOULDER, Point2D(400f, 950f), size = 54f),
+                MapDecoration("im_r2", DecorationType.BOULDER, Point2D(1050f, 1350f), size = 52f),
+                MapDecoration("im_r3", DecorationType.BOULDER, Point2D(2150f, 950f), size = 56f),
+                MapDecoration("im_r4", DecorationType.BOULDER, Point2D(1350f, 200f), size = 50f),
+                MapDecoration("im_cry1", DecorationType.CRYSTAL, Point2D(1400f, 800f), size = 28f),
+                MapDecoration("im_cry2", DecorationType.CRYSTAL, Point2D(1400f, 1100f), size = 28f),
+                MapDecoration("im_t1", DecorationType.PINE_TREE, Point2D(250f, 1350f), size = 64f),
+                MapDecoration("im_t2", DecorationType.PINE_TREE, Point2D(1750f, 1350f), size = 66f),
+                MapDecoration("im_t3", DecorationType.PINE_TREE, Point2D(1050f, 550f), size = 62f),
+                MapDecoration("im_t4", DecorationType.PINE_TREE, Point2D(500f, 200f), size = 64f),
+                MapDecoration("im_t5", DecorationType.PINE_TREE, Point2D(2400f, 550f), size = 66f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("im_d_rock_1", DestructibleType.LARGE_STONE, Point2D(400f, 950f)),
+                DestructibleObject("im_d_rock_2", DestructibleType.LARGE_BOULDER, Point2D(2150f, 950f)),
+                DestructibleObject("im_d_tree_1", DestructibleType.PINE_TREE, Point2D(250f, 1350f)),
+                DestructibleObject("im_d_tree_2", DestructibleType.PINE_TREE, Point2D(1750f, 1350f)),
+                DestructibleObject("im_d_tree_3", DestructibleType.PINE_TREE, Point2D(1050f, 550f)),
+                DestructibleObject("im_d_crate_1", DestructibleType.WOODEN_CRATE, Point2D(1050f, 950f)),
+                DestructibleObject("im_d_crate_2", DestructibleType.REINFORCED_CRATE, Point2D(1650f, 950f))
+            )
+
+            val map = GameMap(
+                id = "ice_mountain",
+                name = "Ice Mountain",
+                description = "Perilous hairpin ascent through high-altitude blizzard peaks. Defend the summit stronghold from enemies climbing the winding glacial ridges.",
+                environmentType = EnvironmentType.SNOW_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(path),
+                basePosition = basePos,
+                decorations = decor,
+                waterPondCenter = pondCenter,
+                waterPondRadius = pondRadius,
+                destructibles = destructibles,
+                worldWidth = 2700f,
+                worldHeight = 1900f,
+                startingCameraCenter = Point2D(1350f, 950f),
+                defaultZoom = 0.84f,
+                totalWaves = 24,
+                missionChapter = "SNOW CAMPAIGN • MISSION 3"
+            )
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = destructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
+        }
+
+        // ------------------------------------------
+        // SNOW LEVEL 4: FROZEN FORTRESS (30 Waves)
+        // Ancient stone citadel carved into sheer blue glaciers.
+        // Dual defense corridors protecting the inner castle sanctum.
+        // ------------------------------------------
+        fun createFrozenFortressMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2450f, 1450f)
+            val pathNorth = GamePath(
+                id = "fortress_north_rampart",
+                waypoints = listOf(
+                    Point2D(-60f, 450f),
+                    Point2D(850f, 450f),
+                    Point2D(1150f, 750f),
+                    Point2D(1650f, 750f),
+                    Point2D(1950f, 1100f),
+                    Point2D(2450f, 1100f),
+                    Point2D(2450f, 1450f)
+                ),
+                pathWidth = GameConfig.PATH_WIDTH
+            )
+            val pathSouth = GamePath(
+                id = "fortress_south_courtyard",
+                waypoints = listOf(
+                    Point2D(450f, 1920f),
+                    Point2D(450f, 1300f),
+                    Point2D(1150f, 1300f),
+                    Point2D(1150f, 750f),
+                    Point2D(1650f, 750f),
+                    Point2D(1950f, 1100f),
+                    Point2D(2450f, 1100f),
+                    Point2D(2450f, 1450f)
+                ),
+                pathWidth = GameConfig.PATH_WIDTH
+            )
+            val pondCenter = Point2D(1550f, 1450f)
+            val pondRadius = 120f
+
+            val decor = listOf(
+                MapDecoration("ff_sp1", DecorationType.SNOW_PILE, Point2D(400f, 250f), size = 38f),
+                MapDecoration("ff_sp2", DecorationType.SNOW_PILE, Point2D(1400f, 550f), size = 42f),
+                MapDecoration("ff_sp3", DecorationType.SNOW_PILE, Point2D(800f, 1050f), size = 40f),
+                MapDecoration("ff_sp4", DecorationType.SNOW_PILE, Point2D(2150f, 850f), size = 44f),
+                MapDecoration("ff_fb1", DecorationType.FROZEN_BUSH, Point2D(650f, 650f), size = 30f),
+                MapDecoration("ff_fb2", DecorationType.FROZEN_BUSH, Point2D(1800f, 900f), size = 32f),
+                MapDecoration("ff_fb3", DecorationType.FROZEN_BUSH, Point2D(800f, 1500f), size = 30f),
+                MapDecoration("ff_r1", DecorationType.BOULDER, Point2D(650f, 900f), size = 52f),
+                MapDecoration("ff_r2", DecorationType.BOULDER, Point2D(1400f, 950f), size = 54f),
+                MapDecoration("ff_r3", DecorationType.BOULDER, Point2D(2150f, 1350f), size = 50f),
+                MapDecoration("ff_cry1", DecorationType.CRYSTAL, Point2D(1550f, 1300f), size = 28f),
+                MapDecoration("ff_cry2", DecorationType.CRYSTAL, Point2D(1550f, 1600f), size = 28f),
+                MapDecoration("ff_t1", DecorationType.PINE_TREE, Point2D(250f, 250f), size = 66f),
+                MapDecoration("ff_t2", DecorationType.PINE_TREE, Point2D(1050f, 250f), size = 68f),
+                MapDecoration("ff_t3", DecorationType.PINE_TREE, Point2D(1850f, 550f), size = 64f),
+                MapDecoration("ff_t4", DecorationType.PINE_TREE, Point2D(200f, 1600f), size = 66f),
+                MapDecoration("ff_t5", DecorationType.PINE_TREE, Point2D(2650f, 850f), size = 68f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("ff_d_rock_1", DestructibleType.LARGE_STONE, Point2D(650f, 900f)),
+                DestructibleObject("ff_d_rock_2", DestructibleType.LARGE_BOULDER, Point2D(1400f, 950f)),
+                DestructibleObject("ff_d_tree_1", DestructibleType.PINE_TREE, Point2D(250f, 250f)),
+                DestructibleObject("ff_d_tree_2", DestructibleType.PINE_TREE, Point2D(1050f, 250f)),
+                DestructibleObject("ff_d_crate_1", DestructibleType.WOODEN_CRATE, Point2D(1400f, 600f)),
+                DestructibleObject("ff_d_crate_2", DestructibleType.REINFORCED_CRATE, Point2D(1950f, 1350f))
+            )
+
+            val map = GameMap(
+                id = "frozen_fortress",
+                name = "Frozen Fortress",
+                description = "Ancient stone citadel carved into sheer blue glaciers. Massive perimeter ramparts and dual defense corridors protecting the inner sanctum.",
+                environmentType = EnvironmentType.SNOW_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathNorth, pathSouth),
+                basePosition = basePos,
+                decorations = decor,
+                waterPondCenter = pondCenter,
+                waterPondRadius = pondRadius,
+                destructibles = destructibles,
+                worldWidth = 2900f,
+                worldHeight = 1850f,
+                startingCameraCenter = Point2D(1450f, 950f),
+                defaultZoom = 0.82f,
+                totalWaves = 30,
+                missionChapter = "SNOW CAMPAIGN • MISSION 4"
+            )
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = destructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
+        }
+
+        // ------------------------------------------
+        // SNOW LEVEL 5: ARCTIC BASE (36 Waves)
+        // High-tech polar defense complex on the frozen ice shelf.
+        // Extreme sub-zero conditions, frozen power pylons, and endless siege forces.
+        // ------------------------------------------
+        fun createArcticBaseMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2550f, 1400f)
+            val path1 = GamePath(
+                id = "arctic_perimeter_route",
+                waypoints = listOf(
+                    Point2D(-60f, 550f),
+                    Point2D(850f, 550f),
+                    Point2D(850f, 1450f),
+                    Point2D(1750f, 1450f),
+                    Point2D(1750f, 800f),
+                    Point2D(2550f, 800f),
+                    Point2D(2550f, 1400f)
+                ),
+                pathWidth = GameConfig.PATH_WIDTH
+            )
+            val path2 = GamePath(
+                id = "arctic_reactor_lane",
+                waypoints = listOf(
+                    Point2D(1350f, -60f),
+                    Point2D(1350f, 550f),
+                    Point2D(2150f, 550f),
+                    Point2D(2150f, 1400f),
+                    Point2D(2550f, 1400f)
+                ),
+                pathWidth = GameConfig.PATH_WIDTH
+            )
+            val pondCenter = Point2D(1300f, 1000f)
+            val pondRadius = 125f
+
+            val decor = listOf(
+                MapDecoration("ab_sp1", DecorationType.SNOW_PILE, Point2D(450f, 350f), size = 42f),
+                MapDecoration("ab_sp2", DecorationType.SNOW_PILE, Point2D(1100f, 350f), size = 40f),
+                MapDecoration("ab_sp3", DecorationType.SNOW_PILE, Point2D(1300f, 1350f), size = 44f),
+                MapDecoration("ab_sp4", DecorationType.SNOW_PILE, Point2D(2200f, 350f), size = 46f),
+                MapDecoration("ab_fb1", DecorationType.FROZEN_BUSH, Point2D(600f, 750f), size = 32f),
+                MapDecoration("ab_fb2", DecorationType.FROZEN_BUSH, Point2D(1550f, 650f), size = 30f),
+                MapDecoration("ab_fb3", DecorationType.FROZEN_BUSH, Point2D(1950f, 1050f), size = 32f),
+                MapDecoration("ab_r1", DecorationType.BOULDER, Point2D(500f, 1050f), size = 56f),
+                MapDecoration("ab_r2", DecorationType.BOULDER, Point2D(1550f, 1150f), size = 54f),
+                MapDecoration("ab_r3", DecorationType.BOULDER, Point2D(2350f, 1100f), size = 52f),
+                MapDecoration("ab_cry1", DecorationType.CRYSTAL, Point2D(1300f, 850f), size = 30f),
+                MapDecoration("ab_cry2", DecorationType.CRYSTAL, Point2D(1300f, 1150f), size = 30f),
+                MapDecoration("ab_t1", DecorationType.PINE_TREE, Point2D(250f, 250f), size = 68f),
+                MapDecoration("ab_t2", DecorationType.PINE_TREE, Point2D(1050f, 150f), size = 70f),
+                MapDecoration("ab_t3", DecorationType.PINE_TREE, Point2D(1900f, 250f), size = 68f),
+                MapDecoration("ab_t4", DecorationType.PINE_TREE, Point2D(400f, 1650f), size = 66f),
+                MapDecoration("ab_t5", DecorationType.PINE_TREE, Point2D(2750f, 550f), size = 70f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("ab_d_rock_1", DestructibleType.LARGE_STONE, Point2D(500f, 1050f)),
+                DestructibleObject("ab_d_rock_2", DestructibleType.LARGE_BOULDER, Point2D(1550f, 1150f)),
+                DestructibleObject("ab_d_tree_1", DestructibleType.PINE_TREE, Point2D(250f, 250f)),
+                DestructibleObject("ab_d_tree_2", DestructibleType.PINE_TREE, Point2D(1900f, 250f)),
+                DestructibleObject("ab_d_crate_1", DestructibleType.REINFORCED_CRATE, Point2D(1100f, 750f)),
+                DestructibleObject("ab_d_crate_2", DestructibleType.REINFORCED_CRATE, Point2D(1950f, 1350f))
+            )
+
+            val map = GameMap(
+                id = "arctic_base",
+                name = "Arctic Base",
+                description = "High-tech polar defense complex on the frozen ice shelf. Deep sub-zero conditions, frozen power pylons, and endless waves of elite siege forces.",
+                environmentType = EnvironmentType.SNOW_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(path1, path2),
+                basePosition = basePos,
+                decorations = decor,
+                waterPondCenter = pondCenter,
+                waterPondRadius = pondRadius,
+                destructibles = destructibles,
+                worldWidth = 3000f,
+                worldHeight = 2000f,
+                startingCameraCenter = Point2D(1500f, 1000f),
+                defaultZoom = 0.80f,
+                totalWaves = 36,
+                missionChapter = "SNOW CAMPAIGN • MISSION 5"
+            )
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = destructibles,
                 candidateDecorations = decor
             )
             val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)

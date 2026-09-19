@@ -61,6 +61,8 @@ data class GameState(
     val enemiesKilledTotal: Int = 0,
     val gameSpeedMultiplier: Float = 1.0f,
     val activeBoss: Enemy? = null,
+    val isBossWave: Boolean = false,
+    val upcomingBossName: String? = null,
     val starsEarned: Int = 0,
     val finalScore: Int = 0,
     val gameTime: Float = 0f,

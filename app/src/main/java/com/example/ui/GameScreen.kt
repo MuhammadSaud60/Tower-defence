@@ -80,6 +80,7 @@ fun GameScreen(
     viewModel: GameViewModel,
     onNavigateToMainMenu: () -> Unit,
     onNavigateToMapSelect: () -> Unit,
+    onNavigateToResearch: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val gameState by viewModel.gameState.collectAsState()
@@ -284,6 +285,7 @@ fun GameScreen(
                 }
             },
             onCloseBuildMenu = { viewModel.selectBuildPosition(null) },
+            progressionManager = viewModel.progressionManager,
             modifier = Modifier.fillMaxSize()
         )
 
@@ -383,7 +385,8 @@ fun GameScreen(
                 coinsEarned = gameState.totalCoinsEarned,
                 enemiesKilled = gameState.enemiesKilledTotal,
                 onRestart = { viewModel.restart() },
-                onMainMenu = onNavigateToMapSelect
+                onMainMenu = onNavigateToMapSelect,
+                onUpgradeTowers = onNavigateToResearch
             )
         }
 
@@ -393,6 +396,7 @@ fun GameScreen(
             VictoryDialog(
                 gameState = gameState,
                 hasNextLevel = nextMap != null,
+                progressionReward = viewModel.lastVictoryReward,
                 onNextLevel = { viewModel.loadNextMap() },
                 onRetry = { viewModel.restart() },
                 onHome = onNavigateToMapSelect

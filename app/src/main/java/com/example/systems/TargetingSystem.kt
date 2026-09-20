@@ -14,6 +14,8 @@ class TargetingSystem {
         val candidates = enemies
             .asSequence()
             .filter { it.isAlive && !it.reachedBase }
+            .filter { !it.isStealthed } // Stealth units cannot be acquired while cloaked
+            .filter { !it.spec.isFlying || tower.canTargetFlying } // Ground siege towers (Cannon) cannot target air units
             .filter { tower.isEnemyInRange(it.position) }
 
         return when (tower.targetingStrategy) {

@@ -17,7 +17,25 @@ enum class EffectType {
     BOSS_ENTRANCE,
     DESTRUCTIBLE_HIT,
     DESTRUCTIBLE_DEBRIS,
-    FLOATING_TOKEN;
+    FLOATING_TOKEN,
+
+    // New Enemy Deaths
+    SHIELD_DEATH,
+    FLYING_DEATH,
+    HEALER_DEATH,
+    SUMMONER_DEATH,
+    STEALTH_DEATH,
+
+    // Ability Visuals
+    SPEED_BURST_TRAIL,
+    ARMOR_CRACK_BURST,
+    SHIELD_SHATTER,
+    HEAL_WAVE,
+    SUMMON_RIFT,
+    STEALTH_SMOKE,
+    BOSS_SHOCKWAVE_RING,
+    BOSS_PHASE_FLASH,
+    BOSS_FOOTSTEP_DUST;
 
     companion object {
         @JvmField val HIT_SPARK = MG_HIT_SPARK

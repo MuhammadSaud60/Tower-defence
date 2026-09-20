@@ -833,6 +833,151 @@ object AudioSynthesizer {
         return bytes
     }
 
+    // --- Enemy Abilities & Boss Mechanics Sound Synthesis ---
+
+    fun synthesizeRunnerDash(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        val duration = 0.18f
+        val totalSamples = (sampleRate * duration).toInt()
+        val bytes = ByteArray(totalSamples * 2)
+        var phase = 0.0
+        for (i in 0 until totalSamples) {
+            val t = i.toFloat() / sampleRate
+            val progress = t / duration
+            val freq = 320f + progress * 720f
+            phase += 2.0 * PI * freq / sampleRate
+            val whoosh = sin(phase).toFloat() * 0.45f
+            val airNoise = (Random.nextFloat() * 2f - 1f) * 0.35f
+            val env = sin(progress * PI.toFloat()) * exp(-t * 3.5f)
+            val sample = ((whoosh + airNoise) * env * 0.7f).coerceIn(-1f, 1f)
+            writePcm16(bytes, i, sample)
+        }
+        return bytes
+    }
+
+    fun synthesizeShieldHit(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        val duration = 0.14f
+        val totalSamples = (sampleRate * duration).toInt()
+        val bytes = ByteArray(totalSamples * 2)
+        var p1 = 0.0
+        var p2 = 0.0
+        for (i in 0 until totalSamples) {
+            val t = i.toFloat() / sampleRate
+            p1 += 2.0 * PI * 880.0 / sampleRate
+            p2 += 2.0 * PI * 1320.0 / sampleRate
+            val tone = (sin(p1) * 0.6f + sin(p2) * 0.4f).toFloat()
+            val env = exp(-t * 24f) * 0.65f
+            val sample = (tone * env).coerceIn(-1f, 1f)
+            writePcm16(bytes, i, sample)
+        }
+        return bytes
+    }
+
+    fun synthesizeShieldBreak(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        val duration = 0.28f
+        val totalSamples = (sampleRate * duration).toInt()
+        val bytes = ByteArray(totalSamples * 2)
+        var phase = 0.0
+        for (i in 0 until totalSamples) {
+            val t = i.toFloat() / sampleRate
+            val freq = 1400.0 - (t / duration) * 900.0
+            phase += 2.0 * PI * freq / sampleRate
+            val glassSine = sin(phase).toFloat() * 0.5f
+            val shatterNoise = (Random.nextFloat() * 2f - 1f) * 0.5f
+            val env = exp(-t * 14f) * 0.85f
+            val sample = ((glassSine + shatterNoise) * env).coerceIn(-1f, 1f)
+            writePcm16(bytes, i, sample)
+        }
+        return bytes
+    }
+
+    fun synthesizeArmorBreak(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        val duration = 0.26f
+        val totalSamples = (sampleRate * duration).toInt()
+        val bytes = ByteArray(totalSamples * 2)
+        var phase = 0.0
+        for (i in 0 until totalSamples) {
+            val t = i.toFloat() / sampleRate
+            val freq = 480.0 - (t / duration) * 220.0
+            phase += 2.0 * PI * freq / sampleRate
+            val metal = sin(phase).toFloat() * 0.6f
+            val crack = (Random.nextFloat() * 2f - 1f) * 0.6f
+            val env = exp(-t * 16f) * 0.9f
+            val sample = ((metal + crack) * env).coerceIn(-1f, 1f)
+            writePcm16(bytes, i, sample)
+        }
+        return bytes
+    }
+
+    fun synthesizeHealPulse(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        return synthesizeMelody(
+            sampleRate,
+            listOf(Pair(523.25f, 0.12f), Pair(659.25f, 0.18f)),
+            peakVolume = 0.65f
+        )
+    }
+
+    fun synthesizeSummonMinions(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        val duration = 0.32f
+        val totalSamples = (sampleRate * duration).toInt()
+        val bytes = ByteArray(totalSamples * 2)
+        var phase = 0.0
+        for (i in 0 until totalSamples) {
+            val t = i.toFloat() / sampleRate
+            val freq = 140.0 + sin(t * 30.0) * 45.0
+            phase += 2.0 * PI * freq / sampleRate
+            val rumble = sin(phase).toFloat() * 0.6f
+            val spark = (Random.nextFloat() * 2f - 1f) * 0.3f
+            val env = exp(-t * 7f) * 0.8f
+            val sample = ((rumble + spark) * env).coerceIn(-1f, 1f)
+            writePcm16(bytes, i, sample)
+        }
+        return bytes
+    }
+
+    fun synthesizeStealthCloak(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        val duration = 0.22f
+        val totalSamples = (sampleRate * duration).toInt()
+        val bytes = ByteArray(totalSamples * 2)
+        var phase = 0.0
+        for (i in 0 until totalSamples) {
+            val t = i.toFloat() / sampleRate
+            val freq = 950.0 - (t / duration) * 500.0
+            phase += 2.0 * PI * freq / sampleRate
+            val shimmer = sin(phase).toFloat() * 0.4f
+            val whisper = (Random.nextFloat() * 2f - 1f) * 0.4f
+            val env = exp(-t * 11f) * 0.6f
+            val sample = ((shimmer + whisper) * env).coerceIn(-1f, 1f)
+            writePcm16(bytes, i, sample)
+        }
+        return bytes
+    }
+
+    fun synthesizeBossShockwave(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        val duration = 0.45f
+        val totalSamples = (sampleRate * duration).toInt()
+        val bytes = ByteArray(totalSamples * 2)
+        var subPhase = 0.0
+        for (i in 0 until totalSamples) {
+            val t = i.toFloat() / sampleRate
+            val subFreq = 85.0 - (t / duration) * 45.0
+            subPhase += 2.0 * PI * subFreq / sampleRate
+            val sub = sin(subPhase).toFloat() * 0.7f
+            val iceCrack = if (t < 0.08f) (Random.nextFloat() * 2f - 1f) * 0.7f else 0f
+            val env = exp(-t * 5.5f) * 0.95f
+            val sample = ((sub + iceCrack) * env).coerceIn(-1f, 1f)
+            writePcm16(bytes, i, sample)
+        }
+        return bytes
+    }
+
+    fun synthesizeBossPhaseChange(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        return synthesizeMelody(
+            sampleRate,
+            listOf(Pair(220f, 0.10f), Pair(330f, 0.12f), Pair(440f, 0.24f)),
+            peakVolume = 0.9f
+        )
+    }
+
     private fun writePcm16(bytes: ByteArray, index: Int, sample: Float) {
         val pcm = (sample * 32767).toInt().coerceIn(-32768, 32767)
         val byteIndex = index * 2

@@ -10,14 +10,18 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,17 +33,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -68,6 +78,10 @@ import com.example.ui.components.GamePanel
 import kotlin.math.cos
 import kotlin.math.sin
 
+private object MainMenuSessionState {
+    var hasAutoShownDailyReward: Boolean = false
+}
+
 /**
  * Professional mobile tower defense opening screen & main menu.
  * Features:
@@ -81,10 +95,31 @@ fun MainMenuScreen(
     progressionManager: ProgressionManager,
     onPlayClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onOpenResearchLab: () -> Unit = {},
+    onOpenProfile: () -> Unit = {},
+    onOpenAchievements: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showTacticalBriefing by remember { mutableStateOf(false) }
-    val totalStars = remember { progressionManager.getTotalStars() }
+    var showRewardChests by remember { mutableStateOf(false) }
+    var showDailyReward by remember {
+        val canClaim = progressionManager.canClaimDailyReward()
+        val shouldAutoShow = canClaim && !MainMenuSessionState.hasAutoShownDailyReward
+        if (shouldAutoShow) {
+            MainMenuSessionState.hasAutoShownDailyReward = true
+        }
+        mutableStateOf(shouldAutoShow)
+    }
+    var refreshKey by remember { mutableStateOf(0) }
+
+    val totalStars: Int = remember(refreshKey) { progressionManager.getTotalStars() }
+    val totalTokens: Int = remember(refreshKey) { progressionManager.getTokens() }
+    val playerLevel: Int = remember(refreshKey) { progressionManager.getPlayerLevel() }
+    val playerTitle: String = remember(refreshKey) { progressionManager.getPlayerTitle() }
+    val xpRatio: Float = remember(refreshKey) { progressionManager.getXpProgressRatio() }
+    val canClaimDaily: Boolean = remember(refreshKey) { progressionManager.canClaimDailyReward() }
+    val unclaimedChests: Int = remember(refreshKey) { progressionManager.getAvailableMilestoneChests().size }
+    val unclaimedAchievements: Int = remember(refreshKey) { progressionManager.getClaimableAchievements().size }
 
     // Infinite animation transition for battlefield ambient effects
     val infiniteTransition = rememberInfiniteTransition(label = "ambient_anim")
@@ -134,242 +169,711 @@ fun MainMenuScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Main Menu Interface Container
-        Column(
+        // 2. Main Menu Responsive Interface Container
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // TOP BAR: Player Profile, Stars, and Token Badges
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Commander Profile Plate
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(
-                            brush = Brush.horizontalGradient(
-                                listOf(Color(0xE60F172A), Color(0x991E293B))
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .background(Color(0xFF0369A1), CircleShape)
-                            .border(1.dp, Color(0xFF38BDF8), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MilitaryTech,
-                            contentDescription = "Rank",
-                            tint = Color(0xFFFFD166),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = "COMMANDER",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            color = Color(0xFF38BDF8)
-                        )
-                        Text(
-                            text = "DEFENSE LEVEL ${maxOf(1, totalStars / 3 + 1)}",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF94A3B8)
-                        )
-                    }
-                }
+            val screenWidth = maxWidth
+            val screenHeight = maxHeight
+            val isLandscape = screenWidth >= screenHeight
+            val isCompactHeight = screenHeight < 460.dp
+            val isUltraCompactHeight = screenHeight < 360.dp
 
-                // Currency & Stars Status Row
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (isLandscape && isCompactHeight) {
+                // LANDSCAPE MOBILE VIEW: Split 2-Column Responsive Layout
+                // Eliminates vertical button crowding: Game identity on left, Action Hub on right
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            horizontal = if (isUltraCompactHeight) 16.dp else 24.dp,
+                            vertical = if (isUltraCompactHeight) 4.dp else 8.dp
+                        ),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Stars Earned Badge
+                    // TOP BAR: Player Profile, Stars, and Token Badges
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .background(Color(0xE60F172A), RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0xFFCA8A04), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .fillMaxWidth()
+                            .padding(bottom = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Total Stars",
-                            tint = Color(0xFFFBBF24),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "$totalStars / 27 STARS",
-                            color = Color(0xFFFDE68A),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.5.sp
-                        )
+                        // Commander Profile Plate (Clickable -> Dossier)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(
+                                    brush = Brush.horizontalGradient(
+                                        listOf(Color(0xE60F172A), Color(0x991E293B))
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                .clickable { onOpenProfile() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(Color(0xFF0369A1), CircleShape)
+                                    .border(1.dp, Color(0xFF38BDF8), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MilitaryTech,
+                                    contentDescription = "Rank",
+                                    tint = Color(0xFFFFD166),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Text(
+                                    text = playerTitle.uppercase(),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.8.sp,
+                                    color = Color(0xFF38BDF8)
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "LV. $playerLevel",
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFDE68A)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    LinearProgressIndicator(
+                                        progress = { xpRatio },
+                                        modifier = Modifier
+                                            .width(36.dp)
+                                            .height(3.dp),
+                                        color = Color(0xFF38BDF8),
+                                        trackColor = Color(0xFF1E293B)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Currency & Stars Status Row
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Stars Earned Badge (Clickable -> Crates)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .background(Color(0xE60F172A), RoundedCornerShape(8.dp))
+                                    .border(
+                                        1.dp,
+                                        if (unclaimedChests > 0) Color(0xFFF59E0B) else Color(0xFFCA8A04),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { showRewardChests = true }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Total Stars",
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "$totalStars / 27",
+                                    color = Color(0xFFFDE68A),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.5.sp
+                                )
+                                if (unclaimedChests > 0) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Surface(
+                                        color = Color(0xFFE11D48),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "+$unclaimedChests",
+                                            color = Color.White,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Black,
+                                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Tactical Currency Badge (Clickable -> Research Lab)
+                            Box(modifier = Modifier.clickable { onOpenResearchLab() }) {
+                                GameCurrencyBadge(
+                                    amount = totalTokens,
+                                    isCompact = true
+                                )
+                            }
+                        }
                     }
 
-                    // Tactical Currency Badge
-                    GameCurrencyBadge(
-                        amount = totalStars * 150 + 200,
-                        isCompact = true
-                    )
-                }
-            }
-
-            // CENTER: Dramatic Game Logo & Hero Battle Action
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.weight(1f)
-            ) {
-                // Game Emblem Shield
-                Box(
-                    modifier = Modifier.size(68.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val cx = size.width / 2f
-                        val cy = size.height / 2f
-                        // Outer glowing ring
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(Color(0x6638BDF8), Color.Transparent),
-                                center = Offset(cx, cy),
-                                radius = size.width * 0.6f
-                            ),
-                            radius = size.width * 0.6f,
-                            center = Offset(cx, cy)
-                        )
-                    }
-                    Box(
+                    // CENTER BODY: Left (Emblem & Title) | Right (Hero Play Button & Nav Buttons)
+                    Row(
                         modifier = Modifier
-                            .size(54.dp)
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    listOf(Color(0xFF1E293B), Color(0xFF0F172A))
-                                ),
-                                shape = RoundedCornerShape(12.dp)
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // LEFT: Game Emblem Shield & Title
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp)
+                        ) {
+                            val emblemSize = if (isUltraCompactHeight) 44.dp else 52.dp
+                            val innerSize = if (isUltraCompactHeight) 36.dp else 42.dp
+                            val iconSize = if (isUltraCompactHeight) 22.dp else 26.dp
+
+                            Box(
+                                modifier = Modifier.size(emblemSize),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val cx = size.width / 2f
+                                    val cy = size.height / 2f
+                                    drawCircle(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(Color(0x6638BDF8), Color.Transparent),
+                                            center = Offset(cx, cy),
+                                            radius = size.width * 0.6f
+                                        ),
+                                        radius = size.width * 0.6f,
+                                        center = Offset(cx, cy)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(innerSize)
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                listOf(Color(0xFF1E293B), Color(0xFF0F172A))
+                                            ),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .border(1.5.dp, Color(0xFF38BDF8), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = "Shield",
+                                        tint = Color(0xFF38BDF8),
+                                        modifier = Modifier.size(iconSize)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(if (isUltraCompactHeight) 2.dp else 4.dp))
+
+                            Text(
+                                text = "FRONTLINE",
+                                fontSize = if (isUltraCompactHeight) 26.sp else 30.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 2.5.sp,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
                             )
-                            .border(2.dp, Color(0xFF38BDF8), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = "Shield",
-                            tint = Color(0xFF38BDF8),
-                            modifier = Modifier.size(32.dp)
-                        )
+
+                            Text(
+                                text = "CITADEL DEFENSE • TACTICAL WARS",
+                                fontSize = if (isUltraCompactHeight) 8.5.sp else 9.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.5.sp,
+                                color = Color(0xFF38BDF8),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
+                        // RIGHT: Tactical Action Center (Hero Play Button + Secondary Button Row)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .weight(1.15f)
+                                .widthIn(max = 380.dp)
+                                .padding(start = 8.dp)
+                        ) {
+                            // Hero Green PLAY Button (Deployed safely with guaranteed vertical space)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .scale(heroPulse)
+                            ) {
+                                GameButton(
+                                    text = "DEPLOY TO BATTLE",
+                                    subText = "CONTINUE CAMPAIGN",
+                                    icon = Icons.Default.PlayArrow,
+                                    variant = GameButtonVariant.PRIMARY,
+                                    height = if (isUltraCompactHeight) 44.dp else 50.dp,
+                                    onClick = onPlayClick,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    testTag = "play_button"
+                                )
+                            }
+
+                            // Dedicated vertical separation ensures zero overlap with Settings button
+                            Spacer(modifier = Modifier.height(if (isUltraCompactHeight) 6.dp else 10.dp))
+
+                            // Progression Hub Row 1: Levels, Research Lab, Medals, Crates
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                GameButton(
+                                    text = "LEVELS",
+                                    icon = Icons.Default.Map,
+                                    variant = GameButtonVariant.SECONDARY,
+                                    height = if (isUltraCompactHeight) 34.dp else 38.dp,
+                                    onClick = onPlayClick,
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "levels_button"
+                                )
+
+                                GameButton(
+                                    text = "RESEARCH",
+                                    icon = Icons.Default.Science,
+                                    variant = GameButtonVariant.SECONDARY,
+                                    height = if (isUltraCompactHeight) 34.dp else 38.dp,
+                                    onClick = onOpenResearchLab,
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "research_button"
+                                )
+
+                                GameButton(
+                                    text = if (unclaimedAchievements > 0) "MEDALS ($unclaimedAchievements)" else "MEDALS",
+                                    icon = Icons.Default.EmojiEvents,
+                                    variant = if (unclaimedAchievements > 0) GameButtonVariant.GOLD else GameButtonVariant.SECONDARY,
+                                    height = if (isUltraCompactHeight) 34.dp else 38.dp,
+                                    onClick = onOpenAchievements,
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "achievements_button"
+                                )
+
+                                GameButton(
+                                    text = if (unclaimedChests > 0) "CRATES ($unclaimedChests)" else "CRATES",
+                                    icon = Icons.Default.Inventory2,
+                                    variant = if (unclaimedChests > 0) GameButtonVariant.GOLD else GameButtonVariant.SECONDARY,
+                                    height = if (isUltraCompactHeight) 34.dp else 38.dp,
+                                    onClick = { showRewardChests = true },
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "crates_button"
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Progression Hub Row 2: Daily Login, Dossier, Settings, Tactics Info
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                GameButton(
+                                    text = if (canClaimDaily) "DAILY (!)" else "DAILY",
+                                    icon = Icons.Default.CalendarMonth,
+                                    variant = if (canClaimDaily) GameButtonVariant.GOLD else GameButtonVariant.SECONDARY,
+                                    height = if (isUltraCompactHeight) 32.dp else 36.dp,
+                                    onClick = { showDailyReward = true },
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "daily_reward_button"
+                                )
+
+                                GameButton(
+                                    text = "DOSSIER",
+                                    icon = Icons.Default.MilitaryTech,
+                                    variant = GameButtonVariant.SECONDARY,
+                                    height = if (isUltraCompactHeight) 32.dp else 36.dp,
+                                    onClick = onOpenProfile,
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "profile_button"
+                                )
+
+                                GameButton(
+                                    text = "SETTINGS",
+                                    icon = Icons.Default.Settings,
+                                    variant = GameButtonVariant.SECONDARY,
+                                    height = if (isUltraCompactHeight) 32.dp else 36.dp,
+                                    onClick = onSettingsClick,
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "settings_button"
+                                )
+
+                                GameButton(
+                                    text = "ABOUT",
+                                    icon = Icons.Default.Info,
+                                    variant = GameButtonVariant.SECONDARY,
+                                    height = if (isUltraCompactHeight) 32.dp else 36.dp,
+                                    onClick = { showTacticalBriefing = true },
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "about_button"
+                                )
+                            }
+                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Primary Title
-                Text(
-                    text = "FRONTLINE",
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 3.sp,
-                    color = Color.White,
-                    textAlign = TextAlign.Center
-                )
-
-                // Subtitle Plaque
-                Text(
-                    text = "CITADEL DEFENSE • TACTICAL WARS",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 2.sp,
-                    color = Color(0xFF38BDF8),
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Hero PLAY Button
-                Box(
+            } else {
+                // TABLET / TALL / DESKTOP VIEW: Centered Column with Structured Action Stack
+                Column(
                     modifier = Modifier
-                        .scale(heroPulse)
-                        .widthIn(min = 220.dp, max = 280.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    GameButton(
-                        text = "DEPLOY TO BATTLE",
-                        subText = "CONTINUE CAMPAIGN",
-                        icon = Icons.Default.PlayArrow,
-                        variant = GameButtonVariant.PRIMARY,
-                        height = 54.dp,
-                        onClick = onPlayClick,
-                        modifier = Modifier.fillMaxWidth(),
-                        testTag = "play_button"
-                    )
+                    // TOP BAR: Player Profile, Stars, and Token Badges
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Commander Profile Plate (Clickable -> Dossier)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(
+                                    brush = Brush.horizontalGradient(
+                                        listOf(Color(0xE60F172A), Color(0x991E293B))
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                .clickable { onOpenProfile() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .background(Color(0xFF0369A1), CircleShape)
+                                    .border(1.dp, Color(0xFF38BDF8), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MilitaryTech,
+                                    contentDescription = "Rank",
+                                    tint = Color(0xFFFFD166),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = playerTitle.uppercase(),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 1.sp,
+                                    color = Color(0xFF38BDF8)
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "LV. $playerLevel",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFDE68A)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    LinearProgressIndicator(
+                                        progress = { xpRatio },
+                                        modifier = Modifier
+                                            .width(48.dp)
+                                            .height(4.dp),
+                                        color = Color(0xFF38BDF8),
+                                        trackColor = Color(0xFF1E293B)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Currency & Stars Status Row
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .background(Color(0xE60F172A), RoundedCornerShape(8.dp))
+                                    .border(
+                                        1.dp,
+                                        if (unclaimedChests > 0) Color(0xFFF59E0B) else Color(0xFFCA8A04),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { showRewardChests = true }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Total Stars",
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "$totalStars / 27 STARS",
+                                    color = Color(0xFFFDE68A),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.5.sp
+                                )
+                                if (unclaimedChests > 0) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        color = Color(0xFFE11D48),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "+$unclaimedChests CRATES",
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Black,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Box(modifier = Modifier.clickable { onOpenResearchLab() }) {
+                                GameCurrencyBadge(
+                                    amount = totalTokens,
+                                    isCompact = true
+                                )
+                            }
+                        }
+                    }
+
+                    // CENTER BRANDING
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.size(64.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val cx = size.width / 2f
+                                val cy = size.height / 2f
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(Color(0x6638BDF8), Color.Transparent),
+                                        center = Offset(cx, cy),
+                                        radius = size.width * 0.6f
+                                    ),
+                                    radius = size.width * 0.6f,
+                                    center = Offset(cx, cy)
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            listOf(Color(0xFF1E293B), Color(0xFF0F172A))
+                                        ),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .border(2.dp, Color(0xFF38BDF8), RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Shield,
+                                    contentDescription = "Shield",
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "FRONTLINE",
+                            fontSize = 34.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 3.sp,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Text(
+                            text = "CITADEL DEFENSE • TACTICAL WARS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 2.sp,
+                            color = Color(0xFF38BDF8),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    // ACTIONS STACK: Primary Play Button + Secondary Button Row
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .widthIn(max = 560.dp)
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .scale(heroPulse)
+                                .widthIn(min = 240.dp, max = 320.dp)
+                        ) {
+                            GameButton(
+                                text = "DEPLOY TO BATTLE",
+                                subText = "CONTINUE CAMPAIGN",
+                                icon = Icons.Default.PlayArrow,
+                                variant = GameButtonVariant.PRIMARY,
+                                height = 54.dp,
+                                onClick = onPlayClick,
+                                modifier = Modifier.fillMaxWidth(),
+                                testTag = "play_button"
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Row 1: Levels, Research Lab, Medals, Crates
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            GameButton(
+                                text = "LEVELS",
+                                icon = Icons.Default.Map,
+                                variant = GameButtonVariant.SECONDARY,
+                                height = 44.dp,
+                                onClick = onPlayClick,
+                                modifier = Modifier.weight(1f),
+                                testTag = "levels_button"
+                            )
+
+                            GameButton(
+                                text = "RESEARCH",
+                                icon = Icons.Default.Science,
+                                variant = GameButtonVariant.SECONDARY,
+                                height = 44.dp,
+                                onClick = onOpenResearchLab,
+                                modifier = Modifier.weight(1f),
+                                testTag = "research_button"
+                            )
+
+                            GameButton(
+                                text = if (unclaimedAchievements > 0) "MEDALS ($unclaimedAchievements)" else "MEDALS",
+                                icon = Icons.Default.EmojiEvents,
+                                variant = if (unclaimedAchievements > 0) GameButtonVariant.GOLD else GameButtonVariant.SECONDARY,
+                                height = 44.dp,
+                                onClick = onOpenAchievements,
+                                modifier = Modifier.weight(1f),
+                                testTag = "achievements_button"
+                            )
+
+                            GameButton(
+                                text = if (unclaimedChests > 0) "CRATES ($unclaimedChests)" else "CRATES",
+                                icon = Icons.Default.Inventory2,
+                                variant = if (unclaimedChests > 0) GameButtonVariant.GOLD else GameButtonVariant.SECONDARY,
+                                height = 44.dp,
+                                onClick = { showRewardChests = true },
+                                modifier = Modifier.weight(1f),
+                                testTag = "crates_button"
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Row 2: Daily Login, Dossier, Settings, About
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            GameButton(
+                                text = if (canClaimDaily) "DAILY (!)" else "DAILY",
+                                icon = Icons.Default.CalendarMonth,
+                                variant = if (canClaimDaily) GameButtonVariant.GOLD else GameButtonVariant.SECONDARY,
+                                height = 40.dp,
+                                onClick = { showDailyReward = true },
+                                modifier = Modifier.weight(1f),
+                                testTag = "daily_reward_button"
+                            )
+
+                            GameButton(
+                                text = "DOSSIER",
+                                icon = Icons.Default.MilitaryTech,
+                                variant = GameButtonVariant.SECONDARY,
+                                height = 40.dp,
+                                onClick = onOpenProfile,
+                                modifier = Modifier.weight(1f),
+                                testTag = "profile_button"
+                            )
+
+                            GameButton(
+                                text = "SETTINGS",
+                                icon = Icons.Default.Settings,
+                                variant = GameButtonVariant.SECONDARY,
+                                height = 40.dp,
+                                onClick = onSettingsClick,
+                                modifier = Modifier.weight(1f),
+                                testTag = "settings_button"
+                            )
+
+                            GameButton(
+                                text = "ABOUT",
+                                icon = Icons.Default.Info,
+                                variant = GameButtonVariant.SECONDARY,
+                                height = 40.dp,
+                                onClick = { showTacticalBriefing = true },
+                                modifier = Modifier.weight(1f),
+                                testTag = "about_button"
+                            )
+                        }
+                    }
                 }
-            }
-
-            // BOTTOM NAVIGATION: Game Buttons Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 680.dp)
-                    .padding(bottom = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Levels / Campaign Mission Select
-                GameButton(
-                    text = "LEVELS",
-                    icon = Icons.Default.Map,
-                    variant = GameButtonVariant.SECONDARY,
-                    height = 44.dp,
-                    onClick = onPlayClick,
-                    modifier = Modifier.weight(1f),
-                    testTag = "levels_button"
-                )
-
-                // Settings Button
-                GameButton(
-                    text = "SETTINGS",
-                    icon = Icons.Default.Settings,
-                    variant = GameButtonVariant.SECONDARY,
-                    height = 44.dp,
-                    onClick = onSettingsClick,
-                    modifier = Modifier.weight(1f),
-                    testTag = "settings_button"
-                )
-
-                // Tactics Guide / About
-                GameButton(
-                    text = "ABOUT",
-                    icon = Icons.Default.Info,
-                    variant = GameButtonVariant.SECONDARY,
-                    height = 44.dp,
-                    onClick = { showTacticalBriefing = true },
-                    modifier = Modifier.weight(1f),
-                    testTag = "about_button"
-                )
             }
         }
     }
 
     if (showTacticalBriefing) {
         TacticalCodexDialog(onDismiss = { showTacticalBriefing = false })
+    }
+
+    if (showRewardChests) {
+        RewardChestDialog(
+            progressionManager = progressionManager,
+            onDismiss = {
+                showRewardChests = false
+                refreshKey++
+            }
+        )
+    }
+
+    if (showDailyReward) {
+        DailyRewardDialog(
+            progressionManager = progressionManager,
+            onDismiss = {
+                showDailyReward = false
+                refreshKey++
+            }
+        )
     }
 }
 

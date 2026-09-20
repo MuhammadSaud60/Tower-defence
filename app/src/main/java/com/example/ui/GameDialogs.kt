@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
@@ -373,7 +374,8 @@ fun GameOverDialog(
     coinsEarned: Int,
     enemiesKilled: Int,
     onRestart: () -> Unit,
-    onMainMenu: () -> Unit
+    onMainMenu: () -> Unit,
+    onUpgradeTowers: (() -> Unit)? = null
 ) {
     val audioPlayer = remember { AndroidAudioPlayer.getInstance() }
     val entranceScale = remember { Animatable(0.85f) }
@@ -461,15 +463,15 @@ fun GameOverDialog(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "MISSION FAILED",
-                            fontSize = 20.sp,
+                            text = "DEFEAT",
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Black,
-                            letterSpacing = 1.5.sp,
+                            letterSpacing = 2.sp,
                             color = Color(0xFFEF4444)
                         )
 
                         Text(
-                            text = "CITADEL DEFENSE COMPROMISED",
+                            text = "DEFENSES OVERRUN",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFFCA5A5),
@@ -487,13 +489,13 @@ fun GameOverDialog(
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = "HALTED AT WAVE ",
+                                text = "WAVE REACHED: ",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF94A3B8)
                             )
                             Text(
-                                text = "$currentWave OF $totalWaves",
+                                text = "$currentWave / $totalWaves",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Color(0xFFFFD166)
@@ -501,7 +503,7 @@ fun GameOverDialog(
                         }
                     }
 
-                    // Right Column: Battle statistics & retry options
+                    // Right Column: Clean Battle statistics & Action buttons
                     Column(
                         modifier = Modifier.weight(1.3f)
                     ) {
@@ -513,32 +515,48 @@ fun GameOverDialog(
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            GameStatRow("Wave Progress", "$currentWave / $totalWaves")
-                            GameStatRow("Invaders Repelled", "$enemiesKilled", valueColor = Color(0xFFFFD166))
+                            GameStatRow("Enemies Destroyed", "$enemiesKilled", valueColor = Color(0xFFFFD166))
                             GameStatRow("Bounty Collected", "$coinsEarned 🪙", valueColor = Color(0xFF38BDF8))
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Retry Mission Hero Button
-                        GameButton(
-                            text = "RETRY MISSION",
-                            icon = Icons.Default.Refresh,
-                            variant = GameButtonVariant.DANGER,
-                            height = 42.dp,
-                            onClick = onRestart,
-                            modifier = Modifier.fillMaxWidth(),
-                            testTag = "game_over_retry_button"
-                        )
-
                         Spacer(modifier = Modifier.height(8.dp))
+
+                        // Action Buttons: Retry + Upgrade Towers + Retreat
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            GameButton(
+                                text = "RETRY",
+                                icon = Icons.Default.Refresh,
+                                variant = GameButtonVariant.DANGER,
+                                height = 40.dp,
+                                onClick = onRestart,
+                                modifier = Modifier.weight(1f),
+                                testTag = "game_over_retry_button"
+                            )
+
+                            if (onUpgradeTowers != null) {
+                                GameButton(
+                                    text = "UPGRADES",
+                                    icon = Icons.Default.Upgrade,
+                                    variant = GameButtonVariant.PRIMARY,
+                                    height = 40.dp,
+                                    onClick = onUpgradeTowers,
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "game_over_upgrade_button"
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         // Return to Campaign
                         GameButton(
-                            text = "TACTICAL RETREAT (HOME)",
+                            text = "CAMPAIGN",
                             icon = Icons.Default.Home,
                             variant = GameButtonVariant.SECONDARY,
-                            height = 40.dp,
+                            height = 38.dp,
                             onClick = onMainMenu,
                             modifier = Modifier.fillMaxWidth(),
                             testTag = "game_over_menu_button"

@@ -37,11 +37,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.GameConfig
+import com.example.data.ProgressionManager
 import com.example.entities.Point2D
 import com.example.entities.TowerSpec
 import com.example.entities.TowerType
@@ -72,6 +74,7 @@ fun TowerBuildRadialMenu(
     onSelectTower: (TowerType) -> Unit,
     onClose: () -> Unit,
     highlightGunner: Boolean = false,
+    progressionManager: ProgressionManager? = null,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -99,6 +102,10 @@ fun TowerBuildRadialMenu(
     val gunnerSpec = remember { TowerSpec.create(TowerType.MACHINE_GUN, 1) }
     val rapidSpec = remember { TowerSpec.create(TowerType.RAPID_FIRE, 1) }
     val frostSpec = remember { TowerSpec.create(TowerType.FROST_GUN, 1) }
+
+    val isCannonLocked = progressionManager?.let { !it.isTowerUnlocked(TowerType.CANNON) } ?: false
+    val isRapidLocked = progressionManager?.let { !it.isTowerUnlocked(TowerType.RAPID_FIRE) } ?: false
+    val isFrostLocked = progressionManager?.let { !it.isTowerUnlocked(TowerType.FROST_GUN) } ?: false
 
     Box(
         modifier = modifier.testTag("tower_build_radial_menu")
@@ -139,6 +146,8 @@ fun TowerBuildRadialMenu(
             maxWidthPx = maxWidthPx,
             maxHeightPx = maxHeightPx,
             scale = animProgress,
+            isLocked = isCannonLocked,
+            unlockRequirement = "LV. 2",
             onClick = { onSelectTower(TowerType.CANNON) }
         )
 
@@ -155,6 +164,7 @@ fun TowerBuildRadialMenu(
             maxHeightPx = maxHeightPx,
             scale = animProgress,
             isHighlighted = highlightGunner,
+            isLocked = false,
             onClick = { onSelectTower(TowerType.MACHINE_GUN) }
         )
 
@@ -170,6 +180,8 @@ fun TowerBuildRadialMenu(
             maxWidthPx = maxWidthPx,
             maxHeightPx = maxHeightPx,
             scale = animProgress,
+            isLocked = isRapidLocked,
+            unlockRequirement = "LV. 3",
             onClick = { onSelectTower(TowerType.RAPID_FIRE) }
         )
 
@@ -185,6 +197,8 @@ fun TowerBuildRadialMenu(
             maxWidthPx = maxWidthPx,
             maxHeightPx = maxHeightPx,
             scale = animProgress,
+            isLocked = isFrostLocked,
+            unlockRequirement = "LV. 4",
             onClick = { onSelectTower(TowerType.FROST_GUN) }
         )
 
@@ -213,6 +227,8 @@ private fun RadialBuildButton(
     maxHeightPx: Float,
     scale: Float,
     isHighlighted: Boolean = false,
+    isLocked: Boolean = false,
+    unlockRequirement: String = "",
     onClick: () -> Unit
 ) {
     val density = LocalDensity.current
@@ -223,7 +239,7 @@ private fun RadialBuildButton(
     val clampedX = centerX.coerceIn(margin, maxWidthPx - margin)
     val clampedY = centerY.coerceIn(margin, maxHeightPx - margin)
 
-    val canAfford = playerCoins >= cost
+    val canAfford = !isLocked && playerCoins >= cost
     val interactionSource = remember { MutableInteractionSource() }
 
     Box(
@@ -293,18 +309,33 @@ private fun RadialBuildButton(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(
-                            text = label,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Black,
-                            color = if (canAfford) Color.White else Color(0xFF94A3B8)
-                        )
-                        Text(
-                            text = "${cost}🪙",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (canAfford) Color(0xFFFFD166) else Color(0xFFEF4444)
-                        )
+                        if (isLocked) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Locked",
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = unlockRequirement,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFEF4444)
+                            )
+                        } else {
+                            Text(
+                                text = label,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (canAfford) Color.White else Color(0xFF94A3B8)
+                            )
+                            Text(
+                                text = "${cost}🪙",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (canAfford) Color(0xFFFFD166) else Color(0xFFEF4444)
+                            )
+                        }
                     }
                 }
             }

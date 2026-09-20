@@ -7,6 +7,8 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
 import com.example.data.EnvironmentType
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 enum class GameSound {
     // Weapons
@@ -43,7 +45,18 @@ enum class GameSound {
     VICTORY,
     GAME_OVER,
     COIN_REWARD,
-    BUTTON_CLICK;
+    BUTTON_CLICK,
+
+    // Enemy Abilities & Boss Mechanics
+    RUNNER_DASH,
+    SHIELD_HIT,
+    SHIELD_BREAK,
+    ARMOR_BREAK,
+    HEAL_PULSE,
+    SUMMON_MINIONS,
+    STEALTH_CLOAK,
+    BOSS_SHOCKWAVE,
+    BOSS_PHASE_CHANGE;
 
     companion object {
         // Backward compatibility aliases
@@ -104,6 +117,17 @@ interface AudioPlayer {
     fun coinReward() = playSound(GameSound.COIN_REWARD)
     fun buttonClick() = playSound(GameSound.BUTTON_CLICK)
 
+    // Enemy Abilities & Boss Mechanics
+    fun runnerDash() = playSound(GameSound.RUNNER_DASH)
+    fun shieldHit() = playSound(GameSound.SHIELD_HIT)
+    fun shieldBreak() = playSound(GameSound.SHIELD_BREAK)
+    fun armorBreak() = playSound(GameSound.ARMOR_BREAK)
+    fun healPulse() = playSound(GameSound.HEAL_PULSE)
+    fun summonMinions() = playSound(GameSound.SUMMON_MINIONS)
+    fun stealthCloak() = playSound(GameSound.STEALTH_CLOAK)
+    fun bossShockwave() = playSound(GameSound.BOSS_SHOCKWAVE)
+    fun bossPhaseChange() = playSound(GameSound.BOSS_PHASE_CHANGE)
+
     // Ambience & Music
     fun updateMapAmbience(environmentType: EnvironmentType)
     fun pauseAmbienceAndMusic()
@@ -123,6 +147,7 @@ interface AudioPlayer {
  */
 class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
 
+    private var appContext: Context? = context?.applicationContext
     private var prefs: SharedPreferences? = null
 
     override var isMuted: Boolean = false
@@ -141,7 +166,11 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         set(value) {
             field = value
             savePreference(KEY_MUSIC_ENABLED, value)
-            if (value && !isMuted) bgmTrack?.play() else bgmTrack?.pause()
+            if (value && !isMuted && !isGlobalMuted) {
+                try { bgmTrack?.play() } catch (_: Exception) {}
+            } else {
+                try { bgmTrack?.pause() } catch (_: Exception) {}
+            }
         }
 
     override var isAmbienceEnabled: Boolean = true
@@ -149,7 +178,11 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             field = value
             savePreference(KEY_AMBIENCE_ENABLED, value)
             val current = currentAmbienceTrack
-            if (value && !isMuted) current?.play() else current?.pause()
+            if (value && !isMuted && !isGlobalMuted) {
+                try { current?.play() } catch (_: Exception) {}
+            } else {
+                try { current?.pause() } catch (_: Exception) {}
+            }
         }
 
     override var sfxVolume: Float = DEFAULT_SFX_VOLUME
@@ -157,7 +190,6 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             val clamped = value.coerceIn(0f, 1f)
             field = clamped
             savePreference(KEY_SFX_VOLUME, clamped)
-            updateSfxVolumes()
         }
 
     override var musicVolume: Float = DEFAULT_MUSIC_VOLUME
@@ -165,7 +197,7 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             val clamped = value.coerceIn(0f, 1f)
             field = clamped
             savePreference(KEY_MUSIC_VOLUME, clamped)
-            bgmTrack?.setVolume(clamped)
+            try { bgmTrack?.setVolume(clamped) } catch (_: Exception) {}
         }
 
     override var ambienceVolume: Float = DEFAULT_AMBIENCE_VOLUME
@@ -173,31 +205,36 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             val clamped = value.coerceIn(0f, 1f)
             field = clamped
             savePreference(KEY_AMBIENCE_VOLUME, clamped)
-            currentAmbienceTrack?.setVolume(clamped)
+            try { currentAmbienceTrack?.setVolume(clamped) } catch (_: Exception) {}
         }
 
-    // Tracks storage
-    private val singleTracks = mutableMapOf<GameSound, AudioTrack>()
-    private val machineGunTracks = mutableListOf<AudioTrack>()
-    private val rapidFireTracks = mutableListOf<AudioTrack>()
-    private val cannonTracks = mutableListOf<AudioTrack>()
-    private val ambienceTracks = mutableMapOf<EnvironmentType, AudioTrack>()
+    // Direct PCM SFX software mixer using a single AudioTrack stream (zero Codec2 / SoundPool dependency)
+    private val sfxMixer = PcmSfxMixer(AudioSynthesizer.DEFAULT_SAMPLE_RATE)
+    private val soundMap = ConcurrentHashMap<GameSound, ShortArray>()
+    private val machineGunVariations = CopyOnWriteArrayList<ShortArray>()
+    private val rapidFireVariations = CopyOnWriteArrayList<ShortArray>()
+    private val cannonVariations = CopyOnWriteArrayList<ShortArray>()
+
+    @Volatile
+    private var isReleased = false
+    private var loaderThread: Thread? = null
+
+    // BGM & Ambience: exactly 1 looping track for BGM and 1 for current active environment
     private var bgmTrack: AudioTrack? = null
+    private var currentAmbienceTrack: AudioTrack? = null
+    private var currentEnvironment: EnvironmentType? = null
 
     // Variations rotation indices
     private var mgIndex = 0
     private var rapidIndex = 0
     private var cannonIndex = 0
 
-    // Currently playing ambience
-    private var currentAmbienceTrack: AudioTrack? = null
-    private var currentEnvironment: EnvironmentType? = null
-
     // Event-based cooldown throttling (milliseconds)
-    private val lastPlayTimes = mutableMapOf<GameSound, Long>()
+    private val lastPlayTimes = ConcurrentHashMap<GameSound, Long>()
 
     init {
         context?.let { initContext(it) }
+        sfxMixer.start()
         try {
             pregenerateAllAudio()
         } catch (e: Exception) {
@@ -206,6 +243,9 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
     }
 
     fun initContext(context: Context) {
+        if (appContext == null) {
+            appContext = context.applicationContext
+        }
         try {
             prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs?.let { p ->
@@ -234,113 +274,104 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         }
     }
 
+    private fun pcmBytesToShortArray(bytes: ByteArray): ShortArray {
+        val shorts = ShortArray(bytes.size / 2)
+        for (i in shorts.indices) {
+            val b0 = bytes[i * 2].toInt() and 0xFF
+            val b1 = bytes[i * 2 + 1].toInt()
+            shorts[i] = ((b1 shl 8) or b0).toShort()
+        }
+        return shorts
+    }
+
     private fun pregenerateAllAudio() {
         val sampleRate = AudioSynthesizer.DEFAULT_SAMPLE_RATE
 
-        // 1. Machine Gun (3 variations)
-        for (i in 0..2) {
-            val data = AudioSynthesizer.synthesizeMachineGun(sampleRate, variation = i)
-            createStaticTrack(data, sampleRate, sfxVolume)?.let { machineGunTracks.add(it) }
-        }
+        // 1. Immediate UI essentials loaded in-memory (zero latency, zero disk IO, zero Codec2 queries)
+        soundMap[GameSound.BUTTON_CLICK] = pcmBytesToShortArray(AudioSynthesizer.synthesizeButtonClick(sampleRate))
+        soundMap[GameSound.COIN_REWARD] = pcmBytesToShortArray(AudioSynthesizer.synthesizeCoinReward(sampleRate))
 
-        // 2. Cannon (2 variations)
-        for (i in 0..1) {
-            val data = AudioSynthesizer.synthesizeCannon(sampleRate, variation = i)
-            createStaticTrack(data, sampleRate, sfxVolume)?.let { cannonTracks.add(it) }
-        }
+        // 2. Synthesize background music and remaining SFX in background daemon thread
+        loaderThread = Thread {
+            try {
+                // Background Music Loop
+                val bgmData = AudioSynthesizer.synthesizeBackgroundMusic(sampleRate)
+                if (!isReleased) {
+                    bgmTrack = createLoopingTrack(bgmData, sampleRate, musicVolume)
+                    if (isMusicEnabled && !isMuted && !isGlobalMuted) {
+                        try {
+                            bgmTrack?.play()
+                        } catch (_: Exception) {}
+                    }
+                }
 
-        // 3. Rapid Fire (3 variations)
-        for (i in 0..2) {
-            val data = AudioSynthesizer.synthesizeRapidFire(sampleRate, variation = i)
-            createStaticTrack(data, sampleRate, sfxVolume)?.let { rapidFireTracks.add(it) }
-        }
+                // Weapons
+                for (i in 0..2) {
+                    val data = AudioSynthesizer.synthesizeMachineGun(sampleRate, variation = i)
+                    machineGunVariations.add(pcmBytesToShortArray(data))
+                }
+                for (i in 0..1) {
+                    val data = AudioSynthesizer.synthesizeCannon(sampleRate, variation = i)
+                    cannonVariations.add(pcmBytesToShortArray(data))
+                }
+                for (i in 0..2) {
+                    val data = AudioSynthesizer.synthesizeRapidFire(sampleRate, variation = i)
+                    rapidFireVariations.add(pcmBytesToShortArray(data))
+                }
 
-        // 4. Frost Gun
-        registerSound(GameSound.FROST_FIRE, AudioSynthesizer.synthesizeFrostFire(sampleRate), sampleRate)
+                fun register(sound: GameSound, bytes: ByteArray) {
+                    soundMap[sound] = pcmBytesToShortArray(bytes)
+                }
 
-        // 5. Projectile Impacts
-        registerSound(GameSound.ENEMY_HIT, AudioSynthesizer.synthesizeEnemyHit(sampleRate), sampleRate)
-        registerSound(GameSound.HEAVY_ENEMY_HIT, AudioSynthesizer.synthesizeHeavyEnemyHit(sampleRate), sampleRate)
-        registerSound(GameSound.CANNON_IMPACT, AudioSynthesizer.synthesizeCannonImpact(sampleRate), sampleRate)
-        registerSound(GameSound.FROST_IMPACT, AudioSynthesizer.synthesizeFrostImpact(sampleRate), sampleRate)
-        registerSound(GameSound.BOSS_IMPACT, AudioSynthesizer.synthesizeBossImpact(sampleRate), sampleRate)
+                register(GameSound.FROST_FIRE, AudioSynthesizer.synthesizeFrostFire(sampleRate))
 
-        // 6. Destructibles
-        registerSound(GameSound.TREE_HIT, AudioSynthesizer.synthesizeTreeHit(sampleRate), sampleRate)
-        registerSound(GameSound.STONE_HIT, AudioSynthesizer.synthesizeStoneHit(sampleRate), sampleRate)
-        registerSound(GameSound.OBJECT_HIT, AudioSynthesizer.synthesizeTreeHit(sampleRate), sampleRate)
-        registerSound(GameSound.TREE_DESTROYED, AudioSynthesizer.synthesizeTreeDestroyed(sampleRate), sampleRate)
-        registerSound(GameSound.STONE_DESTROYED, AudioSynthesizer.synthesizeStoneDestroyed(sampleRate), sampleRate)
-        registerSound(GameSound.OBJECT_DESTROY, AudioSynthesizer.synthesizeStoneDestroyed(sampleRate), sampleRate)
+                // Projectile Impacts
+                register(GameSound.ENEMY_HIT, AudioSynthesizer.synthesizeEnemyHit(sampleRate))
+                register(GameSound.HEAVY_ENEMY_HIT, AudioSynthesizer.synthesizeHeavyEnemyHit(sampleRate))
+                register(GameSound.CANNON_IMPACT, AudioSynthesizer.synthesizeCannonImpact(sampleRate))
+                register(GameSound.FROST_IMPACT, AudioSynthesizer.synthesizeFrostImpact(sampleRate))
+                register(GameSound.BOSS_IMPACT, AudioSynthesizer.synthesizeBossImpact(sampleRate))
 
-        // 7. Game & UI Events
-        registerSound(GameSound.TOWER_PLACED, AudioSynthesizer.synthesizeTowerPlaced(sampleRate), sampleRate)
-        registerSound(GameSound.TOWER_UPGRADED, AudioSynthesizer.synthesizeTowerUpgraded(sampleRate), sampleRate)
-        registerSound(GameSound.TOWER_SOLD, AudioSynthesizer.synthesizeTowerSold(sampleRate), sampleRate)
-        registerSound(GameSound.INVALID_PLACEMENT, AudioSynthesizer.synthesizeInvalidPlacement(sampleRate), sampleRate)
-        registerSound(GameSound.ENEMY_DEFEATED, AudioSynthesizer.synthesizeEnemyDeath(sampleRate), sampleRate)
-        registerSound(GameSound.BOSS_APPEARANCE, AudioSynthesizer.synthesizeBossAppearance(sampleRate), sampleRate)
-        registerSound(GameSound.BOSS_DEFEATED, AudioSynthesizer.synthesizeBossDefeated(sampleRate), sampleRate)
-        registerSound(GameSound.WAVE_START, AudioSynthesizer.synthesizeWaveStarted(sampleRate), sampleRate)
-        registerSound(GameSound.WAVE_CLEAR, AudioSynthesizer.synthesizeWaveCleared(sampleRate), sampleRate)
-        registerSound(GameSound.VICTORY, AudioSynthesizer.synthesizeVictory(sampleRate), sampleRate)
-        registerSound(GameSound.GAME_OVER, AudioSynthesizer.synthesizeDefeat(sampleRate), sampleRate)
-        registerSound(GameSound.COIN_REWARD, AudioSynthesizer.synthesizeCoinReward(sampleRate), sampleRate)
-        registerSound(GameSound.BUTTON_CLICK, AudioSynthesizer.synthesizeButtonClick(sampleRate), sampleRate)
+                // Destructibles
+                register(GameSound.TREE_HIT, AudioSynthesizer.synthesizeTreeHit(sampleRate))
+                register(GameSound.STONE_HIT, AudioSynthesizer.synthesizeStoneHit(sampleRate))
+                register(GameSound.OBJECT_HIT, AudioSynthesizer.synthesizeTreeHit(sampleRate))
+                register(GameSound.TREE_DESTROYED, AudioSynthesizer.synthesizeTreeDestroyed(sampleRate))
+                register(GameSound.STONE_DESTROYED, AudioSynthesizer.synthesizeStoneDestroyed(sampleRate))
+                register(GameSound.OBJECT_DESTROY, AudioSynthesizer.synthesizeStoneDestroyed(sampleRate))
 
-        // 8. Ambience Loops for Environments
-        listOf(
-            EnvironmentType.GREEN_VALLEY,
-            EnvironmentType.DESERT_CANYON,
-            EnvironmentType.FOREST_CROSSROADS,
-            EnvironmentType.SNOW_VALLEY,
-            EnvironmentType.NIGHT_FORTRESS
-        ).forEach { env ->
-            val ambData = AudioSynthesizer.synthesizeAmbience(sampleRate, env)
-            createLoopingTrack(ambData, sampleRate, ambienceVolume)?.let {
-                ambienceTracks[env] = it
+                // Game & UI Events
+                register(GameSound.TOWER_PLACED, AudioSynthesizer.synthesizeTowerPlaced(sampleRate))
+                register(GameSound.TOWER_UPGRADED, AudioSynthesizer.synthesizeTowerUpgraded(sampleRate))
+                register(GameSound.TOWER_SOLD, AudioSynthesizer.synthesizeTowerSold(sampleRate))
+                register(GameSound.INVALID_PLACEMENT, AudioSynthesizer.synthesizeInvalidPlacement(sampleRate))
+                register(GameSound.ENEMY_DEFEATED, AudioSynthesizer.synthesizeEnemyDeath(sampleRate))
+                register(GameSound.BOSS_APPEARANCE, AudioSynthesizer.synthesizeBossAppearance(sampleRate))
+                register(GameSound.BOSS_DEFEATED, AudioSynthesizer.synthesizeBossDefeated(sampleRate))
+                register(GameSound.WAVE_START, AudioSynthesizer.synthesizeWaveStarted(sampleRate))
+                register(GameSound.WAVE_CLEAR, AudioSynthesizer.synthesizeWaveCleared(sampleRate))
+                register(GameSound.VICTORY, AudioSynthesizer.synthesizeVictory(sampleRate))
+                register(GameSound.GAME_OVER, AudioSynthesizer.synthesizeDefeat(sampleRate))
+
+                // Enemy Abilities & Boss Mechanics
+                register(GameSound.RUNNER_DASH, AudioSynthesizer.synthesizeRunnerDash(sampleRate))
+                register(GameSound.SHIELD_HIT, AudioSynthesizer.synthesizeShieldHit(sampleRate))
+                register(GameSound.SHIELD_BREAK, AudioSynthesizer.synthesizeShieldBreak(sampleRate))
+                register(GameSound.ARMOR_BREAK, AudioSynthesizer.synthesizeArmorBreak(sampleRate))
+                register(GameSound.HEAL_PULSE, AudioSynthesizer.synthesizeHealPulse(sampleRate))
+                register(GameSound.SUMMON_MINIONS, AudioSynthesizer.synthesizeSummonMinions(sampleRate))
+                register(GameSound.STEALTH_CLOAK, AudioSynthesizer.synthesizeStealthCloak(sampleRate))
+                register(GameSound.BOSS_SHOCKWAVE, AudioSynthesizer.synthesizeBossShockwave(sampleRate))
+                register(GameSound.BOSS_PHASE_CHANGE, AudioSynthesizer.synthesizeBossPhaseChange(sampleRate))
+            } catch (_: InterruptedException) {
+                // Background worker stopped cleanly
+            } catch (e: Exception) {
+                Log.w("AudioPlayer", "Background audio synthesis warning: ${e.message}")
             }
-        }
-
-        // 9. Background Music Loop
-        val bgmData = AudioSynthesizer.synthesizeBackgroundMusic(sampleRate)
-        bgmTrack = createLoopingTrack(bgmData, sampleRate, musicVolume)
-        if (isMusicEnabled && !isMuted && !isGlobalMuted) {
-            bgmTrack?.play()
-        }
-    }
-
-    private fun registerSound(sound: GameSound, pcmData: ByteArray, sampleRate: Int) {
-        createStaticTrack(pcmData, sampleRate, sfxVolume)?.let {
-            singleTracks[sound] = it
-        }
-    }
-
-    private fun createStaticTrack(pcmData: ByteArray, sampleRate: Int, volume: Float): AudioTrack? {
-        return try {
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(sampleRate)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .build()
-                )
-                .setBufferSizeInBytes(pcmData.size)
-                .setTransferMode(AudioTrack.MODE_STATIC)
-                .build()
-
-            track.write(pcmData, 0, pcmData.size)
-            track.setVolume(volume.coerceIn(0f, 1f))
-            track
-        } catch (e: Exception) {
-            null
+        }.apply {
+            isDaemon = true
+            name = "AudioPreloader"
+            start()
         }
     }
 
@@ -364,30 +395,35 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
 
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                track.release()
+                return null
+            }
+
             track.write(pcmData, 0, pcmData.size)
             val numFrames = pcmData.size / 2
             track.setLoopPoints(0, numFrames, -1) // Loop continuously
             track.setVolume(volume.coerceIn(0f, 1f))
             track
         } catch (e: Exception) {
+            Log.w("AudioPlayer", "Failed to create looping track: ${e.message}")
             null
         }
     }
 
-    private fun updateSfxVolumes() {
-        singleTracks.values.forEach { try { it.setVolume(sfxVolume) } catch (_: Exception) {} }
-        machineGunTracks.forEach { try { it.setVolume(sfxVolume) } catch (_: Exception) {} }
-        rapidFireTracks.forEach { try { it.setVolume(sfxVolume) } catch (_: Exception) {} }
-        cannonTracks.forEach { try { it.setVolume(sfxVolume) } catch (_: Exception) {} }
-    }
-
     private fun applyMasterMute(muted: Boolean) {
         if (muted) {
-            bgmTrack?.pause()
-            currentAmbienceTrack?.pause()
+            try { bgmTrack?.pause() } catch (_: Exception) {}
+            try { currentAmbienceTrack?.pause() } catch (_: Exception) {}
+            sfxMixer.pause()
         } else {
-            if (isMusicEnabled) bgmTrack?.play()
-            if (isAmbienceEnabled) currentAmbienceTrack?.play()
+            sfxMixer.resume()
+            if (isMusicEnabled && !isGlobalMuted) {
+                try { bgmTrack?.play() } catch (_: Exception) {}
+            }
+            if (isAmbienceEnabled && !isGlobalMuted) {
+                try { currentAmbienceTrack?.play() } catch (_: Exception) {}
+            }
         }
     }
 
@@ -412,6 +448,15 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             GameSound.COIN_REWARD -> 70L
             GameSound.BUTTON_CLICK -> 40L
             GameSound.INVALID_PLACEMENT -> 60L
+            GameSound.RUNNER_DASH -> 120L
+            GameSound.SHIELD_HIT -> 60L
+            GameSound.SHIELD_BREAK -> 150L
+            GameSound.ARMOR_BREAK -> 150L
+            GameSound.HEAL_PULSE -> 200L
+            GameSound.SUMMON_MINIONS -> 250L
+            GameSound.STEALTH_CLOAK -> 180L
+            GameSound.BOSS_SHOCKWAVE -> 300L
+            GameSound.BOSS_PHASE_CHANGE -> 500L
             else -> 0L
         }
 
@@ -419,42 +464,38 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         if (now - last < cooldown) return
         lastPlayTimes[sound] = now
 
-        when (sound) {
-            GameSound.MACHINE_GUN_FIRE -> {
-                if (machineGunTracks.isNotEmpty()) {
-                    val track = machineGunTracks[mgIndex % machineGunTracks.size]
-                    mgIndex++
-                    playStaticTrack(track)
-                }
-            }
-            GameSound.RAPID_FIRE -> {
-                if (rapidFireTracks.isNotEmpty()) {
-                    val track = rapidFireTracks[rapidIndex % rapidFireTracks.size]
-                    rapidIndex++
-                    playStaticTrack(track)
-                }
-            }
-            GameSound.CANNON_FIRE -> {
-                if (cannonTracks.isNotEmpty()) {
-                    val track = cannonTracks[cannonIndex % cannonTracks.size]
-                    cannonIndex++
-                    playStaticTrack(track)
-                }
-            }
-            else -> {
-                val track = singleTracks[sound] ?: return
-                playStaticTrack(track)
-            }
-        }
-    }
+        val vol = sfxVolume.coerceIn(0f, 1f)
 
-    private fun playStaticTrack(track: AudioTrack) {
         try {
-            track.stop()
-            track.reloadStaticData()
-            track.play()
-        } catch (e: Exception) {
-            // Hardware busy / non-fatal
+            when (sound) {
+                GameSound.MACHINE_GUN_FIRE -> {
+                    if (machineGunVariations.isNotEmpty()) {
+                        val samples = machineGunVariations[mgIndex % machineGunVariations.size]
+                        mgIndex++
+                        sfxMixer.play(samples, vol)
+                    }
+                }
+                GameSound.RAPID_FIRE -> {
+                    if (rapidFireVariations.isNotEmpty()) {
+                        val samples = rapidFireVariations[rapidIndex % rapidFireVariations.size]
+                        rapidIndex++
+                        sfxMixer.play(samples, vol)
+                    }
+                }
+                GameSound.CANNON_FIRE -> {
+                    if (cannonVariations.isNotEmpty()) {
+                        val samples = cannonVariations[cannonIndex % cannonVariations.size]
+                        cannonIndex++
+                        sfxMixer.play(samples, vol)
+                    }
+                }
+                else -> {
+                    val samples = soundMap[sound] ?: return
+                    sfxMixer.play(samples, vol)
+                }
+            }
+        } catch (_: Exception) {
+            // Non-fatal playback error
         }
     }
 
@@ -463,19 +504,16 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         currentEnvironment = environmentType
 
         try {
-            currentAmbienceTrack?.pause()
-            val targetKey = when (environmentType) {
-                EnvironmentType.GREEN_VALLEY -> EnvironmentType.GREEN_VALLEY
-                EnvironmentType.DESERT_CANYON -> EnvironmentType.DESERT_CANYON
-                EnvironmentType.SNOW_VALLEY -> EnvironmentType.SNOW_VALLEY
-                EnvironmentType.NIGHT_FORTRESS -> EnvironmentType.NIGHT_FORTRESS
-                else -> EnvironmentType.FOREST_CROSSROADS
-            }
-            val track = ambienceTracks[targetKey]
-            currentAmbienceTrack = track
-            track?.setVolume(ambienceVolume)
+            currentAmbienceTrack?.stop()
+            currentAmbienceTrack?.release()
+            currentAmbienceTrack = null
+
+            val sampleRate = AudioSynthesizer.DEFAULT_SAMPLE_RATE
+            val ambData = AudioSynthesizer.synthesizeAmbience(sampleRate, environmentType)
+            currentAmbienceTrack = createLoopingTrack(ambData, sampleRate, ambienceVolume)
+
             if (isAmbienceEnabled && !isMuted && !isGlobalMuted) {
-                track?.play()
+                currentAmbienceTrack?.play()
             }
         } catch (e: Exception) {
             Log.w("AudioPlayer", "Error updating map ambience: ${e.message}")
@@ -486,11 +524,13 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         try {
             bgmTrack?.pause()
             currentAmbienceTrack?.pause()
+            sfxMixer.pause()
         } catch (_: Exception) {}
     }
 
     override fun resumeAmbienceAndMusic() {
         try {
+            sfxMixer.resume()
             if (!isMuted && !isGlobalMuted) {
                 if (isMusicEnabled) bgmTrack?.play()
                 if (isAmbienceEnabled) currentAmbienceTrack?.play()
@@ -499,31 +539,23 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
     }
 
     override fun release() {
+        isReleased = true
+        loaderThread?.interrupt()
+        loaderThread = null
         try {
             bgmTrack?.stop()
             bgmTrack?.release()
             bgmTrack = null
 
             currentAmbienceTrack?.stop()
-            ambienceTracks.values.forEach {
-                try {
-                    it.stop()
-                    it.release()
-                } catch (_: Exception) {}
-            }
-            ambienceTracks.clear()
+            currentAmbienceTrack?.release()
+            currentAmbienceTrack = null
 
-            machineGunTracks.forEach { try { it.release() } catch (_: Exception) {} }
-            machineGunTracks.clear()
-
-            rapidFireTracks.forEach { try { it.release() } catch (_: Exception) {} }
-            rapidFireTracks.clear()
-
-            cannonTracks.forEach { try { it.release() } catch (_: Exception) {} }
-            cannonTracks.clear()
-
-            singleTracks.values.forEach { try { it.release() } catch (_: Exception) {} }
-            singleTracks.clear()
+            sfxMixer.stop()
+            soundMap.clear()
+            machineGunVariations.clear()
+            rapidFireVariations.clear()
+            cannonVariations.clear()
         } catch (e: Exception) {
             Log.w("AudioPlayer", "Error releasing audio tracks: ${e.message}")
         }
@@ -553,15 +585,150 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         private var instance: AndroidAudioPlayer? = null
 
         fun getInstance(context: Context? = null): AndroidAudioPlayer {
-            return instance ?: synchronized(this) {
+            val player = instance ?: synchronized(this) {
                 instance ?: AndroidAudioPlayer(context).also {
                     instance = it
                 }
             }
+            if (context != null) {
+                player.initContext(context)
+            }
+            return player
         }
 
         fun playButtonClick() {
             instance?.buttonClick()
         }
+    }
+}
+
+/**
+ * Direct PCM Software SFX Mixer.
+ * Routes audio directly into a single streaming AudioTrack sink, eliminating
+ * SoundPool, Codec2 queries, file I/O, and system component bottlenecks on emulator and hardware.
+ */
+class PcmSfxMixer(private val sampleRate: Int = AudioSynthesizer.DEFAULT_SAMPLE_RATE) {
+    private var sfxTrack: AudioTrack? = null
+    @Volatile private var isRunning = false
+    @Volatile private var isPaused = false
+    private val activeVoices = CopyOnWriteArrayList<ActiveVoice>()
+    private val voiceLock = Object()
+
+    data class ActiveVoice(
+        val samples: ShortArray,
+        var position: Int = 0,
+        val volume: Float
+    )
+
+    fun start() {
+        if (isRunning) return
+        isRunning = true
+        try {
+            val minBuf = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            val bufSize = maxOf(minBuf, sampleRate / 10 * 2) // ~100ms buffer
+            sfxTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_GAME)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(bufSize)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+
+            sfxTrack?.play()
+        } catch (e: Exception) {
+            Log.w("PcmSfxMixer", "Failed to initialize SFX AudioTrack: ${e.message}")
+            return
+        }
+
+        Thread {
+            val chunkSize = 441 // 20ms chunk at 22050Hz
+            val mixBuffer = ShortArray(chunkSize)
+
+            while (isRunning) {
+                if (isPaused || activeVoices.isEmpty()) {
+                    try {
+                        synchronized(voiceLock) {
+                            if (isRunning && (isPaused || activeVoices.isEmpty())) {
+                                voiceLock.wait(80)
+                            }
+                        }
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                    continue
+                }
+
+                mixBuffer.fill(0)
+                for (voice in activeVoices) {
+                    val remaining = voice.samples.size - voice.position
+                    val toMix = minOf(chunkSize, remaining)
+                    val vol = voice.volume
+                    for (i in 0 until toMix) {
+                        val mixed = mixBuffer[i] + (voice.samples[voice.position + i] * vol).toInt()
+                        mixBuffer[i] = mixed.coerceIn(-32768, 32767).toShort()
+                    }
+                    voice.position += toMix
+                    if (voice.position >= voice.samples.size) {
+                        activeVoices.remove(voice)
+                    }
+                }
+
+                try {
+                    sfxTrack?.write(mixBuffer, 0, chunkSize)
+                } catch (_: Exception) {}
+            }
+        }.apply {
+            isDaemon = true
+            name = "PcmSfxMixerThread"
+            start()
+        }
+    }
+
+    fun play(samples: ShortArray, volume: Float) {
+        if (!isRunning || isPaused || volume <= 0f) return
+        activeVoices.add(ActiveVoice(samples, 0, volume.coerceIn(0f, 1f)))
+        synchronized(voiceLock) {
+            voiceLock.notifyAll()
+        }
+    }
+
+    fun pause() {
+        isPaused = true
+        try { sfxTrack?.pause() } catch (_: Exception) {}
+    }
+
+    fun resume() {
+        isPaused = false
+        try { sfxTrack?.play() } catch (_: Exception) {}
+        synchronized(voiceLock) {
+            voiceLock.notifyAll()
+        }
+    }
+
+    fun stop() {
+        isRunning = false
+        synchronized(voiceLock) {
+            voiceLock.notifyAll()
+        }
+        try {
+            sfxTrack?.stop()
+            sfxTrack?.release()
+            sfxTrack = null
+            activeVoices.clear()
+        } catch (_: Exception) {}
     }
 }

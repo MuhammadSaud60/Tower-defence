@@ -103,6 +103,7 @@ fun GameCanvas(
     onDeselectTower: (() -> Unit)? = null,
     onSelectBuildTower: ((TowerType) -> Unit)? = null,
     onCloseBuildMenu: (() -> Unit)? = null,
+    progressionManager: com.example.data.ProgressionManager? = null,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -457,6 +458,7 @@ fun GameCanvas(
                 maxHeightPx = maxHeightPx,
                 playerCoins = gameState.coins,
                 highlightGunner = (gameState.currentMap.id == "green_valley" && gameState.towers.isEmpty()),
+                progressionManager = progressionManager,
                 onSelectTower = { type -> onSelectBuildTower?.invoke(type) },
                 onClose = { onCloseBuildMenu?.invoke() }
             )
@@ -2797,14 +2799,68 @@ private fun DrawScope.drawEnemies(
             size = Size(shadowWidth, shadowHeight)
         )
 
+        // 1b. Warning Telegraphs & Ability Indicators
+        if (enemy.shockwaveWarningTimer > 0f) {
+            val warningFraction = (1f - (enemy.shockwaveWarningTimer / 1.5f)).coerceIn(0.1f, 1f)
+            drawCircle(
+                color = Color(0x33EF4444),
+                radius = 200f * warningFraction,
+                center = center
+            )
+            drawCircle(
+                color = Color(0xCCEF4444),
+                radius = 200f,
+                center = center,
+                style = Stroke(width = 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), time * 25f))
+            )
+        }
+
+        if (enemy.summonWarningTimer > 0f) {
+            val pulse = sin(time * 12f) * 2.5f
+            drawCircle(
+                color = Color(0x358B5CF6),
+                radius = (enemy.spec.radius * 1.5f) + pulse,
+                center = center
+            )
+            drawCircle(
+                color = Color(0xFFA855F7),
+                radius = (enemy.spec.radius * 1.5f) + pulse,
+                center = center,
+                style = Stroke(width = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), time * 15f))
+            )
+        }
+
+        if (enemy.isSpeedBurstActive) {
+            val rad = Math.toRadians(enemy.headingAngle.toDouble())
+            for (tr in 1..3) {
+                val trDist = tr * 10f
+                val tx = center.x - cos(rad).toFloat() * trDist
+                val ty = center.y - sin(rad).toFloat() * trDist
+                drawCircle(Color(0x5538BDF8), radius = enemy.spec.radius * (1f - tr * 0.22f), center = Offset(tx, ty))
+            }
+        }
+
         // 2. Character Sprite facing movement direction
-        rotate(degrees = enemy.headingAngle, pivot = center) {
-            when (enemy.spec.type) {
-                EnemyType.SCOUT -> drawScoutEnemy(center, enemy, time)
-                EnemyType.SOLDIER -> drawSoldierEnemy(center, enemy, time)
-                EnemyType.HEAVY -> drawHeavyEnemy(center, enemy, time)
-                EnemyType.RUNNER -> drawRunnerEnemy(center, enemy, time)
-                EnemyType.BOSS -> drawBossEnemy(center, enemy, time)
+        val spriteAlpha = if (enemy.isStealthed) 0.35f else 1.0f
+        withTransform({
+            // Apply stealth shimmer if stealthed
+            if (spriteAlpha < 1.0f) {
+                // Dimmed ghostly appearance
+            }
+        }) {
+            rotate(degrees = enemy.headingAngle, pivot = center) {
+                when (enemy.spec.type) {
+                    EnemyType.SCOUT -> drawScoutEnemy(center, enemy, time)
+                    EnemyType.SOLDIER -> drawSoldierEnemy(center, enemy, time)
+                    EnemyType.HEAVY -> drawHeavyEnemy(center, enemy, time)
+                    EnemyType.RUNNER -> drawRunnerEnemy(center, enemy, time)
+                    EnemyType.SHIELD -> drawShieldEnemy(center, enemy, time)
+                    EnemyType.FLYING -> drawFlyingEnemy(center, enemy, time)
+                    EnemyType.HEALER -> drawHealerEnemy(center, enemy, time)
+                    EnemyType.SUMMONER -> drawSummonerEnemy(center, enemy, time)
+                    EnemyType.STEALTH -> drawStealthEnemy(center, enemy, time)
+                    EnemyType.BOSS -> drawBossEnemy(center, enemy, time)
+                }
             }
         }
 
@@ -2836,20 +2892,52 @@ private fun DrawScope.drawEnemies(
             }
         }
 
-        // 3. Boss Shield Phase Barrier
-        if (enemy.spec.isBoss && enemy.isShielded) {
-            val pulse = sin(time * 8f) * 3f
+        // 3. Energy Shield Bubble
+        if (enemy.isEnergyShieldActive) {
+            val pulse = sin(time * 8f) * 2.5f
             drawCircle(
-                color = Color(0x33F59E0B),
-                radius = enemy.spec.radius * 1.25f + pulse,
+                color = Color(0x3306B6D4),
+                radius = enemy.spec.radius * 1.28f + pulse,
                 center = center
             )
             drawCircle(
-                color = Color(0xFFFACC15),
-                radius = enemy.spec.radius * 1.20f + pulse,
+                color = Color(0xFF38BDF8),
+                radius = enemy.spec.radius * 1.22f + pulse,
                 center = center,
-                style = Stroke(width = 3.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 8f), time * 25f))
+                style = Stroke(width = 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), time * 20f))
             )
+        }
+
+        // 3b. Boss Shield Phase Barrier or Enraged Phase Aura
+        if (enemy.spec.isBoss) {
+            if (enemy.isShielded) {
+                val pulse = sin(time * 8f) * 3f
+                drawCircle(
+                    color = Color(0x33F59E0B),
+                    radius = enemy.spec.radius * 1.25f + pulse,
+                    center = center
+                )
+                drawCircle(
+                    color = Color(0xFFFACC15),
+                    radius = enemy.spec.radius * 1.20f + pulse,
+                    center = center,
+                    style = Stroke(width = 3.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 8f), time * 25f))
+                )
+            }
+            if (enemy.bossPhase == 3) {
+                val enragedPulse = sin(time * 16f) * 3.5f
+                drawCircle(
+                    color = Color(0x33DC2626),
+                    radius = enemy.spec.radius * 1.35f + enragedPulse,
+                    center = center
+                )
+                drawCircle(
+                    color = Color(0xFFEF4444),
+                    radius = enemy.spec.radius * 1.30f + enragedPulse,
+                    center = center,
+                    style = Stroke(width = 3f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), time * 30f))
+                )
+            }
         }
 
         // 4. World-Space Health Bars (Drawn horizontally upright directly above the unit)
@@ -2868,8 +2956,9 @@ private fun DrawScope.drawEnemies(
                 cornerRadius = CornerRadius(3f, 3f)
             )
             // Golden boss frame
+            val frameColor = if (enemy.bossPhase == 3) Color(0xFFEF4444) else Color(0xFFF59E0B)
             drawRoundRect(
-                color = Color(0xFFF59E0B),
+                color = frameColor,
                 topLeft = Offset(bossBarLeft - 2f, bossBarTop - 2f),
                 size = Size(bossBarWidth + 4f, bossBarHeight + 4f),
                 cornerRadius = CornerRadius(3f, 3f),
@@ -2884,6 +2973,7 @@ private fun DrawScope.drawEnemies(
             )
             // Health Fill
             val hpColor = when {
+                enemy.bossPhase == 3 -> Color(0xFFDC2626)
                 enemy.healthPercentage > 0.5f -> Color(0xFFEF4444)
                 enemy.healthPercentage > 0.25f -> Color(0xFFF97316)
                 else -> Color(0xFFDC2626)
@@ -2903,14 +2993,21 @@ private fun DrawScope.drawEnemies(
                     cornerRadius = CornerRadius(1.5f, 1.5f)
                 )
             }
-            // Golden skull / crown indicator dot above
-            drawCircle(
-                color = Color(0xFFFDE047),
-                radius = 3f,
-                center = Offset(center.x, bossBarTop - 5f)
-            )
-        } else if (enemy.healthPercentage < 1.0f) {
-            // Standard Enemy Health Bar (Only displayed when damaged to keep screen clean)
+            // Boss Phase Indicator Dots (P1, P2, P3)
+            val dotSpacing = 8f
+            for (p in 1..3) {
+                val dotX = center.x + (p - 2) * dotSpacing
+                val dotColor = if (p <= enemy.bossPhase) {
+                    if (enemy.bossPhase == 3) Color(0xFFEF4444) else Color(0xFFFDE047)
+                } else Color(0xFF475569)
+                drawCircle(
+                    color = dotColor,
+                    radius = if (p == enemy.bossPhase) 3f else 2f,
+                    center = Offset(dotX, bossBarTop - 5f)
+                )
+            }
+        } else if (enemy.healthPercentage < 1.0f || enemy.isEnergyShieldActive || enemy.spec.armor > 0f || enemy.spec.maxArmorHp > 0f) {
+            // Standard Enemy Health Bar
             val barWidth = (enemy.spec.radius * 2f).coerceAtLeast(32f)
             val barHeight = 4.5f
             val barTop = center.y - enemy.spec.radius - 12f
@@ -2933,6 +3030,30 @@ private fun DrawScope.drawEnemies(
                 size = Size(barWidth * enemy.healthPercentage, barHeight),
                 cornerRadius = CornerRadius(2f, 2f)
             )
+
+            // Energy Shield Bar above health bar
+            if (enemy.isEnergyShieldActive && enemy.spec.maxShieldHp > 0f) {
+                val shieldFraction = (enemy.currentShieldHp / enemy.spec.maxShieldHp).coerceIn(0f, 1f)
+                val shieldBarTop = barTop - 4f
+                drawRoundRect(
+                    color = Color(0xCC082F49),
+                    topLeft = Offset(barLeft, shieldBarTop),
+                    size = Size(barWidth, 3f),
+                    cornerRadius = CornerRadius(1.5f, 1.5f)
+                )
+                drawRoundRect(
+                    color = Color(0xFF06B6D4),
+                    topLeft = Offset(barLeft, shieldBarTop),
+                    size = Size(barWidth * shieldFraction, 3f),
+                    cornerRadius = CornerRadius(1.5f, 1.5f)
+                )
+            }
+
+            // Heavy Armor indicator pip
+            if (enemy.spec.armor > 0f || enemy.spec.maxArmorHp > 0f) {
+                val armorColor = if (enemy.isArmorBroken) Color(0xFFEF4444) else Color(0xFF94A3B8)
+                drawCircle(color = armorColor, radius = 2.5f, center = Offset(barLeft - 5f, barTop + barHeight / 2f))
+            }
         }
     }
 }
@@ -3800,6 +3921,262 @@ private fun DrawScope.drawBossEnemy(center: Offset, enemy: Enemy, time: Float) {
             drawCircle(Color.White, radius = 1.6f * flashPhase, center = Offset(px, py))
         }
     }
+}
+
+/**
+ * 6. Shield Bearer Enemy: Heavy cobalt bulwark infantry carrying a massive energy-infused shield.
+ * Frontal physical barrier deflects projectile damage; energy matrix shimmers when shield is active.
+ */
+private fun DrawScope.drawShieldEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 1.4f)
+    val bodyR = enemy.spec.radius * 0.72f
+
+    // Heavy combat boots
+    val bootY = stride * 3f
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(center.x - 7f, center.y - 7f + bootY),
+        size = Size(5f, 4f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(center.x - 7f, center.y + 3f - bootY),
+        size = Size(5f, 4f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+
+    // Armored Torso (Steel/Cobalt)
+    drawCircle(color = Color(0xFF0F172A), radius = bodyR, center = center)
+    drawCircle(color = Color(0xFF1E3A8A), radius = bodyR - 1.5f, center = center)
+    drawCircle(color = Color(0xFF3B82F6), radius = bodyR * 0.65f, center = Offset(center.x - 1f, center.y))
+
+    // Armored Helmet & Visor
+    drawCircle(color = Color(0xFF1E293B), radius = bodyR * 0.55f, center = Offset(center.x + 2f, center.y))
+    drawRoundRect(
+        color = Color(0xFF38BDF8),
+        topLeft = Offset(center.x + 4f, center.y - 2f),
+        size = Size(3f, 4f),
+        cornerRadius = CornerRadius(1f, 1f)
+    )
+
+    // Massive Frontal Tower Shield
+    val shieldX = center.x + bodyR * 0.75f
+    val shieldHeight = enemy.spec.radius * 2.2f
+    val shieldWidth = 6.5f
+    val shieldTop = center.y - shieldHeight / 2f
+
+    // Shield Plate (Dark titanium with bright energetic border)
+    val shieldColor = if (enemy.isEnergyShieldActive) Color(0xFF0284C7) else Color(0xFF334155)
+    val shieldBorder = if (enemy.isEnergyShieldActive) Color(0xFF38BDF8) else Color(0xFF64748B)
+
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(shieldX - 1f, shieldTop - 1f),
+        size = Size(shieldWidth + 2f, shieldHeight + 2f),
+        cornerRadius = CornerRadius(2.5f, 2.5f)
+    )
+    drawRoundRect(
+        color = shieldColor,
+        topLeft = Offset(shieldX, shieldTop),
+        size = Size(shieldWidth, shieldHeight),
+        cornerRadius = CornerRadius(2f, 2f)
+    )
+    drawRoundRect(
+        color = shieldBorder,
+        topLeft = Offset(shieldX, shieldTop),
+        size = Size(shieldWidth, shieldHeight),
+        cornerRadius = CornerRadius(2f, 2f),
+        style = Stroke(width = 1.5f)
+    )
+
+    // Central energetic crest / conduit line
+    if (enemy.isEnergyShieldActive) {
+        drawLine(
+            color = Color(0xFFE0F2FE),
+            start = Offset(shieldX + shieldWidth / 2f, shieldTop + 3f),
+            end = Offset(shieldX + shieldWidth / 2f, shieldTop + shieldHeight - 3f),
+            strokeWidth = 2f,
+            cap = StrokeCap.Round
+        )
+        drawCircle(
+            color = Color.White,
+            radius = 2.5f,
+            center = Offset(shieldX + shieldWidth / 2f, center.y)
+        )
+    }
+}
+
+/**
+ * 7. Flying Aerial Drone / Winged Harpy:
+ * Levitating above ground level, aerodynamic flapping wings, and glowing cockpit tracking lens.
+ */
+private fun DrawScope.drawFlyingEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val hoverY = sin(time * 7f) * 2.5f
+    val elevatedCenter = Offset(center.x, center.y + hoverY)
+    val flap = sin(time * 24f) * 5f
+    val r = enemy.spec.radius * 0.7f
+
+    // Swept-back aerodynamic wings
+    val wingPath = Path().apply {
+        // Left Wing
+        moveTo(elevatedCenter.x - 2f, elevatedCenter.y - 4f)
+        lineTo(elevatedCenter.x - r * 1.6f, elevatedCenter.y - r * 1.8f + flap)
+        lineTo(elevatedCenter.x - r * 0.8f, elevatedCenter.y - r * 0.4f)
+        close()
+        // Right Wing
+        moveTo(elevatedCenter.x - 2f, elevatedCenter.y + 4f)
+        lineTo(elevatedCenter.x - r * 1.6f, elevatedCenter.y + r * 1.8f - flap)
+        lineTo(elevatedCenter.x - r * 0.8f, elevatedCenter.y + r * 0.4f)
+        close()
+    }
+    drawPath(path = wingPath, color = Color(0xFF0284C7))
+    drawPath(path = wingPath, color = Color(0xFF38BDF8), style = Stroke(width = 1.5f))
+
+    // Sleek aerodynamic fuselage
+    drawOval(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(elevatedCenter.x - r * 1.1f, elevatedCenter.y - r * 0.65f),
+        size = Size(r * 2.2f, r * 1.3f)
+    )
+    drawOval(
+        color = Color(0xFF0284C7),
+        topLeft = Offset(elevatedCenter.x - r * 0.95f, elevatedCenter.y - r * 0.52f),
+        size = Size(r * 1.9f, r * 1.04f)
+    )
+
+    // Cockpit optic sensor dome
+    drawCircle(color = Color(0xFF082F49), radius = r * 0.42f, center = Offset(elevatedCenter.x + r * 0.4f, elevatedCenter.y))
+    drawCircle(color = Color(0xFF38BDF8), radius = r * 0.32f, center = Offset(elevatedCenter.x + r * 0.4f, elevatedCenter.y))
+    drawCircle(color = Color.White, radius = 1.5f, center = Offset(elevatedCenter.x + r * 0.45f, elevatedCenter.y - 1f))
+
+    // Twin jet thruster flares behind
+    val thrusterPulse = sin(time * 30f) * 1.5f
+    drawCircle(Color(0xFF38BDF8), radius = 2.5f + thrusterPulse, center = Offset(elevatedCenter.x - r * 1.1f, elevatedCenter.y - 3f))
+    drawCircle(Color(0xFF38BDF8), radius = 2.5f + thrusterPulse, center = Offset(elevatedCenter.x - r * 1.1f, elevatedCenter.y + 3f))
+    drawCircle(Color.White, radius = 1.2f, center = Offset(elevatedCenter.x - r * 1.1f, elevatedCenter.y - 3f))
+    drawCircle(Color.White, radius = 1.2f, center = Offset(elevatedCenter.x - r * 1.1f, elevatedCenter.y + 3f))
+}
+
+/**
+ * 8. Healer / Combat Shaman Enemy:
+ * Cloaked emerald robes with gold runes, ivory staff with a revolving healing gem, and healing aura.
+ */
+private fun DrawScope.drawHealerEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 1.5f)
+    val bodyR = enemy.spec.radius * 0.72f
+
+    // Forest green flowing robes
+    drawCircle(color = Color(0xFF064E3B), radius = bodyR, center = center)
+    drawCircle(color = Color(0xFF059669), radius = bodyR - 1.5f, center = center)
+    drawCircle(color = Color(0xFF10B981), radius = bodyR * 0.60f, center = Offset(center.x - 1f, center.y))
+
+    // Hooded cowl & golden trim
+    drawCircle(color = Color(0xFF047857), radius = bodyR * 0.6f, center = Offset(center.x + 2f, center.y))
+    drawCircle(color = Color(0xFFFDE047), radius = bodyR * 0.58f, center = Offset(center.x + 2f, center.y), style = Stroke(width = 1.2f))
+
+    // Medical / Shamanic Cross Emblem on robe
+    val crossSize = 3.5f
+    drawLine(Color.White, Offset(center.x - 1f - crossSize, center.y), Offset(center.x - 1f + crossSize, center.y), strokeWidth = 2f)
+    drawLine(Color.White, Offset(center.x - 1f, center.y - crossSize), Offset(center.x - 1f, center.y + crossSize), strokeWidth = 2f)
+
+    // Ivory Healing Staff with glowing emerald crystal
+    val staffX = center.x + bodyR * 0.8f
+    val staffY = center.y - bodyR * 0.6f
+    drawLine(
+        color = Color(0xFFFEF3C7),
+        start = Offset(staffX - 2f, staffY + 12f),
+        end = Offset(staffX + 4f, staffY - 6f),
+        strokeWidth = 2.2f,
+        cap = StrokeCap.Round
+    )
+    // Rotating pulsing emerald orb
+    val orbPulse = sin(time * 8f) * 1.5f
+    drawCircle(color = Color(0xFF047857), radius = 4f + orbPulse, center = Offset(staffX + 4f, staffY - 6f))
+    drawCircle(color = Color(0xFF34D399), radius = 3f + orbPulse, center = Offset(staffX + 4f, staffY - 6f))
+    drawCircle(color = Color.White, radius = 1.5f, center = Offset(staffX + 3.5f, staffY - 6.5f))
+}
+
+/**
+ * 9. Summoner / Void Warlock Enemy:
+ * Midnight obsidian robes, runic horn cowl, rotating dark void catalyst focus.
+ */
+private fun DrawScope.drawSummonerEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 1.3f)
+    val bodyR = enemy.spec.radius * 0.72f
+
+    // Dark obsidian robes
+    drawCircle(color = Color(0xFF1E1B4B), radius = bodyR, center = center)
+    drawCircle(color = Color(0xFF4C1D95), radius = bodyR - 1.5f, center = center)
+    drawCircle(color = Color(0xFF6D28D9), radius = bodyR * 0.65f, center = Offset(center.x - 1f, center.y))
+
+    // Horned cowl with glowing magenta gaze
+    drawCircle(color = Color(0xFF2E1065), radius = bodyR * 0.55f, center = Offset(center.x + 2f, center.y))
+    drawCircle(color = Color(0xFFC084FC), radius = 1.8f, center = Offset(center.x + 4.5f, center.y - 2.5f))
+    drawCircle(color = Color(0xFFC084FC), radius = 1.8f, center = Offset(center.x + 4.5f, center.y + 2.5f))
+
+    // Floating Void Focus Orb
+    val orbX = center.x + bodyR * 0.9f
+    val orbY = center.y + sin(time * 5f) * 3f
+    val orbR = 4.5f
+    drawCircle(color = Color(0xFF3B0764), radius = orbR + 2f, center = Offset(orbX, orbY))
+    drawCircle(color = Color(0xFF9333EA), radius = orbR, center = Offset(orbX, orbY))
+    drawCircle(color = Color(0xFFF472B6), radius = orbR * 0.6f, center = Offset(orbX, orbY))
+    drawCircle(color = Color.White, radius = 1.5f, center = Offset(orbX - 1f, orbY - 1f))
+
+    // Orbiting dark runes
+    for (i in 0..2) {
+        val rAng = (i * 2.094f + time * 3f).toFloat()
+        val rx = orbX + cos(rAng) * 8f
+        val ry = orbY + sin(rAng) * 8f
+        drawCircle(color = Color(0xFFC084FC), radius = 1.5f, center = Offset(rx, ry))
+    }
+}
+
+/**
+ * 10. Stealth Stalker Enemy:
+ * Sleek midnight ninja operative, phantom cloaking field, dual energized daggers.
+ */
+private fun DrawScope.drawStealthEnemy(center: Offset, enemy: Enemy, time: Float) {
+    val stride = sin(enemy.animWobbleTime * 2.0f)
+    val bodyR = enemy.spec.radius * 0.70f
+
+    // Aerodynamic dark shinobi bodysuit
+    drawCircle(color = Color(0xFF09090B), radius = bodyR, center = center)
+    drawCircle(color = Color(0xFF18181B), radius = bodyR - 1.5f, center = center)
+    drawCircle(color = Color(0xFF27272A), radius = bodyR * 0.65f, center = Offset(center.x - 1f, center.y))
+
+    // Stealth cowl & glowing violet eye slits
+    drawCircle(color = Color(0xFF09090B), radius = bodyR * 0.5f, center = Offset(center.x + 2f, center.y))
+    drawRoundRect(
+        color = Color(0xFFA855F7),
+        topLeft = Offset(center.x + 4f, center.y - 3f),
+        size = Size(2.5f, 1.8f),
+        cornerRadius = CornerRadius(0.5f, 0.5f)
+    )
+    drawRoundRect(
+        color = Color(0xFFA855F7),
+        topLeft = Offset(center.x + 4f, center.y + 1.2f),
+        size = Size(2.5f, 1.8f),
+        cornerRadius = CornerRadius(0.5f, 0.5f)
+    )
+
+    // Dual reverse-grip phantom daggers
+    val daggerLen = 8f
+    drawLine(
+        color = Color(0xFFC084FC),
+        start = Offset(center.x + 1f, center.y - 7f),
+        end = Offset(center.x + 1f + daggerLen, center.y - 8f),
+        strokeWidth = 2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = Color(0xFFC084FC),
+        start = Offset(center.x + 1f, center.y + 7f),
+        end = Offset(center.x + 1f + daggerLen, center.y + 8f),
+        strokeWidth = 2f,
+        cap = StrokeCap.Round
+    )
 }
 
 private fun DrawScope.drawProjectiles(projectiles: List<Projectile>, env: EnvironmentType = EnvironmentType.GREEN_VALLEY) {
@@ -4708,6 +5085,241 @@ private fun DrawScope.drawVisualEffects(effects: List<VisualEffect>, env: Enviro
                         radius = 2f * alpha,
                         center = Offset(sx, sy)
                     )
+                }
+            }
+            EffectType.SPEED_BURST_TRAIL -> {
+                val currentR = fx.maxRadius * (0.4f + fx.progress * 0.6f)
+                drawCircle(
+                    color = Color(0xFF38BDF8).copy(alpha = alpha * 0.7f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 2.5f * alpha)
+                )
+                for (i in 0..3) {
+                    val ang = i * 1.57f + fx.progress * 3f
+                    val px = center.x + cos(ang) * (currentR * 0.7f)
+                    val py = center.y + sin(ang) * (currentR * 0.7f)
+                    drawCircle(Color(0xFFE0F2FE).copy(alpha = alpha), radius = 2f * alpha, center = Offset(px, py))
+                }
+            }
+            EffectType.SHIELD_SHATTER -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                drawCircle(
+                    color = Color(0xFF06B6D4).copy(alpha = alpha * 0.8f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3.5f * alpha)
+                )
+                // Flying shattered shield shards
+                for (s in 0..5) {
+                    val ang = s * 1.047f + fx.progress * 2.5f
+                    val dist = currentR * (0.5f + fx.progress * 0.7f)
+                    val sx = center.x + cos(ang) * dist
+                    val sy = center.y + sin(ang) * dist
+                    drawRoundRect(
+                        color = Color(0xFFBAE6FD).copy(alpha = alpha),
+                        topLeft = Offset(sx - 3f, sy - 2f),
+                        size = Size(6f, 4f),
+                        cornerRadius = CornerRadius(1f, 1f)
+                    )
+                }
+            }
+            EffectType.ARMOR_CRACK_BURST -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                drawCircle(
+                    color = Color(0xFFF97316).copy(alpha = alpha * 0.85f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3f * alpha)
+                )
+                for (c in 0..4) {
+                    val ang = c * 1.256f + fx.progress * 3f
+                    val dist = currentR * (0.4f + fx.progress * 0.6f)
+                    val cx = center.x + cos(ang) * dist
+                    val cy = center.y + sin(ang) * dist
+                    drawRoundRect(
+                        color = Color(0xFF475569).copy(alpha = alpha),
+                        topLeft = Offset(cx - 3.5f, cy - 2f),
+                        size = Size(7f, 4f),
+                        cornerRadius = CornerRadius(1f, 1f)
+                    )
+                    drawCircle(Color(0xFFFDE047).copy(alpha = alpha), radius = 2f * alpha, center = Offset(cx, cy))
+                }
+            }
+            EffectType.HEAL_WAVE -> {
+                val currentR = fx.maxRadius * (0.2f + fx.progress * 0.8f)
+                drawCircle(
+                    color = Color(0xFF10B981).copy(alpha = alpha * 0.75f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3f * alpha)
+                )
+                drawCircle(
+                    color = Color(0xFF34D399).copy(alpha = alpha * 0.35f),
+                    radius = currentR * 0.85f,
+                    center = center
+                )
+                // Restorative crosses
+                for (c in 0..3) {
+                    val ang = c * 1.57f + fx.progress * 1.5f
+                    val dist = currentR * 0.6f
+                    val cx = center.x + cos(ang) * dist
+                    val cy = center.y + sin(ang) * dist
+                    drawLine(Color.White.copy(alpha = alpha), Offset(cx - 3f, cy), Offset(cx + 3f, cy), strokeWidth = 1.8f)
+                    drawLine(Color.White.copy(alpha = alpha), Offset(cx, cy - 3f), Offset(cx, cy + 3f), strokeWidth = 1.8f)
+                }
+            }
+            EffectType.SUMMON_RIFT -> {
+                val currentR = fx.maxRadius * (0.2f + fx.progress * 0.8f)
+                drawCircle(
+                    color = Color(0xFF8B5CF6).copy(alpha = alpha * 0.8f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3.5f * alpha)
+                )
+                drawCircle(
+                    color = Color(0xFF2E1065).copy(alpha = alpha * 0.6f),
+                    radius = currentR * 0.75f,
+                    center = center
+                )
+                for (r in 0..4) {
+                    val ang = r * 1.256f + fx.progress * 4f
+                    val rx = center.x + cos(ang) * (currentR * 0.8f)
+                    val ry = center.y + sin(ang) * (currentR * 0.8f)
+                    drawCircle(Color(0xFFC084FC).copy(alpha = alpha), radius = 2.5f * alpha, center = Offset(rx, ry))
+                }
+            }
+            EffectType.STEALTH_SMOKE -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                for (i in 0..5) {
+                    val ang = i * 1.047f + fx.progress * 1.2f
+                    val dist = currentR * 0.5f
+                    val px = center.x + cos(ang) * dist
+                    val py = center.y + sin(ang) * dist
+                    drawCircle(Color(0xFF3F3F46).copy(alpha = alpha * 0.65f), radius = currentR * 0.35f, center = Offset(px, py))
+                    drawCircle(Color(0xFFA855F7).copy(alpha = alpha * 0.4f), radius = currentR * 0.2f, center = Offset(px, py))
+                }
+            }
+            EffectType.BOSS_SHOCKWAVE_RING -> {
+                val currentR = fx.maxRadius * (0.1f + fx.progress * 0.9f)
+                drawCircle(
+                    color = Color(0xFFEF4444).copy(alpha = alpha * 0.85f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 5f * alpha)
+                )
+                drawCircle(
+                    color = Color(0xFFF97316).copy(alpha = alpha * 0.5f),
+                    radius = currentR * 0.85f,
+                    center = center,
+                    style = Stroke(width = 3f * alpha)
+                )
+                drawCircle(
+                    color = Color(0xFFFDE047).copy(alpha = alpha * 0.3f),
+                    radius = currentR * 0.5f,
+                    center = center
+                )
+            }
+            EffectType.BOSS_PHASE_FLASH -> {
+                val currentR = fx.maxRadius * (0.2f + fx.progress * 0.8f)
+                drawCircle(
+                    color = Color(0xFFFACC15).copy(alpha = alpha),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 4f * alpha)
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = alpha * 0.9f),
+                    radius = currentR * 0.5f,
+                    center = center
+                )
+            }
+            EffectType.BOSS_FOOTSTEP_DUST -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                drawCircle(
+                    color = Color(0x77CBD5E1).copy(alpha = alpha * 0.5f),
+                    radius = currentR,
+                    center = center
+                )
+            }
+            EffectType.SHIELD_DEATH -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                drawCircle(
+                    color = Color(0xFF0284C7).copy(alpha = alpha * 0.8f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3f * alpha)
+                )
+                for (s in 0..4) {
+                    val ang = s * 1.256f + fx.progress * 2.5f
+                    val dist = currentR * (0.4f + fx.progress * 0.6f)
+                    val sx = center.x + cos(ang) * dist
+                    val sy = center.y + sin(ang) * dist
+                    drawRoundRect(
+                        color = Color(0xFF38BDF8).copy(alpha = alpha),
+                        topLeft = Offset(sx - 3f, sy - 2f),
+                        size = Size(6f, 4f),
+                        cornerRadius = CornerRadius(1f, 1f)
+                    )
+                }
+            }
+            EffectType.FLYING_DEATH -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                drawCircle(
+                    color = Color(0xFF38BDF8).copy(alpha = alpha * 0.8f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 2.5f * alpha)
+                )
+                for (w in 0..3) {
+                    val ang = w * 1.57f + fx.progress * 3.5f
+                    val dist = currentR * 0.6f
+                    val wx = center.x + cos(ang) * dist
+                    val wy = center.y + sin(ang) * dist
+                    drawCircle(Color(0xFFBAE6FD).copy(alpha = alpha), radius = 2.5f * alpha, center = Offset(wx, wy))
+                }
+            }
+            EffectType.HEALER_DEATH -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                drawCircle(
+                    color = Color(0xFF10B981).copy(alpha = alpha * 0.8f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3f * alpha)
+                )
+                for (i in 0..4) {
+                    val ang = i * 1.256f + fx.progress * 2f
+                    val dist = currentR * 0.6f
+                    val px = center.x + cos(ang) * dist
+                    val py = center.y + sin(ang) * dist
+                    drawCircle(Color(0xFF6EE7B7).copy(alpha = alpha), radius = 3f * alpha, center = Offset(px, py))
+                }
+            }
+            EffectType.SUMMONER_DEATH -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                drawCircle(
+                    color = Color(0xFF8B5CF6).copy(alpha = alpha * 0.8f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3.5f * alpha)
+                )
+                for (i in 0..5) {
+                    val ang = i * 1.047f + fx.progress * 3f
+                    val dist = currentR * 0.6f
+                    val px = center.x + cos(ang) * dist
+                    val py = center.y + sin(ang) * dist
+                    drawCircle(Color(0xFFC084FC).copy(alpha = alpha), radius = 3f * alpha, center = Offset(px, py))
+                }
+            }
+            EffectType.STEALTH_DEATH -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                for (i in 0..5) {
+                    val ang = i * 1.047f + fx.progress * 1.5f
+                    val dist = currentR * 0.5f
+                    val px = center.x + cos(ang) * dist
+                    val py = center.y + sin(ang) * dist
+                    drawCircle(Color(0xFF18181B).copy(alpha = alpha * 0.8f), radius = currentR * 0.4f, center = Offset(px, py))
+                    drawCircle(Color(0xFFA855F7).copy(alpha = alpha * 0.6f), radius = currentR * 0.2f, center = Offset(px, py))
                 }
             }
         }

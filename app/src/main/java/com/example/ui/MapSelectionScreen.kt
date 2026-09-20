@@ -1,11 +1,15 @@
 package com.example.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +38,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -245,9 +250,14 @@ private fun TacticalMissionCard(
     onSelect: () -> Unit
 ) {
     val audioPlayer = remember { AndroidAudioPlayer.getInstance() }
-    val pressOffset = remember { Animatable(0f) }
-    val coroutineScope = rememberCoroutineScope()
     val isUnlocked = map.isUnlocked
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressOffset by animateFloatAsState(
+        targetValue = if (isPressed && isUnlocked) 3f else 0f,
+        animationSpec = tween(50),
+        label = "missionCardPressOffset"
+    )
 
     val cardWidth = 220.dp
     val cardHeight = 240.dp
@@ -274,19 +284,13 @@ private fun TacticalMissionCard(
             .width(cardWidth)
             .height(cardHeight + 4.dp)
             .testTag("map_card_${map.id}")
-            .pointerInput(isUnlocked) {
-                if (!isUnlocked) return@pointerInput
-                detectTapGestures(
-                    onPress = {
-                        coroutineScope.launch { pressOffset.animateTo(3f, tween(50)) }
-                        val released = tryAwaitRelease()
-                        coroutineScope.launch { pressOffset.animateTo(0f, tween(100)) }
-                        if (released) {
-                            audioPlayer.buttonClick()
-                            onSelect()
-                        }
-                    }
-                )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = isUnlocked
+            ) {
+                audioPlayer.buttonClick()
+                onSelect()
             }
     ) {
         // Base Drop Lip / Shadow
@@ -303,7 +307,7 @@ private fun TacticalMissionCard(
             modifier = Modifier
                 .width(cardWidth)
                 .height(cardHeight)
-                .offset { IntOffset(0, (pressOffset.value * density).toInt()) }
+                .offset { IntOffset(0, (pressOffset * density).toInt()) }
                 .background(brush = topFaceBrush, shape = shape)
                 .border(1.5.dp, borderColor, shape)
                 .padding(10.dp)
@@ -312,7 +316,7 @@ private fun TacticalMissionCard(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // 1. Top Ribbon: Level Number & Status Indicator
+                // 1. Top Ribbon: Level Number & Lock / Unlock Status
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -324,11 +328,11 @@ private fun TacticalMissionCard(
                                 if (isUnlocked) Color(0xFF0284C7) else Color(0xFF334155),
                                 RoundedCornerShape(4.dp)
                             )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(horizontal = 7.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = "MISSION %02d".format(levelNumber),
-                            fontSize = 10.sp,
+                            text = "LV. %02d".format(levelNumber),
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.sp,
                             color = if (isUnlocked) Color.White else Color(0xFF94A3B8)
@@ -338,19 +342,17 @@ private fun TacticalMissionCard(
                     if (isUnlocked) {
                         if (map.starsEarned == 3) {
                             Text(
-                                text = "PERFECT",
-                                fontSize = 9.sp,
+                                text = "★ 3/3",
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Black,
-                                color = Color(0xFFFBBF24),
-                                letterSpacing = 0.5.sp
+                                color = Color(0xFFFBBF24)
                             )
-                        } else if (map.starsEarned > 0) {
+                        } else {
                             Text(
-                                text = "CLEARED",
-                                fontSize = 9.sp,
+                                text = "${map.starsEarned}/3",
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4ADE80),
-                                letterSpacing = 0.5.sp
+                                color = Color(0xFF94A3B8)
                             )
                         }
                     } else {
@@ -359,27 +361,26 @@ private fun TacticalMissionCard(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = "Locked",
                                 tint = Color(0xFFF43F5E),
-                                modifier = Modifier.size(12.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text = "LOCKED",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Black,
-                                color = Color(0xFFF43F5E),
-                                letterSpacing = 0.5.sp
+                                color = Color(0xFFF43F5E)
                             )
                         }
                     }
                 }
 
-                // 2. Large Environment Battlefield Preview Viewport
+                // 2. Large Map / Environment Preview Viewport
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(108.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(6.dp))
+                        .height(125.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
                 ) {
                     TacticalMapThumbnail(
                         map = map,
@@ -388,71 +389,54 @@ private fun TacticalMissionCard(
                     )
                 }
 
-                // 3. Mission Name & Terrain Description
-                Column {
-                    Text(
-                        text = map.name,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Black,
-                        color = if (isUnlocked) Color.White else Color(0xFF64748B),
-                        maxLines = 1
-                    )
-                    Text(
-                        text = if (!map.missionChapter.isNullOrEmpty()) "${map.missionChapter} • ${map.totalWaves} WAVES"
-                               else "${getEnvironmentLabel(map.environmentType)} • ${map.totalWaves} WAVES",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isUnlocked) Color(0xFF38BDF8) else Color(0xFF475569),
-                        maxLines = 1
-                    )
-                }
-
-                // 4. Bottom Action Area: Stars & Deploy indicator
+                // 3. Clean Bottom Row: Stars + Reward Icon + Deploy Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (isUnlocked) {
-                        GameStarsRow(
-                            starsEarned = map.starsEarned,
-                            totalStars = 3,
-                            starSize = 18.dp
-                        )
+                    // Stars (0-3)
+                    GameStarsRow(
+                        starsEarned = if (isUnlocked) map.starsEarned else 0,
+                        totalStars = 3,
+                        starSize = 16.dp
+                    )
 
-                        // Deploy Arrow
+                    // Reward Icon & Action
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Reward token pill
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
-                                .background(Color(0xFF22C55E), CircleShape),
-                            contentAlignment = Alignment.Center
+                                .background(Color(0xFF0F172A), RoundedCornerShape(4.dp))
+                                .border(1.dp, Color(0xFFCA8A04), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
+                            Text(
+                                text = "🪙 +${50 + levelNumber * 15}",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFFDE68A)
                             )
                         }
-                    } else {
-                        Text(
-                            text = "CLEAR PREV MISSION",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF64748B)
-                        )
 
+                        // Deploy / Lock icon
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
-                                .background(Color(0xFF1E293B), CircleShape),
+                                .background(
+                                    if (isUnlocked) Color(0xFF22C55E) else Color(0xFF1E293B),
+                                    CircleShape
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = "Locked",
-                                tint = Color(0xFF475569),
-                                modifier = Modifier.size(14.dp)
+                                imageVector = if (isUnlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                                contentDescription = if (isUnlocked) "Deploy" else "Locked",
+                                tint = if (isUnlocked) Color.White else Color(0xFF64748B),
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }

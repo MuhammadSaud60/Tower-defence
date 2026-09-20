@@ -70,4 +70,7 @@ data class GameState(
 ) {
     val selectedDestructible: DestructibleObject?
         get() = destructibles.firstOrNull { it.id == selectedDestructibleId && it.isAlive }
+
+    val baseHp: Int get() = base.currentHp
+    val maxBaseHp: Int get() = base.maxHp
 }

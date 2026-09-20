@@ -4,11 +4,11 @@ import com.example.data.GameConfig
 import java.util.UUID
 import kotlin.math.max
 
-enum class TowerType {
-    MACHINE_GUN,
-    CANNON,
-    RAPID_FIRE,
-    FROST_GUN
+enum class TowerType(val displayName: String) {
+    MACHINE_GUN("Machine Gun"),
+    CANNON("Heavy Cannon"),
+    RAPID_FIRE("Rapid Fire"),
+    FROST_GUN("Frost Gun")
 }
 
 enum class TargetingStrategy {
@@ -250,12 +250,15 @@ data class Tower(
     val manualTargetId: String? = null,
     val manualTargetType: TargetType? = null,
     val targetingStrategy: TargetingStrategy = TargetingStrategy.FIRST,
-    val totalCoinsInvested: Int = spec.cost
+    val totalCoinsInvested: Int = spec.cost,
+    val debuffSlowTimer: Float = 0f
 ) {
     val currentTargetId: String? get() = manualTargetId ?: targetId ?: targetEnemyId
     val currentTargetType: TargetType get() = manualTargetType ?: targetType
     val canAttack: Boolean get() = cooldownTimer <= 0f
     val isMaxLevel: Boolean get() = spec.level >= 3
+    val canTargetFlying: Boolean get() = spec.type != TowerType.CANNON
+    val isDebuffed: Boolean get() = debuffSlowTimer > 0f
     val sellRefundCoins: Int get() = (totalCoinsInvested * 0.7f).toInt().coerceAtLeast(10)
     val isFiring: Boolean get() {
         val flashDuration = when (spec.type) {
@@ -281,8 +284,16 @@ data class Tower(
     }
 
     fun tickCooldown(dt: Float): Tower {
-        val newTimer = max(0f, cooldownTimer - dt)
-        return if (newTimer != cooldownTimer) copy(cooldownTimer = newTimer) else this
+        val effectiveDt = if (debuffSlowTimer > 0f) dt * 0.60f else dt
+        val newDebuff = max(0f, debuffSlowTimer - dt)
+        val newTimer = max(0f, cooldownTimer - effectiveDt)
+        return if (newTimer != cooldownTimer || newDebuff != debuffSlowTimer) {
+            copy(cooldownTimer = newTimer, debuffSlowTimer = newDebuff)
+        } else this
+    }
+
+    fun applyDebuff(duration: Float): Tower {
+        return copy(debuffSlowTimer = max(debuffSlowTimer, duration))
     }
 
     fun resetCooldown(): Tower {
@@ -336,10 +347,10 @@ data class Tower(
         return (dist - objectRadius) <= spec.range
     }
 
-    fun upgrade(): Tower? {
+    fun upgrade(customSpec: TowerSpec? = null): Tower? {
         if (isMaxLevel) return null
         val nextLevel = spec.level + 1
-        val upgradedSpec = TowerSpec.create(spec.type, nextLevel)
+        val upgradedSpec = customSpec ?: TowerSpec.create(spec.type, nextLevel)
         return copy(
             spec = upgradedSpec,
             totalCoinsInvested = totalCoinsInvested + spec.upgradeCost

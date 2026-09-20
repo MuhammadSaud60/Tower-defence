@@ -39,7 +39,17 @@ data class CombatTickResult(
     val hasStoneHit: Boolean = false,
     val hasTreeDestroyed: Boolean = false,
     val hasStoneDestroyed: Boolean = false,
-    val destroyedDestructibleIds: Set<String> = emptySet()
+    val destroyedDestructibleIds: Set<String> = emptySet(),
+    val hasRunnerDash: Boolean = false,
+    val hasShieldHit: Boolean = false,
+    val hasShieldBreak: Boolean = false,
+    val hasArmorBreak: Boolean = false,
+    val hasHealPulse: Boolean = false,
+    val hasSummonMinions: Boolean = false,
+    val hasStealthCloak: Boolean = false,
+    val hasBossShockwave: Boolean = false,
+    val hasBossPhaseChange: Boolean = false,
+    val newSpawnedEnemies: List<Enemy> = emptyList()
 )
 
 class CombatSystem(
@@ -71,6 +81,16 @@ class CombatSystem(
         var hasStoneHit = false
         var hasTreeDestroyed = false
         var hasStoneDestroyed = false
+        var hasRunnerDash = false
+        var hasShieldHit = false
+        var hasShieldBreak = false
+        var hasArmorBreak = false
+        var hasHealPulse = false
+        var hasSummonMinions = false
+        var hasStealthCloak = false
+        var hasBossShockwave = false
+        var hasBossPhaseChange = false
+        val newSpawnedEnemies = mutableListOf<Enemy>()
 
         val newEffects = mutableListOf<VisualEffect>()
 
@@ -241,6 +261,42 @@ class CombatSystem(
                             } else {
                                 hasSmallEnemyHit = true
                                 hasEnemyHit = true
+                            }
+
+                            if (damaged.hasShieldBrokenJustNow) {
+                                hasShieldBreak = true
+                                newEffects.add(
+                                    VisualEffect(
+                                        type = EffectType.SHIELD_SHATTER,
+                                        position = damaged.position,
+                                        maxLifetime = 0.35f,
+                                        maxRadius = 32f
+                                    )
+                                )
+                            } else if (damaged.isEnergyShieldActive) {
+                                hasShieldHit = true
+                            }
+                            if (damaged.hasArmorBrokenJustNow) {
+                                hasArmorBreak = true
+                                newEffects.add(
+                                    VisualEffect(
+                                        type = EffectType.ARMOR_CRACK_BURST,
+                                        position = damaged.position,
+                                        maxLifetime = 0.40f,
+                                        maxRadius = 36f
+                                    )
+                                )
+                            }
+                            if (damaged.hasPhaseChangedJustNow) {
+                                hasBossPhaseChange = true
+                                newEffects.add(
+                                    VisualEffect(
+                                        type = EffectType.BOSS_PHASE_FLASH,
+                                        position = damaged.position,
+                                        maxLifetime = 0.60f,
+                                        maxRadius = 70f
+                                    )
+                                )
                             }
 
                             if (!damaged.isAlive) {
@@ -417,6 +473,42 @@ class CombatSystem(
                         }
                         enemyMap[targetEnemy.id] = damaged
 
+                        if (damaged.hasShieldBrokenJustNow) {
+                            hasShieldBreak = true
+                            newEffects.add(
+                                VisualEffect(
+                                    type = EffectType.SHIELD_SHATTER,
+                                    position = damaged.position,
+                                    maxLifetime = 0.35f,
+                                    maxRadius = 32f
+                                )
+                            )
+                        } else if (damaged.isEnergyShieldActive) {
+                            hasShieldHit = true
+                        }
+                        if (damaged.hasArmorBrokenJustNow) {
+                            hasArmorBreak = true
+                            newEffects.add(
+                                VisualEffect(
+                                    type = EffectType.ARMOR_CRACK_BURST,
+                                    position = damaged.position,
+                                    maxLifetime = 0.40f,
+                                    maxRadius = 36f
+                                )
+                            )
+                        }
+                        if (damaged.hasPhaseChangedJustNow) {
+                            hasBossPhaseChange = true
+                            newEffects.add(
+                                VisualEffect(
+                                    type = EffectType.BOSS_PHASE_FLASH,
+                                    position = damaged.position,
+                                    maxLifetime = 0.60f,
+                                    maxRadius = 70f
+                                )
+                            )
+                        }
+
                         if (!damaged.isAlive) {
                             enemiesKilled++
                             coinsEarned += targetEnemy.spec.rewardCoins
@@ -430,12 +522,126 @@ class CombatSystem(
             }
         }
 
+        // 3.5 Process Enemy Abilities, Auric Pulses, Minion Spawning & Tower Debuffs
+        var currentTowersState = updatedTowers
+        for (enemy in enemyMap.values.toList()) {
+            if (!enemy.isAlive) continue
+
+            if (enemy.hasHealPulseJustNow) {
+                hasHealPulse = true
+                newEffects.add(
+                    VisualEffect(
+                        type = EffectType.HEAL_WAVE,
+                        position = enemy.position,
+                        maxLifetime = 0.45f,
+                        maxRadius = 125f
+                    )
+                )
+                // Heal nearby wounded allies
+                val woundedAllies = enemyMap.values
+                    .filter { it.isAlive && it.id != enemy.id && it.currentHp < it.maxHp && it.position.distanceTo(enemy.position) <= 125f }
+                    .sortedBy { it.currentHp / it.maxHp }
+                    .take(3)
+                for (ally in woundedAllies) {
+                    enemyMap[ally.id] = ally.heal(25f)
+                }
+            }
+
+            if (enemy.hasShockwaveJustNow) {
+                hasBossShockwave = true
+                newEffects.add(
+                    VisualEffect(
+                        type = EffectType.BOSS_SHOCKWAVE_RING,
+                        position = enemy.position,
+                        maxLifetime = 0.65f,
+                        maxRadius = 200f
+                    )
+                )
+                // Apply 3.0s cooldown debuff to nearby towers
+                currentTowersState = currentTowersState.map { tower ->
+                    if (tower.position.distanceTo(enemy.position) <= 200f) {
+                        tower.applyDebuff(3.0f)
+                    } else tower
+                }
+            }
+
+            if (enemy.hasSummonJustNow) {
+                hasSummonMinions = true
+                newEffects.add(
+                    VisualEffect(
+                        type = EffectType.SUMMON_RIFT,
+                        position = enemy.position,
+                        maxLifetime = 0.55f,
+                        maxRadius = 38f
+                    )
+                )
+                val isBossSummon = enemy.spec.isBoss
+                val minionSpec = if (isBossSummon) com.example.entities.EnemySpec.ICE_MINION else com.example.entities.EnemySpec.MINION_SCOUT
+                for (i in 0..1) {
+                    val offsetDist = if (i == 0) 14f else -14f
+                    val minion = Enemy(
+                        spec = minionSpec,
+                        pathIndex = enemy.pathIndex,
+                        position = Point2D(
+                            enemy.position.x + (if (i == 0) 12f else -12f),
+                            enemy.position.y + (if (i == 0) -10f else 10f)
+                        ),
+                        currentSegmentIndex = enemy.currentSegmentIndex,
+                        distanceOnSegment = (enemy.distanceOnSegment + offsetDist).coerceAtLeast(0f),
+                        totalProgress = (enemy.totalProgress + offsetDist).coerceAtLeast(0f),
+                        headingAngle = enemy.headingAngle
+                    )
+                    newSpawnedEnemies.add(minion)
+                }
+            }
+
+            if (enemy.hasFootstepStomp) {
+                newEffects.add(
+                    VisualEffect(
+                        type = EffectType.BOSS_FOOTSTEP_DUST,
+                        position = enemy.position,
+                        maxLifetime = 0.28f,
+                        maxRadius = 22f
+                    )
+                )
+            }
+
+            if (enemy.isSpeedBurstActive && enemy.speedBurstTimer in 1.70f..1.80f) {
+                hasRunnerDash = true
+                newEffects.add(
+                    VisualEffect(
+                        type = EffectType.SPEED_BURST_TRAIL,
+                        position = enemy.position,
+                        maxLifetime = 0.35f,
+                        maxRadius = 24f
+                    )
+                )
+            }
+
+            if (enemy.isStealthed && enemy.stealthTimer in 3.10f..3.20f) {
+                hasStealthCloak = true
+                newEffects.add(
+                    VisualEffect(
+                        type = EffectType.STEALTH_SMOKE,
+                        position = enemy.position,
+                        maxLifetime = 0.40f,
+                        maxRadius = 26f
+                    )
+                )
+            }
+        }
+
+        // Add newly spawned minions into enemyMap
+        for (spawned in newSpawnedEnemies) {
+            enemyMap[spawned.id] = spawned
+        }
+
         // 4. Update visual effects
         val updatedEffects = (existingEffects + newEffects)
             .map { it.advance(dt) }
             .filter { !it.isFinished }
 
-        val finalizedTowers = updatedTowers.map { tower ->
+        val finalizedTowers = currentTowersState.map { tower ->
             if (tower.manualTargetId != null && destroyedDestructibles.contains(tower.manualTargetId)) {
                 tower.clearManualTarget()
             } else {
@@ -466,7 +672,17 @@ class CombatSystem(
             hasStoneHit = hasStoneHit,
             hasTreeDestroyed = hasTreeDestroyed,
             hasStoneDestroyed = hasStoneDestroyed,
-            destroyedDestructibleIds = destroyedDestructibles
+            destroyedDestructibleIds = destroyedDestructibles,
+            hasRunnerDash = hasRunnerDash,
+            hasShieldHit = hasShieldHit,
+            hasShieldBreak = hasShieldBreak,
+            hasArmorBreak = hasArmorBreak,
+            hasHealPulse = hasHealPulse,
+            hasSummonMinions = hasSummonMinions,
+            hasStealthCloak = hasStealthCloak,
+            hasBossShockwave = hasBossShockwave,
+            hasBossPhaseChange = hasBossPhaseChange,
+            newSpawnedEnemies = newSpawnedEnemies
         )
     }
 
@@ -476,18 +692,28 @@ class CombatSystem(
             EnemyType.SOLDIER -> EffectType.SOLDIER_DEATH
             EnemyType.HEAVY -> EffectType.HEAVY_DEATH
             EnemyType.RUNNER -> EffectType.RUNNER_DEATH
+            EnemyType.SHIELD -> EffectType.SHIELD_DEATH
+            EnemyType.FLYING -> EffectType.FLYING_DEATH
+            EnemyType.HEALER -> EffectType.HEALER_DEATH
+            EnemyType.SUMMONER -> EffectType.SUMMONER_DEATH
+            EnemyType.STEALTH -> EffectType.STEALTH_DEATH
             EnemyType.BOSS -> EffectType.BOSS_DEATH
         }
         val radius = when (enemy.spec.type) {
             EnemyType.SCOUT -> 24f
             EnemyType.RUNNER -> 26f
+            EnemyType.STEALTH -> 26f
+            EnemyType.HEALER -> 30f
+            EnemyType.FLYING -> 32f
             EnemyType.SOLDIER -> 34f
+            EnemyType.SHIELD -> 38f
+            EnemyType.SUMMONER -> 42f
             EnemyType.HEAVY -> 48f
             EnemyType.BOSS -> 80f
         }
         val lifetime = when (enemy.spec.type) {
             EnemyType.BOSS -> 0.75f
-            EnemyType.HEAVY -> 0.48f
+            EnemyType.HEAVY, EnemyType.SUMMONER -> 0.48f
             else -> 0.35f
         }
         return VisualEffect(

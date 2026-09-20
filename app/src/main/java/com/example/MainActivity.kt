@@ -23,10 +23,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.audio.AndroidAudioPlayer
+import com.example.ui.AchievementsScreen
 import com.example.ui.GameScreen
 import com.example.ui.GameViewModel
 import com.example.ui.MainMenuScreen
 import com.example.ui.MapSelectionScreen
+import com.example.ui.PlayerProfileScreen
+import com.example.ui.ResearchLabScreen
 import com.example.ui.SettingsDialog
 import com.example.ui.SplashScreen
 import com.example.ui.theme.MyApplicationTheme
@@ -35,7 +38,10 @@ enum class AppScreen {
     SPLASH,
     MAIN_MENU,
     MAP_SELECT,
-    GAME
+    GAME,
+    RESEARCH_LAB,
+    PROFILE,
+    ACHIEVEMENTS
 }
 
 class MainActivity : ComponentActivity() {
@@ -124,8 +130,8 @@ fun TowerDefenseApp(
         BackHandler {
             showSettingsDialog = false
         }
-    } else if (currentScreen == AppScreen.MAP_SELECT) {
-        // 3. Map Select screen: return to main menu
+    } else if (currentScreen in listOf(AppScreen.MAP_SELECT, AppScreen.RESEARCH_LAB, AppScreen.PROFILE, AppScreen.ACHIEVEMENTS)) {
+        // 3. Sub-screens: return to main menu
         BackHandler {
             currentScreen = AppScreen.MAIN_MENU
         }
@@ -163,6 +169,15 @@ fun TowerDefenseApp(
                     },
                     onSettingsClick = {
                         showSettingsDialog = true
+                    },
+                    onOpenResearchLab = {
+                        currentScreen = AppScreen.RESEARCH_LAB
+                    },
+                    onOpenProfile = {
+                        currentScreen = AppScreen.PROFILE
+                    },
+                    onOpenAchievements = {
+                        currentScreen = AppScreen.ACHIEVEMENTS
                     }
                 )
             }
@@ -190,6 +205,37 @@ fun TowerDefenseApp(
                     onNavigateToMapSelect = {
                         gameViewModel.pause()
                         currentScreen = AppScreen.MAP_SELECT
+                    },
+                    onNavigateToResearch = {
+                        gameViewModel.pause()
+                        currentScreen = AppScreen.RESEARCH_LAB
+                    }
+                )
+            }
+
+            AppScreen.RESEARCH_LAB -> {
+                ResearchLabScreen(
+                    progressionManager = gameViewModel.progressionManager,
+                    onBack = {
+                        currentScreen = AppScreen.MAIN_MENU
+                    }
+                )
+            }
+
+            AppScreen.PROFILE -> {
+                PlayerProfileScreen(
+                    progressionManager = gameViewModel.progressionManager,
+                    onBack = {
+                        currentScreen = AppScreen.MAIN_MENU
+                    }
+                )
+            }
+
+            AppScreen.ACHIEVEMENTS -> {
+                AchievementsScreen(
+                    progressionManager = gameViewModel.progressionManager,
+                    onBack = {
+                        currentScreen = AppScreen.MAIN_MENU
                     }
                 )
             }

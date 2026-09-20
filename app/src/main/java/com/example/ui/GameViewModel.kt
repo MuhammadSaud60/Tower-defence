@@ -1,15 +1,20 @@
 package com.example.ui
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.GameMap
 import com.example.data.ProgressionManager
+import com.example.data.ProgressionReward
 import com.example.entities.TargetingStrategy
 import com.example.entities.Tower
 import com.example.entities.TowerType
 import com.example.game.GameEngine
 import com.example.game.GameState
+import com.example.game.GameStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
@@ -20,7 +25,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val progressionManager = ProgressionManager(application)
     val gameState: StateFlow<GameState> = gameEngine.gameState
 
+    var lastVictoryReward: ProgressionReward? by mutableStateOf(null)
+        private set
+
     init {
+        gameEngine.progressionManager = progressionManager
+        gameEngine.restart(isNewMission = true)
+
         viewModelScope.launch {
             var lastTime = System.nanoTime()
             while (isActive) {
@@ -33,6 +44,29 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     android.util.Log.e("GameViewModel", "Exception safely handled in game loop", e)
                 }
                 delay(16L)
+            }
+        }
+
+        viewModelScope.launch {
+            var recordedGameOverStats = false
+            gameState.collect { state ->
+                if (state.gameStatus == GameStatus.VICTORY && lastVictoryReward == null) {
+                    lastVictoryReward = handleVictoryProgression()
+                } else if (state.gameStatus == GameStatus.GAME_OVER && !recordedGameOverStats) {
+                    recordedGameOverStats = true
+                    progressionManager.recordCombatStats(
+                        enemiesKilled = gameEngine.getEnemiesKilledTotal(),
+                        bossesKilled = gameEngine.getBossesKilledTotal(),
+                        destructiblesCleared = gameEngine.getDestructiblesClearedTotal(),
+                        towersPlaced = gameEngine.getTowersPlacedTotal(),
+                        damageDealt = gameEngine.getDamageDealtTotal()
+                    )
+                } else if (state.gameStatus == GameStatus.PLAYING || state.gameStatus == GameStatus.PREPARATION) {
+                    recordedGameOverStats = false
+                    if (lastVictoryReward != null && state.currentWave <= 1) {
+                        lastVictoryReward = null
+                    }
+                }
             }
         }
     }
@@ -64,15 +98,43 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun pause() = gameEngine.pause()
     fun resume() = gameEngine.resume()
     fun toggleSpeed() = gameEngine.toggleSpeed()
-    fun restart() = gameEngine.restart()
+    fun restart() {
+        lastVictoryReward = null
+        gameEngine.restart()
+    }
 
     fun loadMap(map: GameMap) {
+        lastVictoryReward = null
         gameEngine.loadMap(map)
     }
 
-    fun handleVictoryProgression() {
+    fun handleVictoryProgression(): ProgressionReward? {
         val state = gameState.value
         val mapId = state.currentMap.id
+
+        // Persist combat stats to lifetime progression
+        progressionManager.recordCombatStats(
+            enemiesKilled = gameEngine.getEnemiesKilledTotal(),
+            bossesKilled = gameEngine.getBossesKilledTotal(),
+            destructiblesCleared = gameEngine.getDestructiblesClearedTotal(),
+            towersPlaced = gameEngine.getTowersPlacedTotal(),
+            damageDealt = gameEngine.getDamageDealtTotal()
+        )
+
+        val previousStars = progressionManager.getStarsForMap(mapId)
+        val basePercent = if (state.maxBaseHp > 0) state.baseHp.toFloat() / state.maxBaseHp else 1f
+
+        val reward = progressionManager.recordBattleVictory(
+            mapId = mapId,
+            starsEarned = state.starsEarned,
+            enemiesKilled = gameEngine.getEnemiesKilledTotal(),
+            bossesKilled = gameEngine.getBossesKilledTotal(),
+            finalBaseHpPercent = basePercent,
+            destructiblesDestroyed = gameEngine.getDestructiblesClearedTotal(),
+            towersPlaced = gameEngine.getTowersPlacedTotal(),
+            damageDealt = gameEngine.getDamageDealtTotal()
+        )
+
         progressionManager.saveStarsForMap(mapId, state.starsEarned)
         progressionManager.recordWaveReached(mapId, state.currentWave)
         when (mapId) {
@@ -89,6 +151,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "frozen_fortress" -> progressionManager.unlockMap("arctic_base")
             "arctic_base" -> progressionManager.unlockMap("night_fortress")
         }
+
+        return reward
     }
 
     fun getNextMap(): GameMap? {

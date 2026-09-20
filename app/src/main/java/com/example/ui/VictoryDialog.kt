@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.audio.AndroidAudioPlayer
+import com.example.data.ProgressionReward
 import com.example.game.GameState
 import com.example.ui.components.GameButton
 import com.example.ui.components.GameButtonVariant
@@ -79,6 +81,7 @@ import com.example.ui.components.GameStatRow
 fun VictoryDialog(
     gameState: GameState,
     hasNextLevel: Boolean = true,
+    progressionReward: com.example.data.ProgressionReward? = null,
     onNextLevel: () -> Unit,
     onRetry: () -> Unit,
     onHome: () -> Unit
@@ -271,6 +274,85 @@ fun VictoryDialog(
                             GameStatRow("Invaders Eliminated", "${gameState.enemiesKilledTotal}")
                             GameStatRow("Bounty Collected", "+${gameState.totalCoinsEarned} 🪙", valueColor = Color(0xFFFBBF24))
                             GameStatRow("Fortress Integrity", "${gameState.base.currentHp}/${gameState.base.maxHp} HP", valueColor = Color(0xFF4ADE80))
+                        }
+
+                        // Long-Term Account Progression Rewards Banner
+                        if (progressionReward != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF1E1B4B).copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, Color(0xFF818CF8), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "COMMANDER REWARDS",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFFA5B4FC),
+                                        letterSpacing = 0.5.sp
+                                    )
+                                    if (progressionReward.isFirstClear) {
+                                        Surface(
+                                            color = Color(0xFFD97706),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "FIRST CLEAR BONUS!",
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Text(
+                                        text = "+${progressionReward.xpEarned} ⚡ XP",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFF67E8F9)
+                                    )
+                                    Text(
+                                        text = "+${progressionReward.tokensEarned} 🪙 TOKENS",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFFFFD166)
+                                    )
+                                }
+
+                                if (progressionReward.leveledUp) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "🎖️ LEVEL UP! REACHED COMMANDER LEVEL ${progressionReward.newLevel}",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF34D399)
+                                    )
+                                }
+
+                                if (progressionReward.unlockedTowers.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "🔓 UNLOCKED: ${progressionReward.unlockedTowers.joinToString { it.displayName }}",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFBBF24)
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))

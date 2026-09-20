@@ -68,9 +68,39 @@ class GameEngine(
     private var placementNoticeTimer = 0f
     private var waveTransitionTimer = 0f
     private var enemiesKilledTotal = 0
+    private var bossesKilledTotal = 0
+    private var destructiblesClearedTotal = 0
+    private var towersPlacedTotal = 0
+    private var damageDealtTotal = 0L
     private var gameSpeedMultiplier = 1.0f
     private var gameTime = 0f
     private var lastWaveRewarded = 0
+
+    var progressionManager: com.example.data.ProgressionManager? = null
+
+    fun getEnemiesKilledTotal(): Int = enemiesKilledTotal
+    fun getBossesKilledTotal(): Int = bossesKilledTotal
+    fun getDestructiblesClearedTotal(): Int = destructiblesClearedTotal
+    fun getTowersPlacedTotal(): Int = towersPlacedTotal
+    fun getDamageDealtTotal(): Long = damageDealtTotal
+
+    fun getEffectiveTowerSpec(type: TowerType, level: Int = 1): TowerSpec {
+        val baseSpec = TowerSpec.create(type, level)
+        val pm = progressionManager ?: return baseSpec
+        val dmgMult = pm.getTowerDamageMultiplier(type)
+        val fireRateMult = pm.getTowerFireRateMultiplier(type)
+        val rangeMult = pm.getTowerRangeMultiplier(type)
+        val splashMult = pm.getTowerSplashMultiplier(type)
+        val apBonus = pm.getTowerArmorPiercingBonus(type)
+
+        return baseSpec.copy(
+            damage = baseSpec.damage * dmgMult,
+            range = baseSpec.range * rangeMult,
+            attackCooldown = if (fireRateMult > 0f) baseSpec.attackCooldown / fireRateMult else baseSpec.attackCooldown,
+            splashRadius = if (baseSpec.splashRadius > 0f) baseSpec.splashRadius * splashMult else 0f,
+            armorPiercing = (baseSpec.armorPiercing + apBonus).coerceIn(0f, 1f)
+        )
+    }
 
     init {
         // Wave starts after preparation countdown reaches 0
@@ -329,10 +359,13 @@ class GameEngine(
 
         // Destructibles sound events
         if (combatResult.hasTreeDestroyed) {
+            destructiblesClearedTotal++
             audioPlayer.treeDestroyed()
         } else if (combatResult.hasStoneDestroyed) {
+            destructiblesClearedTotal++
             audioPlayer.stoneDestroyed()
         } else if (combatResult.hasObjectDestroyed) {
+            destructiblesClearedTotal++
             audioPlayer.objectDestroy()
         } else if (combatResult.hasTreeHit) {
             audioPlayer.treeHit()
@@ -342,16 +375,49 @@ class GameEngine(
             audioPlayer.objectHit()
         }
 
+        // Enemy Ability & Boss Mechanic sound events
+        if (combatResult.hasRunnerDash) {
+            audioPlayer.runnerDash()
+        }
+        if (combatResult.hasShieldHit) {
+            audioPlayer.shieldHit()
+        }
+        if (combatResult.hasShieldBreak) {
+            audioPlayer.shieldBreak()
+        }
+        if (combatResult.hasArmorBreak) {
+            audioPlayer.armorBreak()
+        }
+        if (combatResult.hasHealPulse) {
+            audioPlayer.healPulse()
+        }
+        if (combatResult.hasSummonMinions) {
+            audioPlayer.summonMinions()
+        }
+        if (combatResult.hasStealthCloak) {
+            audioPlayer.stealthCloak()
+        }
+        if (combatResult.hasBossShockwave) {
+            audioPlayer.bossShockwave()
+        }
+        if (combatResult.hasBossPhaseChange) {
+            audioPlayer.bossPhaseChange()
+            showNotice("WARNING: BOSS ENTERED NEXT PHASE!")
+        }
+
         if (combatResult.coinsEarned > 0) {
             economySystem.addCoins(combatResult.coinsEarned)
             audioPlayer.coinReward()
         }
         if (combatResult.enemiesKilled > 0) {
             enemiesKilledTotal += combatResult.enemiesKilled
+            damageDealtTotal += combatResult.enemiesKilled * 150L
             audioPlayer.enemyDeath()
         }
 
         if (combatResult.bossDefeated) {
+            bossesKilledTotal++
+            damageDealtTotal += 3000L
             showNotice("BOSS DEFEATED! Massive Coin Reward!")
             audioPlayer.bossDefeated()
         }
@@ -384,7 +450,7 @@ class GameEngine(
     }
 
     fun selectTowerToBuild(type: TowerType) {
-        val spec = TowerSpec.create(type, 1)
+        val spec = getEffectiveTowerSpec(type, 1)
         if (!economySystem.canAfford(spec.cost)) {
             showNotice("Need ${spec.cost} coins for ${spec.name}!")
             return
@@ -517,7 +583,9 @@ class GameEngine(
         }
 
         economySystem.spend(cost)
-        val upgraded = tower.upgrade() ?: return false
+        val nextLevel = tower.spec.level + 1
+        val upgradedSpec = getEffectiveTowerSpec(tower.spec.type, nextLevel)
+        val upgraded = tower.upgrade(upgradedSpec) ?: return false
 
         val idx = towers.indexOfFirst { it.id == tower.id }
         if (idx != -1) {
@@ -625,7 +693,7 @@ class GameEngine(
 
     @Synchronized
     fun placeTowerAt(type: TowerType, virtualX: Float, virtualY: Float): Boolean {
-        val spec = TowerSpec.create(type, 1)
+        val spec = getEffectiveTowerSpec(type, 1)
         val radius = spec.size / 2f
         val targetPoint = Point2D(virtualX, virtualY)
 
@@ -656,6 +724,7 @@ class GameEngine(
             totalCoinsInvested = spec.cost
         )
         towers.add(newTower)
+        towersPlacedTotal++
         selectedBuildPos = null
         selectedTowerSpec = null
         isBuildingTower = false
@@ -761,7 +830,13 @@ class GameEngine(
 
     @Synchronized
     fun restart(isNewMission: Boolean = true) {
-        base = Base(position = currentMap.basePosition)
+        val baseHpMult = 1f + (progressionManager?.getBaseHpBonus() ?: 0f)
+        val effectiveHp = (GameConfig.BASE_MAX_HP * baseHpMult).toInt()
+        base = Base(
+            position = currentMap.basePosition,
+            maxHp = effectiveHp,
+            currentHp = effectiveHp
+        )
         towers.clear()
         enemies.clear()
         destructibles.clear()
@@ -775,7 +850,8 @@ class GameEngine(
             isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS,
             mapId = currentMap.id
         )
-        economySystem.reset()
+        val startingGoldBonus = progressionManager?.getStartingGoldBonus() ?: 0
+        economySystem.reset(GameConfig.STARTING_COINS + startingGoldBonus)
         if (isNewMission) {
             gameStatus = GameStatus.PREPARATION
             preparationCountdown = 5.0f
@@ -797,6 +873,10 @@ class GameEngine(
         placementNoticeTimer = 0f
         waveTransitionTimer = 0f
         enemiesKilledTotal = 0
+        bossesKilledTotal = 0
+        destructiblesClearedTotal = 0
+        towersPlacedTotal = 0
+        damageDealtTotal = 0L
         gameSpeedMultiplier = 1.0f
         gameTime = 0f
         lastWaveRewarded = 0

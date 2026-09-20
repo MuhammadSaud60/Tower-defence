@@ -2,8 +2,13 @@ package com.example.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dangerous
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -45,6 +51,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -53,12 +60,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -71,6 +81,8 @@ import com.example.ui.components.GameButton
 import com.example.ui.components.GameButtonVariant
 import com.example.ui.components.GamePanel
 import com.example.ui.components.GameStatRow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsDialog(
@@ -259,7 +271,8 @@ private fun AudioControlRow(
 
 /**
  * Professional mobile game tactical Pause dialog.
- * Darkens gameplay with subtle vignette and displays center tactical console.
+ * Darkens gameplay with subtle vignette, tactical overlay effect, and displays center tactical console.
+ * Keeps battlefield frozen and clearly visible in background.
  */
 @Composable
 fun PauseDialog(
@@ -268,91 +281,223 @@ fun PauseDialog(
     onMainMenu: () -> Unit
 ) {
     var showEmbeddedSettings by remember { mutableStateOf(false) }
+    var isClosing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Smooth entry and exit animations
+    var isVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
+    val overlayAlpha by animateFloatAsState(
+        targetValue = if (isVisible && !isClosing) 1f else 0f,
+        animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing),
+        label = "pause_overlay_alpha"
+    )
+
+    val panelScale by animateFloatAsState(
+        targetValue = if (isVisible && !isClosing) 1f else 0.88f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "pause_panel_scale"
+    )
+
+    fun handleResume() {
+        if (isClosing) return
+        isClosing = true
+        coroutineScope.launch {
+            delay(160)
+            onResume()
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(1000f)
-            .background(Color.Black.copy(alpha = 0.82f))
+            .graphicsLayer { alpha = overlayAlpha }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = {}
             )
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 24.dp, vertical = 12.dp),
+            .windowInsetsPadding(WindowInsets.safeDrawing),
         contentAlignment = Alignment.Center
     ) {
-        GamePanel(
-            headerTitle = "MISSION PAUSED",
-            headerIcon = Icons.Default.Pause,
-            borderColor = Color(0xFF38BDF8),
+        // Subtle darkened battlefield overlay (not plain black, keeps battlefield clearly visible!)
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            // 1. Semi-transparent dark slate tint (keeps underlying map, paths, towers visible)
+            drawRect(color = Color(0xB5070D1A))
+
+            // 2. Subtle radial vignette gradient
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.Transparent, Color(0x75000000)),
+                    center = center,
+                    radius = size.maxDimension * 0.72f
+                )
+            )
+
+            // 3. Subtle tactical military scanlines
+            val step = 36f
+            var y = 0f
+            while (y < size.height) {
+                drawLine(
+                    color = Color(0x0A38BDF8),
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = 1f
+                )
+                y += step
+            }
+
+            // 4. Subtle corner tactical brackets
+            val bLen = 28f
+            val bColor = Color(0x3838BDF8)
+            val pad = 16f
+            // Top-Left
+            drawLine(bColor, Offset(pad, pad), Offset(pad + bLen, pad), 2f)
+            drawLine(bColor, Offset(pad, pad), Offset(pad, pad + bLen), 2f)
+            // Top-Right
+            drawLine(bColor, Offset(size.width - pad, pad), Offset(size.width - pad - bLen, pad), 2f)
+            drawLine(bColor, Offset(size.width - pad, pad), Offset(size.width - pad, pad + bLen), 2f)
+            // Bottom-Left
+            drawLine(bColor, Offset(pad, size.height - pad), Offset(pad + bLen, size.height - pad), 2f)
+            drawLine(bColor, Offset(pad, size.height - pad), Offset(pad, size.height - pad - bLen), 2f)
+            // Bottom-Right
+            drawLine(bColor, Offset(size.width - pad, size.height - pad), Offset(size.width - pad - bLen, size.height - pad), 2f)
+            drawLine(bColor, Offset(size.width - pad, size.height - pad), Offset(size.width - pad, size.height - pad - bLen), 2f)
+        }
+
+        // Center Panel: Premium game-style tactical pause interface
+        Box(
             modifier = Modifier
-                .widthIn(min = 320.dp, max = 460.dp)
-                .fillMaxWidth(0.75f)
+                .widthIn(min = 300.dp, max = 390.dp)
+                .fillMaxWidth(0.65f)
                 .wrapContentHeight()
+                .graphicsLayer {
+                    scaleX = panelScale
+                    scaleY = panelScale
+                }
                 .testTag("pause_dialog")
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xF20F172A),
+                border = BorderStroke(1.5.dp, Color(0xFF38BDF8)),
+                shadowElevation = 18.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "TACTICAL OPERATIONS FROZEN",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = Color(0xFF94A3B8)
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 20.dp)
+                ) {
+                    // Status Beacon
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0x2E0284C7), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0x5538BDF8), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(Color(0xFF38BDF8), CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "OPERATIONS FROZEN",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.2.sp,
+                                color = Color(0xFF7DD3FC)
+                            )
+                        }
+                    }
 
-                Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                // Resume Operation (Hero button)
-                GameButton(
-                    text = "RESUME OPERATION",
-                    icon = Icons.Default.PlayArrow,
-                    variant = GameButtonVariant.PRIMARY,
-                    height = 46.dp,
-                    onClick = onResume,
-                    modifier = Modifier.fillMaxWidth(),
-                    testTag = "resume_button"
-                )
+                    // Title: PAUSED
+                    Text(
+                        text = "PAUSED",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 3.sp,
+                        color = Color.White
+                    )
 
-                // Restart Mission
-                GameButton(
-                    text = "RESTART MISSION",
-                    icon = Icons.Default.Refresh,
-                    variant = GameButtonVariant.SECONDARY,
-                    height = 42.dp,
-                    onClick = onRestart,
-                    modifier = Modifier.fillMaxWidth(),
-                    testTag = "pause_restart_button"
-                )
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                // Audio Settings
-                GameButton(
-                    text = "AUDIO OPTIONS",
-                    icon = Icons.Default.Settings,
-                    variant = GameButtonVariant.SECONDARY,
-                    height = 42.dp,
-                    onClick = { showEmbeddedSettings = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    testTag = "pause_settings_button"
-                )
+                    // Glowing accent line
+                    Box(
+                        modifier = Modifier
+                            .width(80.dp)
+                            .height(2.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color.Transparent, Color(0xFF38BDF8), Color.Transparent)
+                                )
+                            )
+                    )
 
-                // Exit to Campaign
-                GameButton(
-                    text = "ABORT TO CAMPAIGN",
-                    icon = Icons.Default.Home,
-                    variant = GameButtonVariant.DANGER,
-                    height = 42.dp,
-                    onClick = onMainMenu,
-                    modifier = Modifier.fillMaxWidth(),
-                    testTag = "pause_menu_button"
-                )
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Buttons
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // 1. Resume
+                        GameButton(
+                            text = "Resume",
+                            icon = Icons.Default.PlayArrow,
+                            variant = GameButtonVariant.PRIMARY,
+                            height = 50.dp,
+                            onClick = { handleResume() },
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "resume_button"
+                        )
+
+                        // 2. Restart Mission
+                        GameButton(
+                            text = "Restart Mission",
+                            icon = Icons.Default.Refresh,
+                            variant = GameButtonVariant.SECONDARY,
+                            height = 48.dp,
+                            onClick = onRestart,
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "pause_restart_button"
+                        )
+
+                        // 3. Settings
+                        GameButton(
+                            text = "Settings",
+                            icon = Icons.Default.Settings,
+                            variant = GameButtonVariant.SECONDARY,
+                            height = 48.dp,
+                            onClick = { showEmbeddedSettings = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "pause_settings_button"
+                        )
+
+                        // 4. Exit To Map
+                        GameButton(
+                            text = "Exit To Map",
+                            icon = Icons.Default.Map,
+                            variant = GameButtonVariant.DANGER,
+                            height = 48.dp,
+                            onClick = onMainMenu,
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "pause_menu_button"
+                        )
+                    }
+                }
             }
         }
     }

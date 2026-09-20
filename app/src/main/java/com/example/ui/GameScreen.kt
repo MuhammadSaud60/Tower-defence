@@ -2,9 +2,14 @@ package com.example.ui
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,8 +27,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CrisisAlert
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
@@ -47,6 +54,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -180,8 +189,26 @@ fun GameScreen(
         // 1. Full-Screen Battlefield Canvas Area (Uses entire available screen)
         GameCanvas(
             gameState = gameState,
+            onPlacementDrag = { vx, vy ->
+                viewModel.updatePlacementPreview(vx, vy)
+            },
             onCanvasTap = { vx, vy ->
                 val tapPoint = Point2D(vx, vy)
+
+                // 0. Active Weapon Placement Mode (Priority 0)
+                if (gameState.isBuildingTower) {
+                    val spec = gameState.selectedTowerSpec
+                    if (spec != null) {
+                        if (viewModel.isValidTowerPlacement(vx, vy)) {
+                            viewModel.placeTowerAt(spec.type, vx, vy)
+                        } else {
+                            viewModel.showNotice("Blocked: Cannot deploy on obstacles, roads, or water!")
+                            viewModel.invalidTargetFeedback()
+                        }
+                    }
+                    return@GameCanvas
+                }
+
                 val currentlySelectedTower = gameState.selectedExistingTower
 
                 // 1. Existing Tower (Priority 1)
@@ -298,7 +325,8 @@ fun GameScreen(
             GameHudBar(
                 gameState = gameState,
                 onPauseClick = { viewModel.pause() },
-                onToggleSpeed = { viewModel.toggleSpeed() }
+                onToggleSpeed = { viewModel.toggleSpeed() },
+                onSetSpeed = { speed -> viewModel.setGameSpeed(speed) }
             )
 
             // Level 1 First Gun Tutorial (Only shown in Level 1 until completed or skipped)
@@ -364,6 +392,42 @@ fun GameScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
+            }
+        }
+
+        // 6. Bottom Tactical Tower Selection Deck & Weapon Preview (visible when game is running/prep)
+        if (gameState.gameStatus == GameStatus.PLAYING || gameState.gameStatus == GameStatus.PREPARATION) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Tower Preview Panel (active when placing a tower)
+                if (gameState.isBuildingTower && gameState.selectedTowerSpec != null) {
+                    val spec = gameState.selectedTowerSpec!!
+                    TowerPreviewPanel(
+                        type = spec.type,
+                        cost = spec.cost,
+                        playerCoins = gameState.coins,
+                        onCancel = { viewModel.cancelTowerBuild() }
+                    )
+                }
+
+                // Premium Mobile Strategy Weapon Shop Deck
+                TowerShopDeck(
+                    playerCoins = gameState.coins,
+                    selectedType = if (gameState.isBuildingTower) gameState.selectedTowerSpec?.type else null,
+                    progressionManager = viewModel.progressionManager,
+                    onSelectTower = { type ->
+                        if (gameState.isBuildingTower && gameState.selectedTowerSpec?.type == type) {
+                            viewModel.cancelTowerBuild()
+                        } else {
+                            viewModel.selectTowerToBuild(type)
+                        }
+                    }
+                )
             }
         }
 
@@ -591,19 +655,20 @@ private fun BossIncomingAlertBanner(
 private fun GameHudBar(
     gameState: GameState,
     onPauseClick: () -> Unit,
-    onToggleSpeed: () -> Unit
+    onToggleSpeed: () -> Unit,
+    onSetSpeed: (Float) -> Unit = {}
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(
                 brush = Brush.verticalGradient(
-                    listOf(Color(0xF80B1220), Color(0xF0050811))
+                    listOf(Color(0xFA0B132B), Color(0xF2070D1A))
                 )
             )
             .border(
                 width = 1.dp,
-                color = Color(0x3338BDF8),
+                color = Color(0x3838BDF8),
                 shape = RectangleShape
             )
             .testTag("game_hud_bar")
@@ -611,26 +676,76 @@ private fun GameHudBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 5.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Group: Tokens, Base Integrity & Wave Badges
+            // ==========================================
+            // Left Group: Base Health & Gold Coins
+            // ==========================================
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 1. Tokens / Gold Capsule Badge
+                // 1. Base Fortress Integrity Capsule
+                val isHpLow = gameState.base.currentHp <= 5
+                val hpRatio = (gameState.base.currentHp.toFloat() / gameState.base.maxHp.toFloat()).coerceIn(0f, 1f)
                 Box(
                     modifier = Modifier
-                        .background(Color(0xE60F172A), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color(0xFFCA8A04), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .background(Color(0xE60F172A), RoundedCornerShape(8.dp))
+                        .border(
+                            1.dp,
+                            if (isHpLow) Color(0xFFEF4444) else Color(0xFF10B981),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = "Base HP",
+                            tint = if (isHpLow) Color(0xFFEF4444) else Color(0xFF34D399),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        // Mini tactical health bar
+                        Box(
+                            modifier = Modifier
+                                .width(36.dp)
+                                .height(5.dp)
+                                .background(Color(0xFF334155), RoundedCornerShape(2.dp))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(hpRatio)
+                                    .height(5.dp)
+                                    .background(
+                                        if (isHpLow) Color(0xFFEF4444) else Color(0xFF10B981),
+                                        RoundedCornerShape(2.dp)
+                                    )
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "${gameState.base.currentHp}/${gameState.base.maxHp}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (isHpLow) Color(0xFFF87171) else Color(0xFF6EE7B7)
+                        )
+                    }
+                }
+
+                // 2. Gold Coins Capsule
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xE60F172A), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFFEAB308), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.MonetizationOn,
-                            contentDescription = "Tokens",
+                            contentDescription = "Gold Coins",
                             tint = Color(0xFFFBBF24),
                             modifier = Modifier.size(16.dp)
                         )
@@ -644,58 +759,38 @@ private fun GameHudBar(
                         )
                     }
                 }
+            }
 
-                // 2. Base Fortress Integrity Pill
-                Box(
-                    modifier = Modifier
-                        .background(Color(0xE60F172A), RoundedCornerShape(6.dp))
-                        .border(
-                            1.dp,
-                            if (gameState.base.currentHp <= 5) Color(0xFFEF4444) else Color(0xFF10B981),
-                            RoundedCornerShape(6.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = "Base HP",
-                            tint = if (gameState.base.currentHp <= 5) Color(0xFFEF4444) else Color(0xFF34D399),
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "${gameState.base.currentHp}/${gameState.base.maxHp}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Black,
-                            color = if (gameState.base.currentHp <= 5) Color(0xFFF87171) else Color(0xFF6EE7B7)
-                        )
-                    }
-                }
-
-                // 3. Wave Capsule Badge
+            // ==========================================
+            // Center Group: Wave Telemetry & Foes
+            // ==========================================
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Wave Capsule Badge
                 Box(
                     modifier = Modifier
                         .background(
                             if (gameState.isBossWave) Color(0xE62A0812) else Color(0xE60F172A),
-                            RoundedCornerShape(6.dp)
+                            RoundedCornerShape(8.dp)
                         )
                         .border(
                             1.dp,
                             if (gameState.isBossWave) Color(0xFFF43F5E) else Color(0x6638BDF8),
-                            RoundedCornerShape(6.dp)
+                            RoundedCornerShape(8.dp)
                         )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(horizontal = 9.dp, vertical = 5.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = if (gameState.isBossWave) "BOSS" else "WAVE",
-                            fontSize = 9.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Black,
                             color = if (gameState.isBossWave) Color(0xFFF43F5E) else Color(0xFF94A3B8),
                             letterSpacing = 1.sp
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = "${gameState.currentWave}/${gameState.maxWaves}",
                             fontSize = 13.sp,
@@ -716,101 +811,103 @@ private fun GameHudBar(
                                     color = Color.White
                                 )
                             }
-                        } else if (gameState.wavesCleared > 0) {
-                            val hpBonus = ((gameState.enemyHpMultiplier - 1f) * 100f).toInt()
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .background(Color(0x33EF4444), RoundedCornerShape(3.dp))
-                                    .border(0.5.dp, Color(0x88EF4444), RoundedCornerShape(3.dp))
-                                    .padding(horizontal = 3.dp, vertical = 1.dp)
-                            ) {
-                                Text(
-                                    text = "+$hpBonus% HP",
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFCA5A5)
-                                )
-                            }
                         }
                     }
                 }
-            }
 
-            // Right Group: Enemies Remaining, Speed Multiplier, and Pause Button
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // 4. Enemies Remaining Badge
+                // Foes / Enemy Count Badge
                 Box(
                     modifier = Modifier
-                        .background(Color(0xE60F172A), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color(0x55F43F5E), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .background(Color(0xE60F172A), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0x66F43F5E), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "FOES",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF94A3B8),
-                            letterSpacing = 1.sp
+                        Icon(
+                            imageVector = Icons.Default.CrisisAlert,
+                            contentDescription = "Foes",
+                            tint = Color(0xFFF43F5E),
+                            modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = "${gameState.enemiesRemaining}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFFF43F5E)
-                        )
-                    }
-                }
-
-                // 5. Speed Multiplier Capsule Toggle (with active LED status indicator)
-                val isFast = gameState.gameSpeedMultiplier > 1f
-                Box(
-                    modifier = Modifier
-                        .background(
-                            if (isFast) Color(0x400284C7) else Color(0xE60F172A),
-                            RoundedCornerShape(6.dp)
-                        )
-                        .border(
-                            1.dp,
-                            if (isFast) Color(0xFF38BDF8) else Color(0xFF334155),
-                            RoundedCornerShape(6.dp)
-                        )
-                        .clickable(onClick = onToggleSpeed)
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
-                        .testTag("speed_toggle_button")
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // LED indicator dot
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(
-                                    if (isFast) Color(0xFF38BDF8) else Color(0xFF475569),
-                                    CircleShape
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "${gameState.gameSpeedMultiplier.toInt()}X",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Black,
-                            color = if (isFast) Color(0xFF38BDF8) else Color(0xFF94A3B8)
+                            color = Color(0xFFFDA4AF)
                         )
                     }
                 }
+            }
 
-                // 6. Tactical Pause Button with 3D press feel
+            // ==========================================
+            // Right Group: Speed Control (1x/2x/3x) & Pause
+            // ==========================================
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Game-Style Segmented Speed Control (1x, 2x, 3x)
+                Row(
+                    modifier = Modifier
+                        .background(Color(0xE60B1220), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
+                        .padding(2.dp)
+                        .testTag("speed_toggle_button"),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val currentSpeed = gameState.gameSpeedMultiplier
+                    listOf(1f, 2f, 3f).forEach { speed ->
+                        val isSelected = (currentSpeed == speed)
+                        val targetBg = if (isSelected) Color(0xFF0284C7) else Color.Transparent
+                        val targetBorder = if (isSelected) Color(0xFF38BDF8) else Color.Transparent
+                        val targetText = if (isSelected) Color.White else Color(0xFF94A3B8)
+
+                        val animatedBg by animateColorAsState(targetValue = targetBg, label = "speed_bg")
+                        val animatedBorder by animateColorAsState(targetValue = targetBorder, label = "speed_border")
+                        val animatedText by animateColorAsState(targetValue = targetText, label = "speed_text")
+
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .widthIn(min = 28.dp)
+                                .background(animatedBg, RoundedCornerShape(6.dp))
+                                .border(1.dp, animatedBorder, RoundedCornerShape(6.dp))
+                                .clickable { onSetSpeed(speed) }
+                                .padding(horizontal = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${speed.toInt()}x",
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
+                                color = animatedText
+                            )
+                        }
+                    }
+                }
+
+                // Tactical Pause Button with game styling and press feedback
+                val pauseInteractionSource = remember { MutableInteractionSource() }
+                val isPausePressed by pauseInteractionSource.collectIsPressedAsState()
+                val pauseScale by animateFloatAsState(
+                    targetValue = if (isPausePressed) 0.92f else 1f,
+                    animationSpec = tween(50),
+                    label = "pause_scale"
+                )
+
                 Box(
                     modifier = Modifier
-                        .size(34.dp)
-                        .background(Color(0xFF1E293B), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color(0xFF475569), RoundedCornerShape(6.dp))
-                        .clickable(onClick = onPauseClick)
+                        .size(32.dp)
+                        .scale(pauseScale)
+                        .background(Color(0xFF1E293B), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFF475569), RoundedCornerShape(8.dp))
+                        .clickable(
+                            interactionSource = pauseInteractionSource,
+                            indication = null,
+                            onClick = onPauseClick
+                        )
                         .testTag("pause_button"),
                     contentAlignment = Alignment.Center
                 ) {

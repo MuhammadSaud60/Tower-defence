@@ -35,7 +35,11 @@ enum class EffectType {
     STEALTH_SMOKE,
     BOSS_SHOCKWAVE_RING,
     BOSS_PHASE_FLASH,
-    BOSS_FOOTSTEP_DUST;
+    BOSS_FOOTSTEP_DUST,
+
+    // Construction & Purchase
+    BUILD_CONSTRUCTION_DUST,
+    PURCHASE_COIN_BURST;
 
     companion object {
         @JvmField val HIT_SPARK = MG_HIT_SPARK

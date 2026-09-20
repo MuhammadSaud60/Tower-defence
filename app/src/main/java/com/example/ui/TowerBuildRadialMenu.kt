@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -136,6 +137,7 @@ fun TowerBuildRadialMenu(
 
         // 2. CANNON (Top - 12:00)
         RadialBuildButton(
+            towerType = TowerType.CANNON,
             label = "CANNON",
             tag = "CANNON",
             cost = cannonSpec.cost,
@@ -153,6 +155,7 @@ fun TowerBuildRadialMenu(
 
         // 3. GUNNER (Left - 9:00)
         RadialBuildButton(
+            towerType = TowerType.MACHINE_GUN,
             label = "GUNNER",
             tag = "GUNNER",
             cost = gunnerSpec.cost,
@@ -170,6 +173,7 @@ fun TowerBuildRadialMenu(
 
         // 4. RAPID FIRE (Right - 3:00)
         RadialBuildButton(
+            towerType = TowerType.RAPID_FIRE,
             label = "RAPID",
             tag = "RAPID_FIRE",
             cost = rapidSpec.cost,
@@ -187,6 +191,7 @@ fun TowerBuildRadialMenu(
 
         // 5. CRYO SLOW GUN (Bottom - 6:00)
         RadialBuildButton(
+            towerType = TowerType.FROST_GUN,
             label = "CRYO",
             tag = "FROST_GUN",
             cost = frostSpec.cost,
@@ -216,6 +221,7 @@ fun TowerBuildRadialMenu(
 
 @Composable
 private fun RadialBuildButton(
+    towerType: TowerType,
     label: String,
     tag: String,
     cost: Int,
@@ -232,7 +238,7 @@ private fun RadialBuildButton(
     onClick: () -> Unit
 ) {
     val density = LocalDensity.current
-    val buttonRadiusDp = 26.dp
+    val buttonRadiusDp = 28.dp
     val buttonRadiusPx = with(density) { buttonRadiusDp.toPx() }
     val margin = buttonRadiusPx + with(density) { 10.dp.toPx() }
 
@@ -278,13 +284,13 @@ private fun RadialBuildButton(
                 }
             }
 
-            // Circular Button
+            // Circular Weapon Button
             Surface(
                 shape = CircleShape,
                 color = if (canAfford) Color(0xFF1E293B) else Color(0xFF0F172A),
                 shadowElevation = if (canAfford) 8.dp else 2.dp,
                 modifier = Modifier
-                    .size(52.dp)
+                    .size(56.dp)
                     .border(
                         width = if (isHighlighted) 3.dp else if (canAfford) 2.dp else 1.dp,
                         brush = if (isHighlighted) Brush.linearGradient(listOf(Color(0xFFFACC15), Color(0xFFF59E0B)))
@@ -305,15 +311,15 @@ private fun RadialBuildButton(
                         )
                         .alpha(if (canAfford) 1f else 0.45f)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        if (isLocked) {
+                    if (isLocked) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = "Locked",
-                                tint = Color(0xFF94A3B8),
+                                tint = Color(0xFFF59E0B),
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
@@ -322,17 +328,37 @@ private fun RadialBuildButton(
                                 fontWeight = FontWeight.Black,
                                 color = Color(0xFFEF4444)
                             )
-                        } else {
-                            Text(
-                                text = label,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Black,
-                                color = if (canAfford) Color.White else Color(0xFF94A3B8)
+                        }
+                    } else {
+                        // Render Weapon Artwork in Center
+                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f - 4f
+                            WeaponArtwork.drawWeapon(
+                                drawScope = this,
+                                type = towerType,
+                                cx = cx,
+                                cy = cy,
+                                scale = 0.42f,
+                                isLocked = false,
+                                recoilProgress = 0f,
+                                animTime = 0f,
+                                level = 1
                             )
+                        }
+
+                        // Bottom Cost Badge
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 2.dp)
+                                .background(Color(0xCC0F172A), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
                             Text(
                                 text = "${cost}🪙",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = if (canAfford) Color(0xFFFFD166) else Color(0xFFEF4444)
                             )
                         }

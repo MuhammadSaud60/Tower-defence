@@ -147,7 +147,7 @@ fun GameCanvas(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(currentMap.id, maxWidthPx, maxHeightPx) {
+                .pointerInput(currentMap.id, maxWidthPx, maxHeightPx, gameState.isBuildingTower) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = true)
                         var isDragging = false
@@ -156,6 +156,16 @@ fun GameCanvas(
                         val startPos = down.position
                         var prevPos = down.position
                         var prevDistance = -1f
+
+                        if (gameState.isBuildingTower) {
+                            val startWorldPt = cameraState.screenToWorld(
+                                screenX = startPos.x,
+                                screenY = startPos.y,
+                                viewportWidth = maxWidthPx,
+                                viewportHeight = maxHeightPx
+                            )
+                            onPlacementDrag?.invoke(startWorldPt.x, startWorldPt.y)
+                        }
 
                         do {
                             val event = awaitPointerEvent()
@@ -189,6 +199,16 @@ fun GameCanvas(
                                     isDragging = true
                                 }
 
+                                if (gameState.isBuildingTower) {
+                                    val dragWorldPt = cameraState.screenToWorld(
+                                        screenX = currentPos.x,
+                                        screenY = currentPos.y,
+                                        viewportWidth = maxWidthPx,
+                                        viewportHeight = maxHeightPx
+                                    )
+                                    onPlacementDrag?.invoke(dragWorldPt.x, dragWorldPt.y)
+                                }
+
                                 if (isDragging) {
                                     cameraState.panBy(
                                         dxPx = delta.x,
@@ -204,8 +224,18 @@ fun GameCanvas(
                             }
                         } while (event.changes.any { it.pressed })
 
-                        // Gesture completed: single tap only if finger did not drag
-                        if (!isDragging && totalDragDistance < touchSlop) {
+                        // Gesture completed
+                        if (gameState.isBuildingTower) {
+                            val worldPt = cameraState.screenToWorld(
+                                screenX = prevPos.x,
+                                screenY = prevPos.y,
+                                viewportWidth = maxWidthPx,
+                                viewportHeight = maxHeightPx
+                            )
+                            if (worldPt.x in 0f..worldWidth && worldPt.y in 0f..worldHeight) {
+                                onCanvasTap(worldPt.x, worldPt.y)
+                            }
+                        } else if (!isDragging && totalDragDistance < touchSlop) {
                             val worldPt = cameraState.screenToWorld(
                                 screenX = startPos.x,
                                 screenY = startPos.y,
@@ -5087,6 +5117,78 @@ private fun DrawScope.drawVisualEffects(effects: List<VisualEffect>, env: Enviro
                     )
                 }
             }
+            EffectType.BUILD_CONSTRUCTION_DUST -> {
+                val currentR = fx.maxRadius * (0.3f + fx.progress * 0.7f)
+                drawCircle(
+                    color = Color(0xFF38BDF8).copy(alpha = alpha * 0.8f),
+                    radius = currentR,
+                    center = center,
+                    style = Stroke(width = 3.5f * alpha)
+                )
+                drawCircle(
+                    color = Color(0xFFBAE6FD).copy(alpha = alpha * 0.5f),
+                    radius = currentR * 0.7f,
+                    center = center,
+                    style = Stroke(width = 2f * alpha)
+                )
+                for (i in 0..7) {
+                    val ang = (i * Math.PI / 4.0).toFloat() + fx.progress * 0.4f
+                    val dist = currentR * (0.6f + fx.progress * 0.4f)
+                    val dx = center.x + cos(ang) * dist
+                    val dy = center.y + sin(ang) * dist
+                    drawCircle(
+                        color = Color(0xFF94A3B8).copy(alpha = alpha * 0.55f),
+                        radius = (8f + fx.progress * 10f) * alpha,
+                        center = Offset(dx, dy)
+                    )
+                }
+                for (s in 0..5) {
+                    val sAng = s * 1.05f + fx.progress * 5f
+                    val sDist = currentR * (0.4f + fx.progress * 0.8f)
+                    val sx = center.x + cos(sAng) * sDist
+                    val sy = center.y + sin(sAng) * sDist
+                    drawCircle(
+                        color = Color(0xFFFBBF24).copy(alpha = alpha),
+                        radius = 2.5f * alpha,
+                        center = Offset(sx, sy)
+                    )
+                }
+            }
+            EffectType.PURCHASE_COIN_BURST -> {
+                val floatY = center.y - (fx.progress * 42f)
+                val coinCenter = Offset(center.x, floatY)
+                drawCircle(
+                    color = Color(0xFFF59E0B).copy(alpha = alpha * 0.5f),
+                    radius = 16f,
+                    center = coinCenter
+                )
+                drawCircle(
+                    color = Color(0xFFD97706).copy(alpha = alpha),
+                    radius = 11f,
+                    center = coinCenter
+                )
+                drawCircle(
+                    color = Color(0xFFFBBF24).copy(alpha = alpha),
+                    radius = 9f,
+                    center = coinCenter
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = alpha * 0.9f),
+                    radius = 3f,
+                    center = Offset(coinCenter.x - 2f, coinCenter.y - 2f)
+                )
+                for (i in 0..4) {
+                    val sAng = (i * Math.PI * 2 / 5.0).toFloat() + fx.progress * 3f
+                    val sDist = 14f + fx.progress * 18f
+                    val sx = coinCenter.x + cos(sAng) * sDist
+                    val sy = coinCenter.y + sin(sAng) * sDist
+                    drawCircle(
+                        color = Color(0xFFFDE047).copy(alpha = alpha),
+                        radius = 2.5f * alpha,
+                        center = Offset(sx, sy)
+                    )
+                }
+            }
             EffectType.SPEED_BURST_TRAIL -> {
                 val currentR = fx.maxRadius * (0.4f + fx.progress * 0.6f)
                 drawCircle(
@@ -5333,20 +5435,128 @@ private fun DrawScope.drawPlacementPreview(gameState: GameState) {
 
     val isValid = gameState.isValidPlacement
     val ringColor = if (isValid) Color(0xFF22C55E) else Color(0xFFEF4444)
-    val fillColor = if (isValid) Color(0x3322C55E) else Color(0x33EF4444)
+    val fillColor = if (isValid) Color(0x2E22C55E) else Color(0x38EF4444)
+    val dashPhase = (gameState.gameTime * 25f) % 20f
 
-    // Range preview
+    // 1. Range preview with animated tactical dash
     drawCircle(color = fillColor, radius = spec.range, center = center)
     drawCircle(
         color = ringColor,
         radius = spec.range,
         center = center,
-        style = Stroke(width = 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f)))
+        style = Stroke(
+            width = 2.5f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), dashPhase)
+        )
     )
 
-    // Tower footprint preview
-    drawCircle(color = ringColor.copy(alpha = 0.6f), radius = spec.size / 2f, center = center)
-    drawCircle(color = Color.White, radius = spec.size / 2f, center = center, style = Stroke(width = 2.5f))
+    // Range Cardinal Crosshair Notches (N, S, E, W)
+    val tickLen = 8f
+    drawLine(ringColor, Offset(center.x, center.y - spec.range - tickLen), Offset(center.x, center.y - spec.range + tickLen), strokeWidth = 2f)
+    drawLine(ringColor, Offset(center.x, center.y + spec.range - tickLen), Offset(center.x, center.y + spec.range + tickLen), strokeWidth = 2f)
+    drawLine(ringColor, Offset(center.x - spec.range - tickLen, center.y), Offset(center.x - spec.range + tickLen, center.y), strokeWidth = 2f)
+    drawLine(ringColor, Offset(center.x + spec.range - tickLen, center.y), Offset(center.x + spec.range + tickLen, center.y), strokeWidth = 2f)
+
+    // 2. Tower Footprint Base
+    val footR = spec.size / 2f
+    drawCircle(color = if (isValid) Color(0x3322C55E) else Color(0x4DEF4444), radius = footR, center = center)
+    drawCircle(color = ringColor, radius = footR, center = center, style = Stroke(width = 2.5f))
+
+    // Tactical Corner Brackets
+    val bSize = footR * 1.15f
+    val bArm = 10f
+    val bracketColor = if (isValid) Color(0xFF4ADE80) else Color(0xFFF87171)
+
+    // Top-Left
+    drawLine(bracketColor, Offset(center.x - bSize, center.y - bSize), Offset(center.x - bSize + bArm, center.y - bSize), strokeWidth = 2.5f)
+    drawLine(bracketColor, Offset(center.x - bSize, center.y - bSize), Offset(center.x - bSize, center.y - bSize + bArm), strokeWidth = 2.5f)
+    // Top-Right
+    drawLine(bracketColor, Offset(center.x + bSize, center.y - bSize), Offset(center.x + bSize - bArm, center.y - bSize), strokeWidth = 2.5f)
+    drawLine(bracketColor, Offset(center.x + bSize, center.y - bSize), Offset(center.x + bSize, center.y - bSize + bArm), strokeWidth = 2.5f)
+    // Bottom-Left
+    drawLine(bracketColor, Offset(center.x - bSize, center.y + bSize), Offset(center.x - bSize + bArm, center.y + bSize), strokeWidth = 2.5f)
+    drawLine(bracketColor, Offset(center.x - bSize, center.y + bSize), Offset(center.x - bSize, center.y + bSize - bArm), strokeWidth = 2.5f)
+    // Bottom-Right
+    drawLine(bracketColor, Offset(center.x + bSize, center.y + bSize), Offset(center.x + bSize - bArm, center.y + bSize), strokeWidth = 2.5f)
+    drawLine(bracketColor, Offset(center.x + bSize, center.y + bSize), Offset(center.x + bSize, center.y + bSize - bArm), strokeWidth = 2.5f)
+
+    // 3. Render Tactical Ghost Weapon or Blocked Hazard
+    if (isValid) {
+        WeaponArtwork.drawWeapon(
+            drawScope = this,
+            type = spec.type,
+            cx = center.x,
+            cy = center.y,
+            scale = 0.52f,
+            isLocked = false,
+            recoilProgress = 0f,
+            animTime = gameState.gameTime,
+            level = 1
+        )
+    } else {
+        // Red Diagonal Hazard Crosshatch across footprint
+        for (i in -3..3) {
+            val offsetVal = i * 10f
+            drawLine(
+                color = Color(0xAAEF4444),
+                start = Offset(center.x + offsetVal - footR * 0.7f, center.y - footR * 0.7f),
+                end = Offset(center.x + offsetVal + footR * 0.7f, center.y + footR * 0.7f),
+                strokeWidth = 2f
+            )
+        }
+
+        // Blocked 🚫 Indicator
+        drawCircle(
+            color = Color(0xCCEF4444),
+            radius = footR * 0.6f,
+            center = center,
+            style = Stroke(width = 3f)
+        )
+        drawLine(
+            color = Color(0xCCEF4444),
+            start = Offset(center.x - footR * 0.42f, center.y - footR * 0.42f),
+            end = Offset(center.x + footR * 0.42f, center.y + footR * 0.42f),
+            strokeWidth = 3f
+        )
+
+        // Highlight nearby colliding obstacles (trees, rocks, stones)
+        val pulse = (kotlin.math.sin(gameState.gameTime * 8f) * 0.5f + 0.5f)
+        for (dest in gameState.destructibles) {
+            if (!dest.isAlive) continue
+            val dist = kotlin.math.hypot(dest.position.x - pos.x, dest.position.y - pos.y)
+            if (dist < footR + dest.radius + 8f) {
+                drawCircle(
+                    color = Color(0x44EF4444),
+                    radius = dest.radius + 6f + pulse * 4f,
+                    center = Offset(dest.position.x, dest.position.y)
+                )
+                drawCircle(
+                    color = Color(0xFFEF4444),
+                    radius = dest.radius + 6f + pulse * 4f,
+                    center = Offset(dest.position.x, dest.position.y),
+                    style = Stroke(width = 2f)
+                )
+            }
+        }
+
+        // Highlight nearby colliding towers
+        for (tow in gameState.towers) {
+            val dist = kotlin.math.hypot(tow.position.x - pos.x, tow.position.y - pos.y)
+            if (dist < footR + tow.spec.size / 2f + 8f) {
+                drawCircle(
+                    color = Color(0x44EF4444),
+                    radius = tow.spec.size / 2f + 6f + pulse * 4f,
+                    center = Offset(tow.position.x, tow.position.y)
+                )
+                drawCircle(
+                    color = Color(0xFFEF4444),
+                    radius = tow.spec.size / 2f + 6f + pulse * 4f,
+                    center = Offset(tow.position.x, tow.position.y),
+                    style = Stroke(width = 2f)
+                )
+            }
+        }
+    }
 }
 
 private fun DrawScope.drawDestructibles(

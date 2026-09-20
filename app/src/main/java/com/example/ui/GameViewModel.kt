@@ -98,6 +98,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun pause() = gameEngine.pause()
     fun resume() = gameEngine.resume()
     fun toggleSpeed() = gameEngine.toggleSpeed()
+    fun setGameSpeed(speed: Float) = gameEngine.setGameSpeed(speed)
     fun restart() {
         lastVictoryReward = null
         gameEngine.restart()

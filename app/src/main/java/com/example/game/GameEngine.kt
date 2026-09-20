@@ -725,6 +725,26 @@ class GameEngine(
         )
         towers.add(newTower)
         towersPlacedTotal++
+
+        // Construction dust effect & coin burst animation on purchase
+        visualEffects.add(
+            VisualEffect(
+                type = com.example.entities.EffectType.BUILD_CONSTRUCTION_DUST,
+                position = targetPoint,
+                maxLifetime = 0.65f,
+                maxRadius = spec.size * 1.6f
+            )
+        )
+        visualEffects.add(
+            VisualEffect(
+                type = com.example.entities.EffectType.PURCHASE_COIN_BURST,
+                position = Point2D(targetPoint.x, targetPoint.y - 12f),
+                maxLifetime = 0.85f,
+                maxRadius = 36f,
+                text = "-${spec.cost}"
+            )
+        )
+
         selectedBuildPos = null
         selectedTowerSpec = null
         isBuildingTower = false
@@ -825,6 +845,11 @@ class GameEngine(
             2.0f -> 3.0f
             else -> 1.0f
         }
+        publishState()
+    }
+
+    fun setGameSpeed(speed: Float) {
+        gameSpeedMultiplier = speed.coerceIn(1.0f, 3.0f)
         publishState()
     }
 

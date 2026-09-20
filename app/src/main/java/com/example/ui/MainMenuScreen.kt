@@ -58,7 +58,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -144,17 +143,6 @@ fun MainMenuScreen(
             repeatMode = RepeatMode.Restart
         ),
         label = "embers"
-    )
-
-    // Hero button subtle pulse
-    val heroPulse by infiniteTransition.animateFloat(
-        initialValue = 0.98f,
-        targetValue = 1.02f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "hero_pulse"
     )
 
     Box(
@@ -409,22 +397,16 @@ fun MainMenuScreen(
                                 .padding(start = 8.dp)
                         ) {
                             // Hero Green PLAY Button (Deployed safely with guaranteed vertical space)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .scale(heroPulse)
-                            ) {
-                                GameButton(
-                                    text = "DEPLOY TO BATTLE",
-                                    subText = "CONTINUE CAMPAIGN",
-                                    icon = Icons.Default.PlayArrow,
-                                    variant = GameButtonVariant.PRIMARY,
-                                    height = if (isUltraCompactHeight) 44.dp else 50.dp,
-                                    onClick = onPlayClick,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    testTag = "play_button"
-                                )
-                            }
+                            GameButton(
+                                text = "DEPLOY TO BATTLE",
+                                subText = "CONTINUE CAMPAIGN",
+                                icon = Icons.Default.PlayArrow,
+                                variant = GameButtonVariant.PRIMARY,
+                                height = if (isUltraCompactHeight) 44.dp else 50.dp,
+                                onClick = onPlayClick,
+                                modifier = Modifier.fillMaxWidth(),
+                                testTag = "play_button"
+                            )
 
                             // Dedicated vertical separation ensures zero overlap with Settings button
                             Spacer(modifier = Modifier.height(if (isUltraCompactHeight) 6.dp else 10.dp))
@@ -733,9 +715,7 @@ fun MainMenuScreen(
                             .padding(bottom = 8.dp)
                     ) {
                         Box(
-                            modifier = Modifier
-                                .scale(heroPulse)
-                                .widthIn(min = 240.dp, max = 320.dp)
+                            modifier = Modifier.widthIn(min = 240.dp, max = 320.dp)
                         ) {
                             GameButton(
                                 text = "DEPLOY TO BATTLE",

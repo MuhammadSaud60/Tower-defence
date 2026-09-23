@@ -66,7 +66,8 @@ data class GameState(
     val starsEarned: Int = 0,
     val finalScore: Int = 0,
     val gameTime: Float = 0f,
-    val tutorialRecommendedPlot: Point2D? = null
+    val tutorialRecommendedPlot: Point2D? = null,
+    val screenShakeIntensity: Float = 0f
 ) {
     val selectedDestructible: DestructibleObject?
         get() = destructibles.firstOrNull { it.id == selectedDestructibleId && it.isAlive }

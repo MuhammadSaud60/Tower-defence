@@ -99,6 +99,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resume() = gameEngine.resume()
     fun toggleSpeed() = gameEngine.toggleSpeed()
     fun setGameSpeed(speed: Float) = gameEngine.setGameSpeed(speed)
+    fun continueBattle() = gameEngine.continueBattle()
     fun restart() {
         lastVictoryReward = null
         gameEngine.restart()
@@ -151,6 +152,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "ice_mountain" -> progressionManager.unlockMap("frozen_fortress")
             "frozen_fortress" -> progressionManager.unlockMap("arctic_base")
             "arctic_base" -> progressionManager.unlockMap("night_fortress")
+            "night_fortress", "map_9_night" -> progressionManager.unlockMap("eclipse_frontier")
+            "eclipse_frontier", "solstice_frontier" -> progressionManager.unlockMap("storm_twin_bastion")
+            "storm_twin_bastion", "tempest_bastion" -> progressionManager.unlockMap("cloudy_dense_forest")
+            "cloudy_dense_forest", "cloudy_forest" -> progressionManager.unlockMap("snow_summit_descent")
+            "snow_summit_descent", "frostpeak_descent" -> progressionManager.unlockMap("desert_dune_bastion")
         }
 
         return reward
@@ -171,6 +177,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "ice_mountain" -> GameMap.createFrozenFortressMap(isUnlocked = true, stars = progressionManager.getStarsForMap("frozen_fortress"))
             "frozen_fortress" -> GameMap.createArcticBaseMap(isUnlocked = true, stars = progressionManager.getStarsForMap("arctic_base"))
             "arctic_base" -> GameMap.createNightFortressMap(isUnlocked = true, stars = progressionManager.getStarsForMap("night_fortress"))
+            "night_fortress", "map_9_night" -> GameMap.createEclipseFrontierMap(isUnlocked = true, stars = progressionManager.getStarsForMap("eclipse_frontier"))
+            "eclipse_frontier", "solstice_frontier" -> GameMap.createTempestBastionMap(isUnlocked = true, stars = progressionManager.getStarsForMap("storm_twin_bastion"))
+            "storm_twin_bastion", "tempest_bastion" -> GameMap.createCloudyForestMap(isUnlocked = true, stars = progressionManager.getStarsForMap("cloudy_dense_forest"))
+            "cloudy_dense_forest", "cloudy_forest" -> GameMap.createSnowSummitMap(isUnlocked = true, stars = progressionManager.getStarsForMap("snow_summit_descent"))
+            "snow_summit_descent", "frostpeak_descent" -> GameMap.createDesertDuneBastionMap(isUnlocked = true, stars = progressionManager.getStarsForMap("desert_dune_bastion"))
             else -> null
         }
     }

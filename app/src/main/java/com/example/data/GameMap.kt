@@ -12,7 +12,10 @@ enum class EnvironmentType {
     OBSIDIAN_TUNNEL,
     DRAGON_COIL,
     SNOW_VALLEY,
-    NIGHT_FORTRESS
+    NIGHT_FORTRESS,
+    DAY_NIGHT,
+    TEMPEST_RAIN,
+    CLOUDY_FOREST
 }
 
 enum class DecorationType {
@@ -77,7 +80,12 @@ data class GameMap(
     val startingCameraCenter: Point2D = Point2D(460f, 440f),
     val defaultZoom: Float = 1.0f,
     val totalWaves: Int = GameConfig.TOTAL_WAVES,
-    val missionChapter: String? = null
+    val missionChapter: String? = null,
+    val allowedBuildSpots: List<Point2D>? = null,
+    val initialBuildClearings: List<Point2D> = emptyList(),
+    val startingCoins: Int? = null,
+    val difficulty: String = "Normal",
+    val hasDesertWind: Boolean = false
 ) {
     // Single-path backward-compatible constructor
     constructor(
@@ -100,7 +108,12 @@ data class GameMap(
         startingCameraCenter: Point2D = Point2D(460f, 440f),
         defaultZoom: Float = 1.0f,
         totalWaves: Int = GameConfig.TOTAL_WAVES,
-        missionChapter: String? = null
+        missionChapter: String? = null,
+        allowedBuildSpots: List<Point2D>? = null,
+        initialBuildClearings: List<Point2D> = emptyList(),
+        startingCoins: Int? = null,
+        difficulty: String = "Normal",
+        hasDesertWind: Boolean = false
     ) : this(
         id = id,
         name = name,
@@ -121,7 +134,12 @@ data class GameMap(
         startingCameraCenter = startingCameraCenter,
         defaultZoom = defaultZoom,
         totalWaves = totalWaves,
-        missionChapter = missionChapter
+        missionChapter = missionChapter,
+        allowedBuildSpots = allowedBuildSpots,
+        initialBuildClearings = initialBuildClearings,
+        startingCoins = startingCoins,
+        difficulty = difficulty,
+        hasDesertWind = hasDesertWind
     )
 
     val path: GamePath get() = paths.first()
@@ -252,6 +270,14 @@ data class GameMap(
             candidate.y in (basePosition.y - baseClearY)..(basePosition.y + baseClearY)
         ) {
             return false
+        }
+
+        // 7. Allowed build spot / initial build clearing clearance
+        val clearings = allowedBuildSpots ?: initialBuildClearings
+        for (spot in clearings) {
+            if (candidate.distanceTo(spot) < (75f + collisionRadius)) {
+                return false
+            }
         }
 
         return true
@@ -431,6 +457,26 @@ data class GameMap(
                 createNightFortressMap(
                     isUnlocked = isMapUnlocked("night_fortress") || isMapUnlocked("map_9_night"),
                     stars = maxOf(getStars("night_fortress"), getStars("map_9_night"))
+                ),
+                createEclipseFrontierMap(
+                    isUnlocked = isMapUnlocked("eclipse_frontier") || isMapUnlocked("solstice_frontier") || isMapUnlocked("night_fortress"),
+                    stars = maxOf(getStars("eclipse_frontier"), getStars("solstice_frontier"))
+                ),
+                createTempestBastionMap(
+                    isUnlocked = isMapUnlocked("storm_twin_bastion") || isMapUnlocked("tempest_bastion"),
+                    stars = maxOf(getStars("storm_twin_bastion"), getStars("tempest_bastion"))
+                ),
+                createCloudyForestMap(
+                    isUnlocked = isMapUnlocked("cloudy_dense_forest") || isMapUnlocked("cloudy_forest"),
+                    stars = maxOf(getStars("cloudy_dense_forest"), getStars("cloudy_forest"))
+                ),
+                createSnowSummitMap(
+                    isUnlocked = isMapUnlocked("snow_summit_descent") || isMapUnlocked("frostpeak_descent"),
+                    stars = maxOf(getStars("snow_summit_descent"), getStars("frostpeak_descent"))
+                ),
+                createDesertDuneBastionMap(
+                    isUnlocked = isMapUnlocked("desert_dune_bastion") || isMapUnlocked("dune_storm_stronghold"),
+                    stars = maxOf(getStars("desert_dune_bastion"), getStars("dune_storm_stronghold"))
                 )
             )
         }
@@ -1261,7 +1307,7 @@ data class GameMap(
         }
 
         // ------------------------------------------
-        // SNOW LEVEL 4: FROZEN FORTRESS (30 Waves)
+        // SNOW LEVEL 4: FROZEN FORTRESS (24 Waves)
         // Ancient stone citadel carved into sheer blue glaciers.
         // Dual defense corridors protecting the inner castle sanctum.
         // ------------------------------------------
@@ -1343,7 +1389,7 @@ data class GameMap(
                 worldHeight = 1850f,
                 startingCameraCenter = Point2D(1450f, 950f),
                 defaultZoom = 0.82f,
-                totalWaves = 30,
+                totalWaves = 24,
                 missionChapter = "SNOW CAMPAIGN • MISSION 4"
             )
             val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
@@ -1357,7 +1403,7 @@ data class GameMap(
         }
 
         // ------------------------------------------
-        // SNOW LEVEL 5: ARCTIC BASE (36 Waves)
+        // SNOW LEVEL 5: ARCTIC BASE (25 Waves)
         // High-tech polar defense complex on the frozen ice shelf.
         // Extreme sub-zero conditions, frozen power pylons, and endless siege forces.
         // ------------------------------------------
@@ -1436,7 +1482,7 @@ data class GameMap(
                 worldHeight = 2000f,
                 startingCameraCenter = Point2D(1500f, 1000f),
                 defaultZoom = 0.80f,
-                totalWaves = 36,
+                totalWaves = 25,
                 missionChapter = "SNOW CAMPAIGN • MISSION 5"
             )
             val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
@@ -1572,6 +1618,737 @@ data class GameMap(
             return finalizedMap
         }
 
+        // ========================================================
+        // MAP 14 — SOLSTICE ECLIPSE FRONTIER (Day & Night Proving Ground)
+        // 20 Waves total: Waves 1-10 High Noon Sun, Waves 11-20 Midnight Siege
+        // Difficulty: High (Waves 9-20: ONLY Bosses & Fast Enemies, with swarms up to 10 Bosses!)
+        // ========================================================
+        fun createEclipseFrontierMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val waypoints = listOf(
+                Point2D(-40f, 620f),
+                Point2D(380f, 620f),
+                Point2D(620f, 380f),
+                Point2D(1020f, 380f),
+                Point2D(1280f, 680f),
+                Point2D(980f, 1080f),
+                Point2D(1350f, 1380f),
+                Point2D(1820f, 1320f),
+                Point2D(1950f, 920f),
+                Point2D(2350f, 920f)
+            )
+
+            val basePos = Point2D(2350f, 920f)
+            val pondCenter = Point2D(1540f, 860f)
+            val pondRadius = 115f
+
+            val path = GamePath(id = "eclipse_frontier_pass", waypoints = waypoints, pathWidth = GameConfig.PATH_WIDTH)
+
+            val decor = listOf(
+                // Day & Night contrasting flora and lanterns
+                MapDecoration("ef_lp1", DecorationType.LANTERN_POST, Point2D(360f, 520f), size = 32f),
+                MapDecoration("ef_lp2", DecorationType.LANTERN_POST, Point2D(680f, 460f), size = 32f),
+                MapDecoration("ef_lp3", DecorationType.LANTERN_POST, Point2D(1220f, 740f), size = 32f),
+                MapDecoration("ef_lp4", DecorationType.LANTERN_POST, Point2D(1040f, 1160f), size = 32f),
+                MapDecoration("ef_lp5", DecorationType.LANTERN_POST, Point2D(1760f, 1220f), size = 32f),
+                MapDecoration("ef_lp6", DecorationType.LANTERN_POST, Point2D(2240f, 820f), size = 32f),
+
+                // Luminous crystals and glow mushrooms for nocturnal half
+                MapDecoration("ef_gm1", DecorationType.GLOW_MUSHROOM, Point2D(840f, 620f), size = 26f),
+                MapDecoration("ef_gm2", DecorationType.GLOW_MUSHROOM, Point2D(1440f, 680f), size = 28f),
+                MapDecoration("ef_gm3", DecorationType.GLOW_MUSHROOM, Point2D(1740f, 820f), size = 26f),
+                MapDecoration("ef_cry1", DecorationType.CRYSTAL, Point2D(1420f, 1020f), size = 28f),
+                MapDecoration("ef_cry2", DecorationType.CRYSTAL, Point2D(1680f, 1040f), size = 28f),
+
+                // Sun-warmed oaks and pines
+                MapDecoration("ef_t1", DecorationType.OAK_TREE, Point2D(220f, 260f), size = 52f),
+                MapDecoration("ef_t2", DecorationType.OAK_TREE, Point2D(820f, 220f), size = 54f),
+                MapDecoration("ef_t3", DecorationType.PINE_TREE, Point2D(1180f, 220f), size = 50f),
+                MapDecoration("ef_t4", DecorationType.PINE_TREE, Point2D(460f, 820f), size = 50f),
+                MapDecoration("ef_t5", DecorationType.PINE_TREE, Point2D(680f, 1280f), size = 52f),
+                MapDecoration("ef_t6", DecorationType.OAK_TREE, Point2D(1560f, 1540f), size = 52f),
+                MapDecoration("ef_t7", DecorationType.PINE_TREE, Point2D(2120f, 1280f), size = 50f),
+
+                // Boulders and rocks
+                MapDecoration("ef_r1", DecorationType.BOULDER, Point2D(240f, 780f), size = 46f),
+                MapDecoration("ef_r2", DecorationType.BOULDER, Point2D(880f, 880f), size = 48f),
+                MapDecoration("ef_r3", DecorationType.BOULDER, Point2D(1440f, 1220f), size = 44f),
+                MapDecoration("ef_r4", DecorationType.BOULDER, Point2D(2150f, 650f), size = 50f),
+
+                // Bushes and flowers
+                MapDecoration("ef_b1", DecorationType.BUSH, Point2D(520f, 520f), size = 30f),
+                MapDecoration("ef_b2", DecorationType.BUSH, Point2D(1120f, 520f), size = 32f),
+                MapDecoration("ef_b3", DecorationType.FLOWER_PATCH, Point2D(760f, 740f), size = 34f),
+                MapDecoration("ef_b4", DecorationType.FLOWER_PATCH, Point2D(1620f, 1180f), size = 34f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("ef_d_tree_1", DestructibleType.OAK_TREE, Point2D(520f, 220f)),
+                DestructibleObject("ef_d_rock_1", DestructibleType.LARGE_BOULDER, Point2D(1350f, 500f)),
+                DestructibleObject("ef_d_tree_2", DestructibleType.PINE_TREE, Point2D(780f, 1420f)),
+                DestructibleObject("ef_d_crate_1", DestructibleType.REINFORCED_CRATE, Point2D(1880f, 720f)),
+                DestructibleObject("ef_d_tree_3", DestructibleType.PINE_TREE, Point2D(2450f, 680f))
+            )
+
+            val map = GameMap(
+                id = "eclipse_frontier",
+                name = "Eclipse Frontier",
+                description = "Day & Night Proving Ground (20 Waves): High noon shines upon Waves 1–10 before midnight plunges the pass into darkness. From Wave 9 onwards, only elite fast invaders and swarms of up to 10 bosses strike!",
+                environmentType = EnvironmentType.DAY_NIGHT,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(path),
+                basePosition = basePos,
+                decorations = decor,
+                waterPondCenter = pondCenter,
+                waterPondRadius = pondRadius,
+                destructibles = destructibles,
+                worldWidth = 2650f,
+                worldHeight = 1750f,
+                startingCameraCenter = Point2D(1325f, 875f),
+                defaultZoom = 0.80f,
+                totalWaves = 20
+            )
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = destructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
+        }
+
+        fun createTempestBastionMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val northWaypoints = listOf(
+                Point2D(0f, 420f),
+                Point2D(360f, 420f),
+                Point2D(640f, 280f),
+                Point2D(1020f, 280f),
+                Point2D(1280f, 520f),
+                Point2D(1620f, 520f),
+                Point2D(1880f, 380f),
+                Point2D(2140f, 480f),
+                Point2D(2300f, 620f)
+            )
+
+            val southWaypoints = listOf(
+                Point2D(0f, 1380f),
+                Point2D(340f, 1380f),
+                Point2D(620f, 1520f),
+                Point2D(1000f, 1520f),
+                Point2D(1260f, 1280f),
+                Point2D(1600f, 1280f),
+                Point2D(1860f, 1420f),
+                Point2D(2140f, 1320f),
+                Point2D(2300f, 1180f)
+            )
+
+            val basePos = Point2D(2300f, 900f)
+            val pondCenter = Point2D(1440f, 900f)
+            val pondRadius = 120f
+
+            val pathNorth = GamePath(id = "storm_path_north", waypoints = northWaypoints, pathWidth = GameConfig.PATH_WIDTH)
+            val pathSouth = GamePath(id = "storm_path_south", waypoints = southWaypoints, pathWidth = GameConfig.PATH_WIDTH)
+
+            val decor = listOf(
+                // Storm Bastion perimeter lightning rods & lanterns
+                MapDecoration("tb_lp1", DecorationType.LANTERN_POST, Point2D(360f, 560f), size = 32f),
+                MapDecoration("tb_lp2", DecorationType.LANTERN_POST, Point2D(1020f, 420f), size = 32f),
+                MapDecoration("tb_lp3", DecorationType.LANTERN_POST, Point2D(1620f, 660f), size = 32f),
+                MapDecoration("tb_lp4", DecorationType.LANTERN_POST, Point2D(2140f, 620f), size = 32f),
+                MapDecoration("tb_lp5", DecorationType.LANTERN_POST, Point2D(360f, 1240f), size = 32f),
+                MapDecoration("tb_lp6", DecorationType.LANTERN_POST, Point2D(1020f, 1380f), size = 32f),
+                MapDecoration("tb_lp7", DecorationType.LANTERN_POST, Point2D(1620f, 1140f), size = 32f),
+                MapDecoration("tb_lp8", DecorationType.LANTERN_POST, Point2D(2140f, 1180f), size = 32f),
+
+                // Storm-weathered pines and ancient boulders
+                MapDecoration("tb_t1", DecorationType.PINE_TREE, Point2D(220f, 220f), size = 54f),
+                MapDecoration("tb_t2", DecorationType.PINE_TREE, Point2D(840f, 160f), size = 52f),
+                MapDecoration("tb_t3", DecorationType.PINE_TREE, Point2D(1440f, 320f), size = 52f),
+                MapDecoration("tb_t4", DecorationType.PINE_TREE, Point2D(220f, 1580f), size = 54f),
+                MapDecoration("tb_t5", DecorationType.PINE_TREE, Point2D(840f, 1640f), size = 52f),
+                MapDecoration("tb_t6", DecorationType.PINE_TREE, Point2D(1440f, 1480f), size = 52f),
+                MapDecoration("tb_t7", DecorationType.PINE_TREE, Point2D(1980f, 900f), size = 50f),
+
+                // Wet slippery bluffs & boulders
+                MapDecoration("tb_r1", DecorationType.BOULDER, Point2D(650f, 900f), size = 48f),
+                MapDecoration("tb_r2", DecorationType.BOULDER, Point2D(1150f, 900f), size = 46f),
+                MapDecoration("tb_r3", DecorationType.BOULDER, Point2D(2480f, 600f), size = 50f),
+                MapDecoration("tb_r4", DecorationType.BOULDER, Point2D(2480f, 1200f), size = 50f),
+
+                // Storm crystals & rain flora
+                MapDecoration("tb_c1", DecorationType.CRYSTAL, Point2D(1720f, 820f), size = 28f),
+                MapDecoration("tb_c2", DecorationType.CRYSTAL, Point2D(1720f, 980f), size = 28f),
+                MapDecoration("tb_b1", DecorationType.BUSH, Point2D(540f, 740f), size = 32f),
+                MapDecoration("tb_b2", DecorationType.BUSH, Point2D(540f, 1060f), size = 32f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("tb_d_rock_1", DestructibleType.LARGE_BOULDER, Point2D(830f, 900f)),
+                DestructibleObject("tb_d_tree_1", DestructibleType.PINE_TREE, Point2D(480f, 850f)),
+                DestructibleObject("tb_d_crate_1", DestructibleType.REINFORCED_CRATE, Point2D(1800f, 900f)),
+                DestructibleObject("tb_d_tree_2", DestructibleType.PINE_TREE, Point2D(2460f, 420f)),
+                DestructibleObject("tb_d_rock_2", DestructibleType.LARGE_BOULDER, Point2D(2460f, 1380f))
+            )
+
+            val map = GameMap(
+                id = "storm_twin_bastion",
+                name = "Tempest Bastion",
+                description = "Torrential Storm & Twin Towers (15 Waves): Heavy rain pours relentlessly as enemies march down dual paths assaulting North & South Bastion Towers. After Wave 7, only apex bosses attack!",
+                environmentType = EnvironmentType.TEMPEST_RAIN,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathNorth, pathSouth),
+                basePosition = basePos,
+                decorations = decor,
+                waterPondCenter = pondCenter,
+                waterPondRadius = pondRadius,
+                destructibles = destructibles,
+                worldWidth = 2650f,
+                worldHeight = 1750f,
+                startingCameraCenter = Point2D(1325f, 875f),
+                defaultZoom = 0.80f,
+                totalWaves = 15
+            )
+            val (finalDestructibles, finalDecorations) = buildNaturalEnvironmentForMap(
+                map = map,
+                candidateDestructibles = destructibles,
+                candidateDecorations = decor
+            )
+            val finalizedMap = map.copy(destructibles = finalDestructibles, decorations = finalDecorations)
+            validateMap(finalizedMap)
+            return finalizedMap
+        }
+
+        /**
+         * Creates Level 16: "Cloudy Grove" (cloudy_dense_forest)
+         * - Dense ancient forest filled with trees everywhere
+         * - Day + cloudy overcast atmosphere with drifting canopy shadows
+         * - Exactly 2 strategic cleared gun foundations where towers can be placed
+         * - 3 distinct winding forest trails converging and merging at one junction
+         * - Rocky mountain tunnel shielding enemies as they advance from the merge junction to the base
+         */
+        fun createCloudyForestMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2050f, 800f)
+
+            // Path 1 (North Trail): Descends through dense northern pine groves to the merge junction
+            val pathNorth = GamePath(
+                id = "cloudy_trail_north",
+                waypoints = listOf(
+                    Point2D(0f, 280f),
+                    Point2D(340f, 280f),
+                    Point2D(560f, 420f),
+                    Point2D(880f, 420f),
+                    Point2D(1120f, 640f),
+                    Point2D(1350f, 800f), // MERGE CHOKEPOINT
+                    Point2D(1520f, 800f), // TUNNEL ENTRANCE
+                    Point2D(1840f, 800f), // TUNNEL EXIT
+                    basePos               // BASE FORTRESS TOWER
+                ),
+                pathWidth = 50f
+            )
+
+            // Path 2 (Center Trail): Runs through the central ancient tree thicket to the merge junction
+            val pathCenter = GamePath(
+                id = "cloudy_trail_center",
+                waypoints = listOf(
+                    Point2D(0f, 800f),
+                    Point2D(360f, 800f),
+                    Point2D(600f, 720f),
+                    Point2D(880f, 800f),
+                    Point2D(1140f, 800f),
+                    Point2D(1350f, 800f), // MERGE CHOKEPOINT
+                    Point2D(1520f, 800f), // TUNNEL ENTRANCE
+                    Point2D(1840f, 800f), // TUNNEL EXIT
+                    basePos               // BASE FORTRESS TOWER
+                ),
+                pathWidth = 50f
+            )
+
+            // Path 3 (South Trail): Ascends from southern fern hollows to the merge junction
+            val pathSouth = GamePath(
+                id = "cloudy_trail_south",
+                waypoints = listOf(
+                    Point2D(0f, 1320f),
+                    Point2D(340f, 1320f),
+                    Point2D(560f, 1180f),
+                    Point2D(880f, 1180f),
+                    Point2D(1120f, 960f),
+                    Point2D(1350f, 800f), // MERGE CHOKEPOINT
+                    Point2D(1520f, 800f), // TUNNEL ENTRANCE
+                    Point2D(1840f, 800f), // TUNNEL EXIT
+                    basePos               // BASE FORTRESS TOWER
+                ),
+                pathWidth = 50f
+            )
+
+            // Tunnel Region: Rocky mountain ridge spanning the merged highway
+            val tunnel = TunnelRegion(
+                id = "forest_cavern_tunnel",
+                boundsLeft = 1520f,
+                boundsTop = 680f,
+                boundsRight = 1840f,
+                boundsBottom = 920f,
+                entrance = Point2D(1520f, 800f),
+                exit = Point2D(1840f, 800f)
+            )
+
+            // ONLY 2 initial empty locations (no tree, no stone) overlooking the merge junction
+            val clearingNorth = Point2D(1350f, 600f) // North flank initial empty clearing
+            val clearingSouth = Point2D(1350f, 1000f) // South flank initial empty clearing
+            val initialClearings = listOf(clearingNorth, clearingSouth)
+
+            // Pre-seed map to check environment clearance
+            val baseMap = GameMap(
+                id = "cloudy_dense_forest",
+                name = "Cloudy Grove",
+                description = "Dense Ancient Forest (15 Waves): Only 2 clearings exist initially to place guns. All other buildable ground is packed with trees and stones. Target and blast the trees and stones to clear new locations and set more guns!",
+                environmentType = EnvironmentType.CLOUDY_FOREST,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathNorth, pathCenter, pathSouth),
+                basePosition = basePos,
+                decorations = emptyList(),
+                tunnelRegion = tunnel,
+                destructibles = emptyList(),
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1350f, 800f),
+                defaultZoom = 0.85f,
+                totalWaves = 15,
+                allowedBuildSpots = null,
+                initialBuildClearings = initialClearings
+            )
+
+            // Populate all buildable ground across the entire forest with destructible trees and stones,
+            // EXCEPT for the 2 initial empty clearings!
+            val destructibles = mutableListOf<DestructibleObject>()
+            var dId = 0
+            val rnd = java.util.Random(42L)
+
+            // Forest grid covering all buildable ground outside roads
+            for (gx in 75..2325 step 90) {
+                for (gy in 75..1525 step 90) {
+                    val jx = gx.toFloat() + (rnd.nextFloat() * 26f - 13f)
+                    val jy = gy.toFloat() + (rnd.nextFloat() * 26f - 13f)
+                    val candPos = Point2D(jx, jy)
+
+                    // EXCLUSIVITY: The 2 initial clearings have NO tree and NO stone
+                    val inInitialClearing = initialClearings.any { candPos.distanceTo(it) < 85f }
+                    if (inInitialClearing) continue
+
+                    // Must be completely off-road and outside tunnel/base
+                    if (baseMap.canSpawnEnvironmentObject(candPos, collisionRadius = 25f, roadSafetyMargin = 30f)) {
+                        val (dType, hp, reward) = when (rnd.nextInt(5)) {
+                            0 -> Triple(DestructibleType.PINE_TREE, 95f, 12)
+                            1 -> Triple(DestructibleType.OAK_TREE, 110f, 14)
+                            2 -> Triple(DestructibleType.TREE, 100f, 12)
+                            3 -> Triple(DestructibleType.STONE, 130f, 15)
+                            else -> Triple(DestructibleType.LARGE_STONE, 180f, 20)
+                        }
+
+                        destructibles.add(
+                            DestructibleObject(
+                                id = "cloudy_destructible_${dId++}",
+                                type = dType,
+                                position = candPos,
+                                maxHp = hp,
+                                currentHp = hp,
+                                rewardTokens = reward,
+                                radius = 24f
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Scatter ground undergrowth (flowers, mushrooms) that do NOT block building
+            val decor = mutableListOf<MapDecoration>()
+            var decorIdx = 0
+            for (i in 0 until 50) {
+                val fx = 100f + rnd.nextFloat() * 2200f
+                val fy = 100f + rnd.nextFloat() * 1400f
+                val cand = Point2D(fx, fy)
+                if (baseMap.canSpawnEnvironmentObject(cand, collisionRadius = 14f, roadSafetyMargin = 22f)) {
+                    val decType = if (rnd.nextBoolean()) DecorationType.FLOWER_PATCH else DecorationType.GLOW_MUSHROOM
+                    decor.add(
+                        MapDecoration(
+                            id = "forest_undergrowth_${decorIdx++}",
+                            type = decType,
+                            position = cand,
+                            size = 18f + rnd.nextFloat() * 10f
+                        )
+                    )
+                }
+            }
+
+            val finalMap = baseMap.copy(
+                decorations = decor,
+                destructibles = destructibles
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // =========================================================================
+        // MAP 17 — FROSTPEAK DESCENT (Day Snow Mountains)
+        // Enemies descend from the high icy mountain peaks down to the stronghold tower at the mountain bottom.
+        // Carpeted with abundant snow-covered boulders, rocks, and icy stones across 20 escalating waves.
+        // =========================================================================
+        fun createSnowSummitMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(1000f, 1680f)
+
+            // Path 1 (West Glacier Ridge): Cascades down from the Northwest Peak
+            val pathWest = GamePath(
+                id = "frostpeak_descent_west",
+                waypoints = listOf(
+                    Point2D(600f, -40f),
+                    Point2D(600f, 220f),
+                    Point2D(350f, 440f),
+                    Point2D(700f, 660f),
+                    Point2D(1000f, 850f), // Slope convergence
+                    Point2D(600f, 1080f),
+                    Point2D(600f, 1340f),
+                    Point2D(1400f, 1340f),
+                    Point2D(1400f, 1600f),
+                    basePos
+                ),
+                pathWidth = 50f
+            )
+
+            // Path 2 (East Glacier Ridge): Cascades down from the Northeast Peak
+            val pathEast = GamePath(
+                id = "frostpeak_descent_east",
+                waypoints = listOf(
+                    Point2D(1400f, -40f),
+                    Point2D(1400f, 220f),
+                    Point2D(1650f, 440f),
+                    Point2D(1300f, 660f),
+                    Point2D(1000f, 850f), // Slope convergence
+                    Point2D(600f, 1080f),
+                    Point2D(600f, 1340f),
+                    Point2D(1400f, 1340f),
+                    Point2D(1400f, 1600f),
+                    basePos
+                ),
+                pathWidth = 50f
+            )
+
+            // Heavy abundance of snow-covered boulders, snowdrifts, and frozen mountain features
+            val decor = mutableListOf<MapDecoration>(
+                // Snow-covered boulders on upper Northwest peak
+                MapDecoration("fps_b1", DecorationType.BOULDER, Point2D(420f, 100f), size = 56f),
+                MapDecoration("fps_b2", DecorationType.BOULDER, Point2D(780f, 100f), size = 52f),
+                MapDecoration("fps_b3", DecorationType.BOULDER, Point2D(200f, 260f), size = 60f),
+                MapDecoration("fps_b4", DecorationType.BOULDER, Point2D(480f, 320f), size = 48f),
+                MapDecoration("fps_sp1", DecorationType.SNOW_PILE, Point2D(340f, 140f), size = 46f),
+                MapDecoration("fps_sp2", DecorationType.SNOW_PILE, Point2D(840f, 220f), size = 42f),
+                MapDecoration("fps_fb1", DecorationType.FROZEN_BUSH, Point2D(240f, 400f), size = 32f),
+
+                // Snow-covered boulders on upper Northeast peak
+                MapDecoration("fps_b5", DecorationType.BOULDER, Point2D(1220f, 100f), size = 54f),
+                MapDecoration("fps_b6", DecorationType.BOULDER, Point2D(1580f, 100f), size = 58f),
+                MapDecoration("fps_b7", DecorationType.BOULDER, Point2D(1800f, 260f), size = 62f),
+                MapDecoration("fps_b8", DecorationType.BOULDER, Point2D(1520f, 320f), size = 50f),
+                MapDecoration("fps_sp3", DecorationType.SNOW_PILE, Point2D(1660f, 140f), size = 45f),
+                MapDecoration("fps_sp4", DecorationType.SNOW_PILE, Point2D(1160f, 220f), size = 40f),
+                MapDecoration("fps_fb2", DecorationType.FROZEN_BUSH, Point2D(1760f, 400f), size = 32f),
+
+                // Central mountain plateau boulders & crystals
+                MapDecoration("fps_b9", DecorationType.BOULDER, Point2D(1000f, 350f), size = 64f),
+                MapDecoration("fps_b10", DecorationType.BOULDER, Point2D(1000f, 500f), size = 58f),
+                MapDecoration("fps_b11", DecorationType.BOULDER, Point2D(450f, 580f), size = 52f),
+                MapDecoration("fps_b12", DecorationType.BOULDER, Point2D(1550f, 580f), size = 52f),
+                MapDecoration("fps_cry1", DecorationType.CRYSTAL, Point2D(860f, 420f), size = 30f),
+                MapDecoration("fps_cry2", DecorationType.CRYSTAL, Point2D(1140f, 420f), size = 30f),
+                MapDecoration("fps_sp5", DecorationType.SNOW_PILE, Point2D(900f, 620f), size = 48f),
+                MapDecoration("fps_sp6", DecorationType.SNOW_PILE, Point2D(1100f, 620f), size = 48f),
+
+                // Mid-mountain terrace boulders
+                MapDecoration("fps_b13", DecorationType.BOULDER, Point2D(350f, 850f), size = 62f),
+                MapDecoration("fps_b14", DecorationType.BOULDER, Point2D(1650f, 850f), size = 64f),
+                MapDecoration("fps_b15", DecorationType.BOULDER, Point2D(800f, 960f), size = 54f),
+                MapDecoration("fps_b16", DecorationType.BOULDER, Point2D(1200f, 960f), size = 54f),
+                MapDecoration("fps_b17", DecorationType.BOULDER, Point2D(380f, 1200f), size = 56f),
+                MapDecoration("fps_b18", DecorationType.BOULDER, Point2D(1620f, 1200f), size = 58f),
+                MapDecoration("fps_sp7", DecorationType.SNOW_PILE, Point2D(250f, 1020f), size = 45f),
+                MapDecoration("fps_sp8", DecorationType.SNOW_PILE, Point2D(1750f, 1020f), size = 45f),
+
+                // Lower valley & fortress tower approaches (mountain base)
+                MapDecoration("fps_b19", DecorationType.BOULDER, Point2D(1000f, 1180f), size = 60f),
+                MapDecoration("fps_b20", DecorationType.BOULDER, Point2D(800f, 1480f), size = 55f),
+                MapDecoration("fps_b21", DecorationType.BOULDER, Point2D(1200f, 1480f), size = 55f),
+                MapDecoration("fps_b22", DecorationType.BOULDER, Point2D(650f, 1680f), size = 58f),
+                MapDecoration("fps_b23", DecorationType.BOULDER, Point2D(1350f, 1680f), size = 58f),
+                MapDecoration("fps_sp9", DecorationType.SNOW_PILE, Point2D(700f, 1550f), size = 46f),
+                MapDecoration("fps_sp10", DecorationType.SNOW_PILE, Point2D(1300f, 1550f), size = 46f),
+                MapDecoration("fps_cry3", DecorationType.CRYSTAL, Point2D(1000f, 1520f), size = 32f),
+
+                // High alpine pine trees flanking the ridges
+                MapDecoration("fps_pt1", DecorationType.PINE_TREE, Point2D(150f, 120f), size = 68f),
+                MapDecoration("fps_pt2", DecorationType.PINE_TREE, Point2D(1850f, 120f), size = 68f),
+                MapDecoration("fps_pt3", DecorationType.PINE_TREE, Point2D(120f, 650f), size = 70f),
+                MapDecoration("fps_pt4", DecorationType.PINE_TREE, Point2D(1880f, 650f), size = 70f),
+                MapDecoration("fps_pt5", DecorationType.PINE_TREE, Point2D(180f, 1450f), size = 72f),
+                MapDecoration("fps_pt6", DecorationType.PINE_TREE, Point2D(1820f, 1450f), size = 72f)
+            )
+
+            val baseMap = GameMap(
+                id = "snow_summit_descent",
+                name = "Frostpeak Descent",
+                description = "High snow mountains under bright winter daylight. Enemy legions surge downward from the icy summits while your stronghold tower stands firm at the mountain base amidst snow-covered boulder fields.",
+                environmentType = EnvironmentType.SNOW_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathWest, pathEast),
+                basePosition = basePos,
+                decorations = emptyList(),
+                worldWidth = 2000f,
+                worldHeight = 1800f,
+                startingCameraCenter = Point2D(1000f, 900f),
+                defaultZoom = 0.95f,
+                totalWaves = 20,
+                missionChapter = "FROSTPEAK"
+            )
+
+            // Destructible snow-covered stones and rocks scattered across the slopes
+            val destructibles = mutableListOf<DestructibleObject>()
+            val candRocks = listOf(
+                Point2D(460f, 220f),
+                Point2D(1540f, 220f),
+                Point2D(260f, 500f),
+                Point2D(1740f, 500f),
+                Point2D(840f, 320f),
+                Point2D(1160f, 320f),
+                Point2D(1000f, 680f),
+                Point2D(480f, 740f),
+                Point2D(1520f, 740f),
+                Point2D(820f, 1160f),
+                Point2D(1180f, 1160f),
+                Point2D(360f, 1460f),
+                Point2D(1640f, 1460f),
+                Point2D(1000f, 1380f),
+                Point2D(780f, 1620f),
+                Point2D(1220f, 1620f)
+            )
+
+            var rId = 1
+            for (p in candRocks) {
+                if (baseMap.canSpawnEnvironmentObject(p, collisionRadius = 24f, roadSafetyMargin = 28f)) {
+                    val dType = if (rId % 3 == 0) DestructibleType.PINE_TREE else DestructibleType.LARGE_STONE
+                    destructibles.add(
+                        DestructibleObject(
+                            id = "snow_summit_stone_${rId++}",
+                            type = dType,
+                            position = p,
+                            maxHp = 220f,
+                            currentHp = 220f,
+                            rewardTokens = 22,
+                            radius = 26f
+                        )
+                    )
+                }
+            }
+
+            val finalMap = baseMap.copy(
+                decorations = decor,
+                destructibles = destructibles
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // ==========================================
+        // MAP 18 — ARID DESERT (Dune Bastion)
+        // Difficulty: Hard (15 Waves)
+        // Waves:
+        //   1: First the boss attacking with small enemies
+        //   2-6: Fastest enemies with medium level enemies
+        //   7-11: All type enemies with different bosses
+        //   12-15: ONLY bosses in large amount
+        // Starting coins: 1000
+        // Setting: Large desert with big stones, desert wind, and 2 enemy paths!
+        // ==========================================
+        fun createDesertDuneBastionMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2200f, 800f)
+
+            // Path 1 (Northern Sand Canyon): Winds through northern dune plateaus
+            val pathNorth = GamePath(
+                id = "dune_canyon_north",
+                waypoints = listOf(
+                    Point2D(-40f, 400f),
+                    Point2D(350f, 400f),
+                    Point2D(650f, 260f),
+                    Point2D(1050f, 260f),
+                    Point2D(1350f, 440f),
+                    Point2D(1700f, 440f),
+                    Point2D(1950f, 700f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            // Path 2 (Southern Oasis Dunes): Winds through southern sunbaked dunes
+            val pathSouth = GamePath(
+                id = "dune_canyon_south",
+                waypoints = listOf(
+                    Point2D(-40f, 1200f),
+                    Point2D(350f, 1200f),
+                    Point2D(650f, 1340f),
+                    Point2D(1050f, 1340f),
+                    Point2D(1350f, 1160f),
+                    Point2D(1700f, 1160f),
+                    Point2D(1950f, 900f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val baseMap = GameMap(
+                id = "desert_dune_bastion",
+                name = "Dune Bastion",
+                description = "Arid Desert (Hard • 15 Waves): A massive sunbaked desert with roaring desert winds and colossal stone monoliths. Enemies march along two treacherous paths. Begins with 1000 coins for defense against early and late boss rushes!",
+                environmentType = EnvironmentType.DESERT_CANYON,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathNorth, pathSouth),
+                basePosition = basePos,
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1100f, 800f),
+                defaultZoom = 0.85f,
+                totalWaves = 15,
+                missionChapter = "DESERT",
+                startingCoins = 1000,
+                difficulty = "Hard",
+                hasDesertWind = true
+            )
+
+            val decor = mutableListOf<MapDecoration>()
+
+            // Giant stone monoliths and boulder formations in northern cliffs
+            val northBigStones = listOf(
+                Point2D(200f, 140f) to 75f,
+                Point2D(500f, 110f) to 85f,
+                Point2D(850f, 120f) to 90f,
+                Point2D(1250f, 110f) to 80f,
+                Point2D(1600f, 130f) to 85f,
+                Point2D(1900f, 160f) to 70f
+            )
+            northBigStones.forEachIndexed { idx, (pos, sz) ->
+                if (baseMap.canSpawnEnvironmentObject(pos, collisionRadius = sz / 2f, roadSafetyMargin = 25f)) {
+                    decor.add(MapDecoration("dune_nboulder_$idx", DecorationType.BOULDER, pos, sz, (idx * 35f) % 360f))
+                }
+            }
+
+            // Giant stone monoliths and boulder formations in southern cliffs
+            val southBigStones = listOf(
+                Point2D(200f, 1460f) to 75f,
+                Point2D(500f, 1490f) to 85f,
+                Point2D(850f, 1480f) to 90f,
+                Point2D(1250f, 1490f) to 80f,
+                Point2D(1600f, 1470f) to 85f,
+                Point2D(1900f, 1440f) to 70f
+            )
+            southBigStones.forEachIndexed { idx, (pos, sz) ->
+                if (baseMap.canSpawnEnvironmentObject(pos, collisionRadius = sz / 2f, roadSafetyMargin = 25f)) {
+                    decor.add(MapDecoration("dune_sboulder_$idx", DecorationType.BOULDER, pos, sz, (idx * 45f) % 360f))
+                }
+            }
+
+            // Central desert plateau big stones between the two paths
+            val centralBigStones = listOf(
+                Point2D(220f, 800f) to 70f,
+                Point2D(550f, 680f) to 75f,
+                Point2D(550f, 920f) to 75f,
+                Point2D(880f, 740f) to 95f,
+                Point2D(880f, 860f) to 90f,
+                Point2D(1200f, 680f) to 80f,
+                Point2D(1200f, 920f) to 80f,
+                Point2D(1520f, 720f) to 85f,
+                Point2D(1520f, 880f) to 85f,
+                Point2D(1800f, 800f) to 65f
+            )
+            centralBigStones.forEachIndexed { idx, (pos, sz) ->
+                if (baseMap.canSpawnEnvironmentObject(pos, collisionRadius = sz / 2f, roadSafetyMargin = 25f)) {
+                    decor.add(MapDecoration("dune_cboulder_$idx", DecorationType.BOULDER, pos, sz, (idx * 55f) % 360f))
+                }
+            }
+
+            // Arid desert cacti & dry scrub
+            val desertCacti = listOf(
+                Point2D(120f, 520f),
+                Point2D(420f, 520f),
+                Point2D(780f, 480f),
+                Point2D(1120f, 480f),
+                Point2D(1500f, 320f),
+                Point2D(120f, 1080f),
+                Point2D(420f, 1080f),
+                Point2D(780f, 1120f),
+                Point2D(1120f, 1120f),
+                Point2D(1500f, 1280f),
+                Point2D(2050f, 520f),
+                Point2D(2050f, 1080f)
+            )
+            desertCacti.forEachIndexed { idx, pos ->
+                if (baseMap.canSpawnEnvironmentObject(pos, collisionRadius = 18f, roadSafetyMargin = 20f)) {
+                    decor.add(MapDecoration("dune_cactus_$idx", DecorationType.CACTUS, pos, 36f, 0f))
+                }
+            }
+
+            // Scatter destructible big stones across the desert for tactical clearing and bonus coins
+            val destructibles = mutableListOf<DestructibleObject>()
+            val candRocks = listOf(
+                Point2D(380f, 680f),
+                Point2D(380f, 920f),
+                Point2D(700f, 620f),
+                Point2D(700f, 980f),
+                Point2D(720f, 800f),
+                Point2D(1000f, 620f),
+                Point2D(1000f, 980f),
+                Point2D(1040f, 800f),
+                Point2D(1350f, 680f),
+                Point2D(1350f, 920f),
+                Point2D(1380f, 800f),
+                Point2D(1650f, 640f),
+                Point2D(1650f, 960f),
+                Point2D(1680f, 800f),
+                Point2D(480f, 260f),
+                Point2D(1250f, 260f),
+                Point2D(480f, 1340f),
+                Point2D(1250f, 1340f),
+                Point2D(1880f, 520f),
+                Point2D(1880f, 1080f),
+                Point2D(2050f, 680f),
+                Point2D(2050f, 920f)
+            )
+
+            var rId = 1
+            for (p in candRocks) {
+                if (baseMap.canSpawnEnvironmentObject(p, collisionRadius = 26f, roadSafetyMargin = 26f)) {
+                    val isLarge = (rId % 2 == 0)
+                    destructibles.add(
+                        DestructibleObject(
+                            id = "desert_bastion_stone_${rId++}",
+                            type = if (isLarge) DestructibleType.LARGE_STONE else DestructibleType.STONE,
+                            position = p,
+                            maxHp = if (isLarge) 240f else 180f,
+                            currentHp = if (isLarge) 240f else 180f,
+                            rewardTokens = if (isLarge) 30 else 20,
+                            radius = if (isLarge) 28f else 22f
+                        )
+                    )
+                }
+            }
+
+            val finalMap = baseMap.copy(
+                decorations = decor,
+                destructibles = destructibles
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
         /**
          * Defensive map validation ensuring boundaries, base presence, and path integrity.
          */
@@ -1599,7 +2376,7 @@ data class GameMap(
                 }
                 val endPoint = path.endPoint
                 val distToBase = endPoint.distanceTo(map.basePosition)
-                if (distToBase > 60f) {
+                if (distToBase > 60f && map.environmentType != EnvironmentType.TEMPEST_RAIN && map.id != "storm_twin_bastion") {
                     android.util.Log.w("GameMap", "Path ${path.id} end $endPoint does not connect to base ${map.basePosition} (distance: $distToBase)")
                 }
             }

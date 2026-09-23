@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -258,30 +259,41 @@ fun GameCanvas(
                 EnvironmentType.DRAGON_COIL -> Color(0xFF332F2B)
                 EnvironmentType.SNOW_VALLEY -> Color(0xFFDCE5EE)
                 EnvironmentType.NIGHT_FORTRESS -> Color(0xFF0F172A)
+                EnvironmentType.DAY_NIGHT -> if (gameState.currentWave <= 10) Color(0xFF4C8C2B) else Color(0xFF0A1128)
+                EnvironmentType.TEMPEST_RAIN -> Color(0xFF1E293B)
+                EnvironmentType.CLOUDY_FOREST -> Color(0xFF1E3824)
             }
             drawRect(color = envBaseColor, size = size)
 
-            // True 2D Camera Transformation
+            // True 2D Camera Transformation with dynamic screen shake
+            val shakeIntensity = gameState.screenShakeIntensity
+            val shakeOffset = if (shakeIntensity > 0f) {
+                val shakeDist = shakeIntensity * 14f
+                val shakeX = kotlin.math.sin(gameState.gameTime * 52f) * shakeDist
+                val shakeY = kotlin.math.cos(gameState.gameTime * 41f) * shakeDist
+                Offset(shakeX, shakeY)
+            } else Offset.Zero
+
             withTransform({
                 translate(
-                    left = maxWidthPx / 2f - cameraState.cameraX * cameraState.zoom,
-                    top = maxHeightPx / 2f - cameraState.cameraY * cameraState.zoom
+                    left = maxWidthPx / 2f - cameraState.cameraX * cameraState.zoom + shakeOffset.x,
+                    top = maxHeightPx / 2f - cameraState.cameraY * cameraState.zoom + shakeOffset.y
                 )
                 scale(scaleX = cameraState.zoom, scaleY = cameraState.zoom, pivot = Offset.Zero)
             }) {
                 // 1. Natural Terrain spanning the full world dimensions
-                drawNaturalTerrain(currentMap)
+                drawNaturalTerrain(currentMap, gameState.currentWave)
 
                 // 2. Water pond if present
                 drawWaterPond(currentMap, gameState.gameTime)
 
                 // 3. Roads across all paths
                 for ((gamePath, composeP) in composePaths) {
-                    drawDirtRoad(composeP, gamePath, currentMap.environmentType)
+                    drawDirtRoad(composeP, gamePath, currentMap.environmentType, gameState.currentWave)
                 }
 
                 // 4. Ground Decorations (Trees, Rocks, Bushes, Crystals, Snow Piles)
-                drawDecorations(currentMap.decorations, currentMap.environmentType)
+                drawDecorations(currentMap.decorations, currentMap.environmentType, gameState.currentWave)
 
                 // 4.5. Destructible Environment Objects (Natural trees, rocks, wooden crates)
                 drawDestructibles(
@@ -291,6 +303,17 @@ fun GameCanvas(
                     gameTime = gameState.gameTime,
                     env = currentMap.environmentType
                 )
+
+                // 4.6. Gun Placement Foundations for initial clearings or restricted spots
+                val foundationSpots = currentMap.allowedBuildSpots ?: currentMap.initialBuildClearings
+                if (foundationSpots.isNotEmpty()) {
+                    drawAllowedBuildFoundations(
+                        spots = foundationSpots,
+                        towers = gameState.towers,
+                        selectedSpot = gameState.selectedBuildPos,
+                        gameTime = gameState.gameTime
+                    )
+                }
 
                 // 5. Entrance Cave / Spawn Gate for each path
                 for (sp in currentMap.spawnPoints) {
@@ -302,16 +325,33 @@ fun GameCanvas(
                     drawTunnelPortals(gameState.currentMap.tunnelRegion!!)
                 }
 
-                // 6.5. Weather Effects: Lightweight Falling Snow in background (behind towers and enemies)
+                // 6.5. Weather Effects: Lightweight Falling Snow and Heavy Rain in background (behind towers and enemies)
                 if (currentMap.environmentType == EnvironmentType.SNOW_VALLEY) {
                     drawFallingSnowWeatherEffect(worldWidth, worldHeight, gameState.gameTime)
                 }
-                if (currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS) {
+                if (currentMap.environmentType == EnvironmentType.TEMPEST_RAIN) {
+                    drawHeavyRainWeatherEffect(worldWidth, worldHeight, gameState.gameTime)
+                }
+                if (currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS ||
+                    (currentMap.environmentType == EnvironmentType.DAY_NIGHT && gameState.currentWave > 10)
+                ) {
                     drawNightSkyAndAmbientEffects(worldWidth, worldHeight, gameState.gameTime)
+                }
+                if (currentMap.environmentType == EnvironmentType.FOREST_CROSSROADS ||
+                    currentMap.environmentType == EnvironmentType.GREEN_VALLEY ||
+                    (currentMap.environmentType == EnvironmentType.DAY_NIGHT && gameState.currentWave <= 10)
+                ) {
+                    drawForestLeavesAndWindEffect(worldWidth, worldHeight, gameState.gameTime)
+                }
+                if (currentMap.environmentType == EnvironmentType.CLOUDY_FOREST) {
+                    drawCloudyDaySkyAndShadowsEffect(worldWidth, worldHeight, gameState.gameTime)
+                }
+                if (currentMap.hasDesertWind || currentMap.id == "desert_dune_bastion") {
+                    drawDesertWindAndSandEffect(worldWidth, worldHeight, gameState.gameTime)
                 }
 
                 // 7. Player Castle Fortress Base
-                drawCastleBase(gameState.base, gameState.gameTime, currentMap.environmentType)
+                drawCastleBase(gameState.base, gameState.gameTime, currentMap.environmentType, gameState.currentWave)
 
                 // 8. Placed Defense Towers
                 drawTowers(gameState.towers, gameState.selectedExistingTower, gameState.gameTime, currentMap.environmentType)
@@ -330,9 +370,14 @@ fun GameCanvas(
                 // 12. Combat Particles & Explosions
                 drawVisualEffects(gameState.effects, currentMap.environmentType)
 
-                // 12.5. Floating bioluminescent fireflies for Night Fortress
-                if (currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS) {
+                // 12.5. Floating bioluminescent fireflies for Night Fortress and Day/Night late waves
+                if (currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS ||
+                    (currentMap.environmentType == EnvironmentType.DAY_NIGHT && gameState.currentWave > 10)
+                ) {
                     drawNightFirefliesAndGlow(worldWidth, worldHeight, gameState.gameTime)
+                }
+                if (currentMap.environmentType == EnvironmentType.TEMPEST_RAIN) {
+                    drawTempestLightningAndPuddleRipples(worldWidth, worldHeight, gameState.gameTime)
                 }
 
                 // 13. Tower Placement Preview (Legacy dragging)
@@ -499,7 +544,7 @@ fun GameCanvas(
 /**
  * Draws natural terrain tailored for each map's distinct environment.
  */
-private fun DrawScope.drawNaturalTerrain(map: GameMap) {
+private fun DrawScope.drawNaturalTerrain(map: GameMap, currentWave: Int = 1) {
     val arenaSize = Size(map.worldWidth, map.worldHeight)
 
     when (map.environmentType) {
@@ -576,6 +621,348 @@ private fun DrawScope.drawNaturalTerrain(map: GameMap) {
             // Moonlit ground clearings, dark moss, and glowing flora
             drawNightTerrainDetails(map.worldWidth, map.worldHeight)
         }
+        EnvironmentType.DAY_NIGHT -> {
+            val isNight = currentWave > 10
+            if (!isNight) {
+                // Sunlit Radiant Frontier (Day Phase - Waves 1 to 10)
+                drawRect(color = Color(0xFF5D9A38), size = arenaSize)
+                drawHillLayer(Color(0xFF6AA743), 180f, 320f, map.worldWidth)
+                drawHillLayer(Color(0xFF538C2F), 460f, 620f, map.worldWidth)
+                drawHillLayer(Color(0xFF6AA743), 780f, 960f, map.worldWidth)
+                drawHillLayer(Color(0xFF538C2F), 1100f, 1260f, map.worldWidth)
+                drawGrassTufts()
+                // Day sunlit golden gradient sweep
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0x22FBBF24),
+                            Color(0x00000000),
+                            Color(0x18F59E0B)
+                        )
+                    ),
+                    size = arenaSize
+                )
+            } else {
+                // Treacherous Midnight Realm (Night Phase - Waves 11 to 20)
+                drawRect(color = Color(0xFF0A1128), size = arenaSize)
+                drawHillLayer(Color(0xFF0E1A38), 180f, 360f, map.worldWidth)
+                drawHillLayer(Color(0xFF14244B), 520f, 720f, map.worldWidth)
+                drawHillLayer(Color(0xFF0E1A38), 900f, 1100f, map.worldWidth)
+                drawHillLayer(Color(0xFF182B56), 1280f, 1480f, map.worldWidth)
+                drawNightTerrainDetails(map.worldWidth, map.worldHeight)
+                // Midnight lunar atmospheric tint
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0x331E1B4B),
+                            Color(0x153B0764),
+                            Color(0x44020617)
+                        )
+                    ),
+                    size = arenaSize
+                )
+            }
+        }
+        EnvironmentType.TEMPEST_RAIN -> {
+            // Stormy dark bedrock / wet marshland under torrential rain
+            drawRect(color = Color(0xFF1E293B), size = arenaSize)
+            drawHillLayer(Color(0xFF0F172A), 180f, 360f, map.worldWidth)
+            drawHillLayer(Color(0xFF334155), 520f, 720f, map.worldWidth)
+            drawHillLayer(Color(0xFF0F172A), 900f, 1100f, map.worldWidth)
+            drawHillLayer(Color(0xFF1E293B), 1280f, 1480f, map.worldWidth)
+            // Rain puddles, wet mud slicks, and dark stormy gradient
+            drawTempestTerrainDetails(map.worldWidth, map.worldHeight)
+        }
+        EnvironmentType.CLOUDY_FOREST -> {
+            // Dense overcast deep emerald pine woodland
+            drawRect(color = Color(0xFF1E3824), size = arenaSize)
+            drawHillLayer(Color(0xFF152A1B), 160f, 360f, map.worldWidth)
+            drawHillLayer(Color(0xFF26462D), 500f, 720f, map.worldWidth)
+            drawHillLayer(Color(0xFF18301E), 860f, 1080f, map.worldWidth)
+            drawHillLayer(Color(0xFF2D5235), 1220f, 1440f, map.worldWidth)
+            drawCloudyForestTerrainDetails(map.worldWidth, map.worldHeight)
+        }
+    }
+}
+
+private const val RAIN_DROP_COUNT = 140
+private val RAIN_DROP_SEEDS = Array(RAIN_DROP_COUNT) { i ->
+    val rand = kotlin.random.Random(i * 3137 + 89)
+    floatArrayOf(
+        rand.nextFloat(), // 0: x seed
+        rand.nextFloat(), // 1: y seed
+        780f + rand.nextFloat() * 450f, // 2: fall speed px/sec (heavy fast downpour)
+        18f + rand.nextFloat() * 16f, // 3: streak length
+        0.35f + rand.nextFloat() * 0.40f, // 4: alpha
+        rand.nextFloat() // 5: splash seed
+    )
+}
+
+private fun DrawScope.drawHeavyRainWeatherEffect(worldWidth: Float, worldHeight: Float, gameTime: Float) {
+    // Fast slanted rain streaks (slanted with storm wind: dx = -7f)
+    val slantX = -7f
+    for (seed in RAIN_DROP_SEEDS) {
+        val xBase = seed[0] * worldWidth
+        val yBase = seed[1] * worldHeight
+        val fallSpeed = seed[2]
+        val streakLen = seed[3]
+        val alpha = seed[4]
+
+        val y = (yBase + gameTime * fallSpeed) % worldHeight
+        val x = (xBase + gameTime * 65f) % worldWidth
+
+        // Rain streak
+        drawLine(
+            color = Color(0xFFBAE6FD).copy(alpha = alpha),
+            start = Offset(x, y),
+            end = Offset(x + slantX, y + streakLen),
+            strokeWidth = 1.5f,
+            cap = StrokeCap.Round
+        )
+
+        // Ground splash ripple on lower sections
+        if (y > worldHeight * 0.25f && (seed[5] > 0.55f)) {
+            val splashProgress = (gameTime * 4.5f + seed[5] * 10f) % 1f
+            val splashR = 2.5f + splashProgress * 7.5f
+            val splashAlpha = (1f - splashProgress) * 0.40f
+            drawOval(
+                color = Color(0xFFBAE6FD).copy(alpha = splashAlpha),
+                topLeft = Offset(x - splashR, y + streakLen - splashR * 0.45f),
+                size = Size(splashR * 2f, splashR * 0.9f),
+                style = Stroke(width = 1.1f)
+            )
+        }
+    }
+}
+
+private fun DrawScope.drawTempestLightningAndPuddleRipples(worldWidth: Float, worldHeight: Float, gameTime: Float) {
+    // Atmospheric lightning flash every 6.8 seconds
+    val lightningCycle = (gameTime % 6.8f)
+    val isFlashing = (lightningCycle in 0.0f..0.12f) || (lightningCycle in 0.22f..0.30f)
+    if (isFlashing) {
+        val flashAlpha = if (lightningCycle < 0.12f) {
+            0.22f + kotlin.math.sin(gameTime * 60f) * 0.08f
+        } else {
+            0.15f
+        }
+        drawRect(
+            color = Color(0xFFBAE6FD).copy(alpha = flashAlpha.coerceIn(0f, 0.35f)),
+            size = Size(worldWidth, worldHeight)
+        )
+    }
+
+    // Heavy storm mist / rain haze across top and bottom
+    drawRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color(0x330F172A),
+                Color(0x11020617),
+                Color(0x280F172A)
+            )
+        ),
+        size = Size(worldWidth, worldHeight)
+    )
+}
+
+private fun DrawScope.drawTempestTerrainDetails(worldWidth: Float, worldHeight: Float) {
+    // Wet mud patches, rain puddles, storm craters
+    val puddleColor = Color(0x660EA5E9)
+    val puddleBorder = Color(0xAA38BDF8)
+
+    // Standing water rain puddles reflecting storm sky
+    val puddles = listOf(
+        Offset(380f, 850f) to Size(110f, 50f),
+        Offset(820f, 580f) to Size(130f, 55f),
+        Offset(820f, 1180f) to Size(125f, 52f),
+        Offset(1680f, 420f) to Size(100f, 45f),
+        Offset(1680f, 1380f) to Size(105f, 48f),
+        Offset(2100f, 880f) to Size(140f, 60f)
+    )
+
+    for ((pos, sz) in puddles) {
+        drawOval(color = Color(0x44020617), topLeft = Offset(pos.x - 3f, pos.y - 2f), size = Size(sz.width + 6f, sz.height + 4f))
+        drawOval(color = puddleColor, topLeft = pos, size = sz)
+        drawOval(color = puddleBorder, topLeft = pos, size = sz, style = Stroke(width = 1.5f))
+        // Reflective water sheen highlight
+        drawOval(
+            color = Color(0x33FFFFFF),
+            topLeft = Offset(pos.x + sz.width * 0.2f, pos.y + sz.height * 0.2f),
+            size = Size(sz.width * 0.5f, sz.height * 0.35f)
+        )
+    }
+}
+
+private fun DrawScope.drawCloudyForestTerrainDetails(worldWidth: Float, worldHeight: Float) {
+    // Rich moss patches, ancient loam mounds, and damp woodland glades
+    val mossColor = Color(0x3510B981)
+    val darkSoilColor = Color(0x280B1B0F)
+
+    val mossPatches = listOf(
+        Offset(320f, 400f) to Size(140f, 75f),
+        Offset(550f, 950f) to Size(180f, 90f),
+        Offset(920f, 420f) to Size(160f, 85f),
+        Offset(1250f, 1020f) to Size(150f, 80f),
+        Offset(1550f, 480f) to Size(170f, 95f),
+        Offset(1800f, 1100f) to Size(190f, 100f)
+    )
+
+    for ((pos, sz) in mossPatches) {
+        drawOval(color = darkSoilColor, topLeft = Offset(pos.x - 6f, pos.y - 4f), size = Size(sz.width + 12f, sz.height + 8f))
+        drawOval(color = mossColor, topLeft = pos, size = sz)
+        drawOval(
+            color = Color(0x1A34D399),
+            topLeft = Offset(pos.x + sz.width * 0.25f, pos.y + sz.height * 0.25f),
+            size = Size(sz.width * 0.5f, sz.height * 0.5f)
+        )
+    }
+}
+
+private fun DrawScope.drawAllowedBuildFoundations(
+    spots: List<Point2D>,
+    towers: List<Tower>,
+    selectedSpot: Point2D?,
+    gameTime: Float
+) {
+    spots.forEachIndexed { index, spot ->
+        val hasTower = towers.any { it.position.distanceTo(spot) < 32f }
+        val isSelected = selectedSpot != null && selectedSpot.distanceTo(spot) < 32f
+        val pulse = (kotlin.math.sin(gameTime * 4f) * 0.5f + 0.5f)
+
+        val center = Offset(spot.x, spot.y)
+        val outerRadius = 36f
+
+        // 1. Foundation outer stone base shadow
+        drawCircle(
+            color = Color(0x55020617),
+            radius = outerRadius + 5f,
+            center = Offset(center.x, center.y + 4f)
+        )
+
+        // 2. Fortified octagonal stone platform
+        val sides = 8
+        val outerPath = Path().apply {
+            for (i in 0 until sides) {
+                val angle = (i * 2 * Math.PI / sides) - Math.PI / 8
+                val px = (center.x + kotlin.math.cos(angle) * outerRadius).toFloat()
+                val py = (center.y + kotlin.math.sin(angle) * outerRadius).toFloat()
+                if (i == 0) moveTo(px, py) else lineTo(px, py)
+            }
+            close()
+        }
+        drawPath(path = outerPath, color = Color(0xFF334155))
+        drawPath(path = outerPath, color = Color(0xFF64748B), style = Stroke(width = 2.5f))
+
+        // 3. Inner metallic mount circle
+        drawCircle(
+            color = Color(0xFF1E293B),
+            radius = 26f,
+            center = center
+        )
+        drawCircle(
+            color = if (isSelected) Color(0xFF38BDF8) else Color(0xFF475569),
+            radius = 26f,
+            center = center,
+            style = Stroke(width = 2f)
+        )
+
+        // 4. Corner heavy industrial bolts
+        for (i in 0 until 4) {
+            val angle = i * Math.PI / 2 + Math.PI / 4
+            val bx = (center.x + kotlin.math.cos(angle) * 30f).toFloat()
+            val by = (center.y + kotlin.math.sin(angle) * 30f).toFloat()
+            drawCircle(color = Color(0xFF94A3B8), radius = 2.5f, center = Offset(bx, by))
+        }
+
+        if (!hasTower) {
+            // Turret crosshair indicator
+            val crosshairLen = 14f
+            val crossColor = if (isSelected) Color(0xFF34D399) else Color(0xAA10B981)
+            drawLine(
+                color = crossColor,
+                start = Offset(center.x - crosshairLen, center.y),
+                end = Offset(center.x + crosshairLen, center.y),
+                strokeWidth = 2f
+            )
+            drawLine(
+                color = crossColor,
+                start = Offset(center.x, center.y - crosshairLen),
+                end = Offset(center.x, center.y + crosshairLen),
+                strokeWidth = 2f
+            )
+            drawCircle(
+                color = crossColor,
+                radius = 12f,
+                center = center,
+                style = Stroke(width = 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 4f)))
+            )
+
+            // Animated pulsing beacon if empty
+            val beaconRadius = 32f + pulse * 10f
+            val beaconAlpha = (1f - pulse) * 0.7f
+            drawCircle(
+                color = (if (isSelected) Color(0xFF38BDF8) else Color(0xFF34D399)).copy(alpha = beaconAlpha),
+                radius = beaconRadius,
+                center = center,
+                style = Stroke(width = 2.5f)
+            )
+        }
+    }
+}
+
+private fun DrawScope.drawCloudyDaySkyAndShadowsEffect(worldWidth: Float, worldHeight: Float, gameTime: Float) {
+    // 1. Soft overcast daylight tint across entire arena
+    drawRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color(0x18A7F3D0), // Cool diffuse daylight
+                Color(0x0C38BDF8),
+                Color(0x200F172A)  // Canopy gloom
+            )
+        ),
+        size = Size(worldWidth, worldHeight)
+    )
+
+    // 2. Large organic soft cloud shadows drifting slowly northeast
+    val cloudCount = 6
+    val windSpeedX = 22f
+    val windSpeedY = -8f
+    for (i in 0 until cloudCount) {
+        val seed = i * 283.7f
+        val origX = (seed * 11f) % worldWidth
+        val origY = (seed * 17f) % worldHeight
+
+        val curX = (origX + gameTime * windSpeedX) % (worldWidth + 400f) - 200f
+        val curY = (origY + gameTime * windSpeedY) % (worldHeight + 400f) - 200f
+
+        val cloudW = 280f + (i % 3) * 90f
+        val cloudH = 160f + (i % 2) * 60f
+
+        drawOval(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color(0x38091410), // Soft dark cloud shadow center
+                    Color(0x22091410),
+                    Color(0x00000000)  // Feathered edge
+                ),
+                center = Offset(curX + cloudW * 0.5f, curY + cloudH * 0.5f),
+                radius = cloudW * 0.5f
+            ),
+            topLeft = Offset(curX, curY),
+            size = Size(cloudW, cloudH)
+        )
+    }
+
+    // 3. Gentle drifting forest mist wisps near tree level
+    val mistCount = 10
+    for (i in 0 until mistCount) {
+        val mx = ((i * 311f + gameTime * 14f) % worldWidth)
+        val my = ((i * 197f + kotlin.math.sin(gameTime * 0.4f + i) * 20f) % worldHeight)
+        val mistAlpha = (kotlin.math.sin(gameTime * 0.8f + i * 1.5f) * 0.5f + 0.5f) * 0.12f + 0.05f
+        drawOval(
+            color = Color(0xFFE2E8F0).copy(alpha = mistAlpha),
+            topLeft = Offset(mx, my),
+            size = Size(180f, 40f)
+        )
     }
 }
 
@@ -610,6 +997,145 @@ private fun DrawScope.drawFallingSnowWeatherEffect(worldWidth: Float, worldHeigh
             radius = radius,
             center = Offset(x, y)
         )
+    }
+
+    // Dynamic cold wind gust trails across the snow valley
+    val windPhase = gameTime * 0.45f
+    for (w in 0..3) {
+        val wy = (w * 0.26f * worldHeight + kotlin.math.sin(windPhase + w.toFloat()) * 35f) % worldHeight
+        val wx = (gameTime * (140f + w * 25f) + w * 320f) % (worldWidth + 200f) - 100f
+        val wLen = 65f + w * 18f
+        val wAlpha = (0.12f + kotlin.math.sin(gameTime * 1.8f + w.toFloat()) * 0.06f).coerceIn(0.04f, 0.22f)
+        drawLine(
+            color = Color.White.copy(alpha = wAlpha),
+            start = Offset(wx, wy),
+            end = Offset(wx + wLen, wy + kotlin.math.sin(wx * 0.02f) * 6f),
+            strokeWidth = 1.6f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+private val LEAF_COUNT = 36
+private val LEAF_SEEDS = Array(LEAF_COUNT) { i ->
+    val rand = kotlin.random.Random(i * 7919 + 17)
+    floatArrayOf(
+        rand.nextFloat(), // x seed
+        rand.nextFloat(), // y seed
+        32f + rand.nextFloat() * 40f, // drift speed px/sec
+        0.9f + rand.nextFloat() * 1.2f, // sway speed
+        3.5f + rand.nextFloat() * 2.5f, // length
+        rand.nextFloat() // color index seed
+    )
+}
+
+private fun DrawScope.drawForestLeavesAndWindEffect(worldWidth: Float, worldHeight: Float, gameTime: Float) {
+    // Gentle floating leaves fluttering with wind currents
+    for (seed in LEAF_SEEDS) {
+        val xBase = seed[0] * worldWidth
+        val yBase = seed[1] * worldHeight
+        val fallSpeed = seed[2]
+        val swaySpeed = seed[3]
+        val leafSize = seed[4]
+        val colorSeed = seed[5]
+
+        val y = (yBase + gameTime * fallSpeed) % worldHeight
+        val sway = kotlin.math.sin(gameTime * swaySpeed + seed[0] * 12f) * 28f
+        val x = (xBase + sway + gameTime * 22f) % worldWidth
+
+        val leafColor = when {
+            colorSeed > 0.65f -> Color(0xFFD97706).copy(alpha = 0.65f) // Golden amber
+            colorSeed > 0.35f -> Color(0xFF65A30D).copy(alpha = 0.60f) // Bright leaf green
+            else -> Color(0xFF15803D).copy(alpha = 0.55f) // Deep forest green
+        }
+
+        rotate(degrees = (gameTime * 45f + seed[0] * 360f) % 360f, pivot = Offset(x, y)) {
+            drawOval(
+                color = leafColor,
+                topLeft = Offset(x - leafSize, y - leafSize * 0.5f),
+                size = Size(leafSize * 2f, leafSize)
+            )
+            drawLine(
+                color = Color.White.copy(alpha = 0.35f),
+                start = Offset(x - leafSize * 0.8f, y),
+                end = Offset(x + leafSize * 0.8f, y),
+                strokeWidth = 0.8f
+            )
+        }
+    }
+}
+
+/**
+ * Atmospheric desert wind, drifting sand ribbons, blowing dust motes, and whirling desert devils.
+ */
+private fun DrawScope.drawDesertWindAndSandEffect(worldWidth: Float, worldHeight: Float, gameTime: Float) {
+    // 1. Long horizontal desert wind ribbons drifting across the desert dunes
+    val windRibbons = listOf(
+        Triple(0.18f, 180f, 450f),
+        Triple(0.38f, 240f, 550f),
+        Triple(0.55f, 210f, 400f),
+        Triple(0.72f, 260f, 600f),
+        Triple(0.88f, 190f, 480f)
+    )
+    for ((yFrac, speed, ribbonLen) in windRibbons) {
+        val yBase = yFrac * worldHeight
+        val yWaving = yBase + kotlin.math.sin(gameTime * 2.2f + yFrac * 10f) * 35f
+        val xHead = (gameTime * speed + yFrac * worldWidth * 1.5f) % (worldWidth + ribbonLen + 100f) - ribbonLen
+
+        val path = Path().apply {
+            moveTo(xHead, yWaving)
+            cubicTo(
+                xHead + ribbonLen * 0.35f, yWaving - 18f,
+                xHead + ribbonLen * 0.70f, yWaving + 18f,
+                xHead + ribbonLen, yWaving
+            )
+        }
+        drawPath(
+            path = path,
+            color = Color(0xFFFDE68A).copy(alpha = 0.20f),
+            style = Stroke(
+                width = 3.5f,
+                cap = StrokeCap.Round
+            )
+        )
+    }
+
+    // 2. Swirling sand particles / blowing dust wisps swept by wind gusts
+    for (i in 0 until 42) {
+        val seed = (i * 263 % 1000) / 1000f
+        val speed = 220f + (i % 7) * 45f
+        val x = (seed * worldWidth + gameTime * speed) % worldWidth
+        val ySway = kotlin.math.sin(gameTime * 3.5f + i) * 22f
+        val y = (seed * worldHeight + ySway + gameTime * 15f) % worldHeight
+        val radius = if (i % 4 == 0) 2.6f else 1.6f
+        val color = if (i % 3 == 0) Color(0xFFFBBF24).copy(alpha = 0.45f) else Color(0xFFD97706).copy(alpha = 0.35f)
+        drawCircle(
+            color = color,
+            radius = radius,
+            center = Offset(x, y)
+        )
+    }
+
+    // 3. Mini swirling dust devils in open desert expanses
+    val dustDevils = listOf(
+        Pair(worldWidth * 0.28f, worldHeight * 0.48f),
+        Pair(worldWidth * 0.75f, worldHeight * 0.68f)
+    )
+    for ((ddX, ddY) in dustDevils) {
+        val swirlProgress = (gameTime * 4.0f) % (Math.PI * 2).toFloat()
+        val driftX = ddX + kotlin.math.sin(gameTime * 0.8f) * 60f
+        val driftY = ddY + kotlin.math.cos(gameTime * 0.8f) * 30f
+        for (ring in 1..3) {
+            val ringR = ring * 14f
+            val ringAngle = swirlProgress + ring * 1.2f
+            val px = driftX + kotlin.math.cos(ringAngle) * ringR
+            val py = driftY + kotlin.math.sin(ringAngle) * (ringR * 0.55f)
+            drawCircle(
+                color = Color(0xFFFDE047).copy(alpha = 0.30f / ring),
+                radius = 2.2f,
+                center = Offset(px, py)
+            )
+        }
     }
 }
 
@@ -1089,6 +1615,29 @@ private fun DrawScope.drawWaterPond(map: GameMap, time: Float) {
         return
     }
 
+    if (map.environmentType == EnvironmentType.TEMPEST_RAIN) {
+        // Storm-swollen dark lake with torrential rain impact ripples
+        drawCircle(color = Color(0xFF0F172A), radius = r + 14f, center = pondOffset)
+        drawCircle(color = Color(0xFF1E293B), radius = r + 8f, center = pondOffset)
+
+        // Dark stormy water body
+        drawCircle(color = Color(0xFF03223F), radius = r, center = pondOffset)
+        drawCircle(color = Color(0xFF073860), radius = r * 0.85f, center = pondOffset)
+        drawCircle(color = Color(0xFF0C4A7A), radius = r * 0.6f, center = pondOffset)
+
+        // Multiple vigorous rain disturbance ripples radiating outward
+        for (i in 0..2) {
+            val rippleP = ((time * 0.75f + i * 0.33f) % 1f)
+            drawCircle(
+                color = Color(0xFF38BDF8).copy(alpha = (1f - rippleP) * 0.55f),
+                radius = r * (0.15f + rippleP * 0.82f),
+                center = pondOffset,
+                style = Stroke(width = 2.0f)
+            )
+        }
+        return
+    }
+
     // Sandy / earthen shore rim
     drawCircle(color = Color(0xFFB0824E), radius = r + 14f, center = pondOffset)
     drawCircle(color = Color(0xFFC79E68), radius = r + 8f, center = pondOffset)
@@ -1283,7 +1832,7 @@ private fun DrawScope.drawTunnelCavernCanopy(tunnel: TunnelRegion, time: Float) 
     drawCircle(color = Color(0xFFE2E8F0), radius = 20f, center = Offset(left + width / 2f, top + height / 2f), style = Stroke(width = 2f))
 }
 
-private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath, env: EnvironmentType) {
+private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath, env: EnvironmentType, currentWave: Int = 1) {
     val (shadowColor, shoulderColor, roadColor, wagonColor, pebbleColor) = when (env) {
         EnvironmentType.GREEN_VALLEY -> listOf(Color(0xFF38230F), Color(0xFF8B5E34), Color(0xFFBC8A5F), Color(0x446F4E37), Color(0xFFD4A373))
         EnvironmentType.DESERT_CANYON -> listOf(Color(0xFF4A2810), Color(0xFF9C5221), Color(0xFFD68947), Color(0x44783815), Color(0xFFE8B27A))
@@ -1292,6 +1841,25 @@ private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath, env: Envir
         EnvironmentType.DRAGON_COIL -> listOf(Color(0xFF141210), Color(0xFF3E3A36), Color(0xFF6E6760), Color(0x449E978E), Color(0xFF9E978E))
         EnvironmentType.SNOW_VALLEY -> listOf(Color(0xFFCBD5E1), Color(0xFF94A3B8), Color(0xFF475569), Color(0x88BAE6FD), Color(0xFFE2E8F0))
         EnvironmentType.NIGHT_FORTRESS -> listOf(Color(0xFF070C16), Color(0xFF1E293B), Color(0xFF334155), Color(0x6638BDF8), Color(0xFF64748B))
+        EnvironmentType.DAY_NIGHT -> if (currentWave <= 10) {
+            listOf(Color(0xFF38230F), Color(0xFF8B5E34), Color(0xFFBC8A5F), Color(0x446F4E37), Color(0xFFD4A373))
+        } else {
+            listOf(Color(0xFF070C16), Color(0xFF1E293B), Color(0xFF334155), Color(0x6638BDF8), Color(0xFF64748B))
+        }
+        EnvironmentType.TEMPEST_RAIN -> listOf(
+            Color(0xFF070C16),
+            Color(0xFF1E293B),
+            Color(0xFF334155),
+            Color(0x6638BDF8),
+            Color(0xFF64748B)
+        )
+        EnvironmentType.CLOUDY_FOREST -> listOf(
+            Color(0xFF140F0A),
+            Color(0xFF3B2B1B),
+            Color(0xFF5D4834),
+            Color(0x442B1C10),
+            Color(0xFF7A644D)
+        )
     }
 
     // 1. Natural road trench / ditch shadow
@@ -1349,8 +1917,9 @@ private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath, env: Envir
         drawCircle(color = shadowColor.copy(alpha = 0.4f), radius = 2.5f, center = Offset(midX - 8f, midY + 6f))
     }
 
-    // 6. Night Fortress glowing markers and moonlit borders
-    if (env == EnvironmentType.NIGHT_FORTRESS) {
+    // 6. Night Fortress & Tempest Rain wet road edge highlights
+    val isNightRoad = env == EnvironmentType.NIGHT_FORTRESS || (env == EnvironmentType.DAY_NIGHT && currentWave > 10) || env == EnvironmentType.TEMPEST_RAIN
+    if (isNightRoad) {
         // Moonlit path edge highlights
         drawPath(
             path = composePath,
@@ -1371,7 +1940,8 @@ private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath, env: Envir
     }
 }
 
-private fun DrawScope.drawDecorations(decorations: List<MapDecoration>, env: EnvironmentType = EnvironmentType.GREEN_VALLEY) {
+private fun DrawScope.drawDecorations(decorations: List<MapDecoration>, env: EnvironmentType = EnvironmentType.GREEN_VALLEY, currentWave: Int = 1) {
+    val isNightMode = env == EnvironmentType.NIGHT_FORTRESS || (env == EnvironmentType.DAY_NIGHT && currentWave > 10)
     for (d in decorations) {
         val center = Offset(d.position.x, d.position.y)
 
@@ -1405,7 +1975,7 @@ private fun DrawScope.drawDecorations(decorations: List<MapDecoration>, env: Env
                 if (env == EnvironmentType.SNOW_VALLEY) {
                     drawCircle(color = Color(0xFFF1F5F9), radius = d.size * 0.25f, center = Offset(center.x - 3f, center.y - 12f))
                     drawCircle(color = Color(0xFFCBD5E1), radius = d.size * 0.18f, center = Offset(center.x + 4f, center.y - 14f))
-                } else if (env == EnvironmentType.NIGHT_FORTRESS) {
+                } else if (isNightMode) {
                     // Moonlit edge highlight on canopy
                     drawCircle(color = Color(0x66BAE6FD), radius = d.size * 0.28f, center = Offset(center.x - 4f, center.y - 14f))
                 }
@@ -1426,7 +1996,7 @@ private fun DrawScope.drawDecorations(decorations: List<MapDecoration>, env: Env
                     drawPineSnowTier(center.x, center.y + 11f, d.size * 0.40f)
                     drawPineSnowTier(center.x, center.y - 4f, d.size * 0.32f)
                     drawPineSnowTier(center.x, center.y - 20f, d.size * 0.22f)
-                } else if (env == EnvironmentType.NIGHT_FORTRESS) {
+                } else if (isNightMode) {
                     // Moonlit crests on pine tiers
                     drawCircle(color = Color(0x55BAE6FD), radius = d.size * 0.18f, center = Offset(center.x - 2f, center.y - 20f))
                 }
@@ -1657,7 +2227,235 @@ private fun DrawScope.drawSpawnGate(start: Point2D, worldWidth: Float, worldHeig
     drawCircle(color = Color(0xFFFFD166), radius = 2.5f, center = Offset(center.x + 22f, center.y - 19f))
 }
 
-private fun DrawScope.drawCastleBase(base: Base, gameTime: Float, env: EnvironmentType = EnvironmentType.GREEN_VALLEY) {
+private fun DrawScope.drawTempestTwinBastions(base: Base, gameTime: Float) {
+    val cx = base.position.x
+    val cy = base.position.y
+    val northTowerCenter = Offset(cx, cy - 280f)
+    val southTowerCenter = Offset(cx, cy + 280f)
+
+    // 1. Heavy Stone Rampart Curtain Wall connecting North Tower to South Tower
+    // Wall shadow
+    drawRoundRect(
+        color = Color(0x66000000),
+        topLeft = Offset(cx - 36f + 8f, cy - 280f + 10f),
+        size = Size(72f, 560f),
+        cornerRadius = CornerRadius(16f, 16f)
+    )
+    // Wall base stone
+    drawRoundRect(
+        color = Color(0xFF1E293B),
+        topLeft = Offset(cx - 36f, cy - 280f),
+        size = Size(72f, 560f),
+        cornerRadius = CornerRadius(12f, 12f)
+    )
+    drawRoundRect(
+        color = Color(0xFF334155),
+        topLeft = Offset(cx - 30f, cy - 275f),
+        size = Size(60f, 550f),
+        cornerRadius = CornerRadius(8f, 8f)
+    )
+    // Wall stone texture lines
+    for (step in 0..14) {
+        val yLine = cy - 260f + step * 36f
+        drawLine(
+            color = Color(0xFF0F172A),
+            start = Offset(cx - 30f, yLine),
+            end = Offset(cx + 30f, yLine),
+            strokeWidth = 2f
+        )
+    }
+
+    // 2. Render North Bastion Tower and South Bastion Tower
+    fun drawBastionTower(center: Offset, isNorth: Boolean) {
+        val r = 52f
+        // Tower drop shadow
+        drawCircle(color = Color(0x66000000), radius = r + 4f, center = Offset(center.x + 6f, center.y + 8f))
+
+        // Outer fortress drum
+        drawCircle(color = Color(0xFF0F172A), radius = r, center = center)
+        drawCircle(color = Color(0xFF1E293B), radius = r - 3f, center = center)
+        drawCircle(color = Color(0xFF334155), radius = r - 8f, center = center)
+        drawCircle(color = Color(0xFF475569), radius = r - 15f, center = center)
+
+        // Crenelated wall teeth
+        for (i in 0..7) {
+            val angle = i * (kotlin.math.PI.toFloat() * 2f / 8f)
+            val tx = center.x + kotlin.math.cos(angle) * (r - 4f)
+            val ty = center.y + kotlin.math.sin(angle) * (r - 4f)
+            drawCircle(color = Color(0xFF0F172A), radius = 5.5f, center = Offset(tx, ty))
+            drawCircle(color = Color(0xFF64748B), radius = 3.5f, center = Offset(tx, ty))
+        }
+
+        // West-facing Fortified Iron Portcullis Gate (where enemies approach)
+        val gateW = 28f
+        val gateH = 34f
+        val gateX = center.x - r - 4f
+        val gateY = center.y - gateH / 2f
+        drawRoundRect(
+            color = Color(0xFF020617),
+            topLeft = Offset(gateX, gateY),
+            size = Size(gateW, gateH),
+            cornerRadius = CornerRadius(6f, 6f)
+        )
+        // Iron gate bars
+        for (b in 1..3) {
+            val bx = gateX + b * (gateW / 4f)
+            drawLine(
+                color = Color(0xFF94A3B8),
+                start = Offset(bx, gateY + 3f),
+                end = Offset(bx, gateY + gateH - 3f),
+                strokeWidth = 2.2f
+            )
+        }
+        for (b in 1..2) {
+            val by = gateY + b * (gateH / 3f)
+            drawLine(
+                color = Color(0xFF64748B),
+                start = Offset(gateX + 2f, by),
+                end = Offset(gateX + gateW - 2f, by),
+                strokeWidth = 2.0f
+            )
+        }
+
+        // Tall copper lightning rod with electric storm spark
+        val rodLen = 32f
+        val rodTop = Offset(center.x, center.y - rodLen)
+        drawLine(color = Color(0xFFD97706), start = center, end = rodTop, strokeWidth = 3f, cap = StrokeCap.Round)
+        drawLine(color = Color(0xFFFBBF24), start = Offset(center.x, center.y - 10f), end = rodTop, strokeWidth = 1.5f, cap = StrokeCap.Round)
+
+        // Sparking electric plasma ball at tip of rod
+        val sparkPulse = (kotlin.math.sin(gameTime * 14f + if (isNorth) 0f else 3.14f) * 0.5f + 0.5f) * 4f
+        drawCircle(color = Color(0x6638BDF8), radius = 10f + sparkPulse, center = rodTop)
+        drawCircle(color = Color(0xFF38BDF8), radius = 4f + sparkPulse * 0.5f, center = rodTop)
+        drawCircle(color = Color.White, radius = 2f, center = rodTop)
+
+        // Glowing cyan storm brazier lights on tower deck
+        val brazierGlow = (kotlin.math.sin(gameTime * 8f + if (isNorth) 1f else 2f) * 0.5f + 0.5f) * 2f
+        drawCircle(color = Color(0x880284C7), radius = 6f + brazierGlow, center = Offset(center.x + 12f, center.y))
+        drawCircle(color = Color(0xFF38BDF8), radius = 3f, center = Offset(center.x + 12f, center.y))
+        drawCircle(color = Color(0x880284C7), radius = 6f + brazierGlow, center = Offset(center.x - 12f, center.y))
+        drawCircle(color = Color(0xFF38BDF8), radius = 3f, center = Offset(center.x - 12f, center.y))
+    }
+
+    drawBastionTower(northTowerCenter, isNorth = true)
+    drawBastionTower(southTowerCenter, isNorth = false)
+
+    // 3. Central Command Citadel at (cx, cy)
+    val keepW = base.width
+    val keepH = base.height
+    val keepLeft = cx - keepW / 2f
+    val keepTop = cy - keepH / 2f
+
+    // Citadel drop shadow
+    drawRoundRect(
+        color = Color(0x66000000),
+        topLeft = Offset(keepLeft + 8f, keepTop + 12f),
+        size = Size(keepW, keepH),
+        cornerRadius = CornerRadius(16f, 16f)
+    )
+    // Citadel main keep
+    drawRoundRect(
+        color = Color(0xFF0F172A),
+        topLeft = Offset(keepLeft, keepTop),
+        size = Size(keepW, keepH),
+        cornerRadius = CornerRadius(14f, 14f)
+    )
+    drawRoundRect(
+        color = Color(0xFF1E293B),
+        topLeft = Offset(keepLeft + 3f, keepTop + 3f),
+        size = Size(keepW - 6f, keepH - 6f),
+        cornerRadius = CornerRadius(12f, 12f)
+    )
+    drawRoundRect(
+        color = Color(0xFF334155),
+        topLeft = Offset(keepLeft + 8f, keepTop + 8f),
+        size = Size(keepW - 16f, keepH - 16f),
+        cornerRadius = CornerRadius(10f, 10f)
+    )
+
+    // Central Citadel Roof Battlements
+    val numBattles = 5
+    val bWidth = (keepW - 12f) / numBattles
+    for (i in 0 until numBattles step 2) {
+        val bx = keepLeft + 6f + i * bWidth
+        drawRoundRect(
+            color = Color(0xFF0F172A),
+            topLeft = Offset(bx, keepTop - 7f),
+            size = Size(bWidth, 9f),
+            cornerRadius = CornerRadius(3f, 3f)
+        )
+        drawRoundRect(
+            color = Color(0xFF475569),
+            topLeft = Offset(bx + 1.5f, keepTop - 5.5f),
+            size = Size(bWidth - 3f, 6.5f),
+            cornerRadius = CornerRadius(2f, 2f)
+        )
+    }
+
+    // Grand Storm Defense Banners
+    val flagX = cx
+    val flagPoleTop = keepTop - 36f
+    drawLine(color = Color(0xFF94A3B8), start = Offset(flagX, keepTop), end = Offset(flagX, flagPoleTop), strokeWidth = 3f)
+    drawCircle(Color(0xFFFBBF24), radius = 3.5f, center = Offset(flagX, flagPoleTop))
+    val wave = kotlin.math.sin(gameTime * 9f) * 3f
+    val banner = Path().apply {
+        moveTo(flagX, flagPoleTop + 4f)
+        cubicTo(flagX + 12f, flagPoleTop + 4f + wave, flagX + 22f, flagPoleTop + 7f - wave, flagX + 32f, flagPoleTop + 10f + wave * 0.5f)
+        lineTo(flagX + 26f, flagPoleTop + 22f)
+        cubicTo(flagX + 18f, flagPoleTop + 19f - wave * 0.5f, flagX + 10f, flagPoleTop + 16f + wave, flagX, flagPoleTop + 16f)
+        close()
+    }
+    drawPath(banner, Color(0xFF0284C7))
+    drawCircle(Color(0xFF38BDF8), radius = 2.5f, center = Offset(flagX + 14f, flagPoleTop + 11f))
+
+    // 4. Central Fortress Health Bar directly above the Citadel
+    val barW = keepW + 20f
+    val barH = 10f
+    val barTop = keepTop - 46f
+    val barLeft = cx - barW / 2f
+
+    // Dark slate stone frame
+    drawRoundRect(
+        color = Color(0xEE0F172A),
+        topLeft = Offset(barLeft - 2f, barTop - 2f),
+        size = Size(barW + 4f, barH + 4f),
+        cornerRadius = CornerRadius(4f, 4f)
+    )
+    drawRoundRect(
+        color = Color(0xFF38BDF8),
+        topLeft = Offset(barLeft - 2f, barTop - 2f),
+        size = Size(barW + 4f, barH + 4f),
+        cornerRadius = CornerRadius(4f, 4f),
+        style = Stroke(width = 1.2f)
+    )
+    drawRoundRect(
+        color = Color(0xFF450A0A),
+        topLeft = Offset(barLeft, barTop),
+        size = Size(barW, barH),
+        cornerRadius = CornerRadius(3f, 3f)
+    )
+    val hpFillColor = when {
+        base.healthPercentage > 0.5f -> Color(0xFF22C55E)
+        base.healthPercentage > 0.25f -> Color(0xFFF59E0B)
+        else -> Color(0xFFEF4444)
+    }
+    val fillWidth = (barW * base.healthPercentage).coerceAtLeast(0f)
+    if (fillWidth > 0f) {
+        drawRoundRect(
+            color = hpFillColor,
+            topLeft = Offset(barLeft, barTop),
+            size = Size(fillWidth, barH),
+            cornerRadius = CornerRadius(3f, 3f)
+        )
+    }
+}
+
+private fun DrawScope.drawCastleBase(base: Base, gameTime: Float, env: EnvironmentType = EnvironmentType.GREEN_VALLEY, currentWave: Int = 1) {
+    if (env == EnvironmentType.TEMPEST_RAIN) {
+        drawTempestTwinBastions(base, gameTime)
+        return
+    }
+    val isNightMode = env == EnvironmentType.NIGHT_FORTRESS || (env == EnvironmentType.DAY_NIGHT && currentWave > 10)
     val left = base.position.x - base.width / 2f
     val top = base.position.y - base.height / 2f
     val cx = base.position.x
@@ -1723,7 +2521,7 @@ private fun DrawScope.drawCastleBase(base: Base, gameTime: Float, env: Environme
         drawCircle(color = Color(0x44F59E0B), radius = 13f - brazierPulse, center = rightTowerCenter)
         drawCircle(color = Color(0xFFF59E0B), radius = 4f, center = rightTowerCenter)
         drawCircle(color = Color(0xFFFEF08A), radius = 2f, center = rightTowerCenter)
-    } else if (env == EnvironmentType.NIGHT_FORTRESS) {
+    } else if (isNightMode) {
         // Glowing night defense beacons on Bastion Towers
         val beaconPulse = (kotlin.math.sin(gameTime * 8f) * 0.5f + 0.5f) * 4f
         drawCircle(color = Color(0x5538BDF8), radius = 15f + beaconPulse, center = leftTowerCenter)
@@ -1790,7 +2588,7 @@ private fun DrawScope.drawCastleBase(base: Base, gameTime: Float, env: Environme
                 size = Size(bWidth, 4f),
                 cornerRadius = CornerRadius(2f, 2f)
             )
-        } else if (env == EnvironmentType.NIGHT_FORTRESS) {
+        } else if (isNightMode) {
             // Moonlit specular rim along battlement top
             drawRect(
                 color = Color(0xFF93C5FD),
@@ -1801,7 +2599,7 @@ private fun DrawScope.drawCastleBase(base: Base, gameTime: Float, env: Environme
     }
 
     // 4.5. Citadel Arched Stained-Glass / Warm Windows in Night Fortress
-    if (env == EnvironmentType.NIGHT_FORTRESS) {
+    if (isNightMode) {
         val winY = top + 14f
         val winW = 8f
         val winH = 14f
@@ -2399,10 +3197,34 @@ private fun DrawScope.drawCannonTower(center: Offset, tower: Tower) {
             }
         }
 
-        // Breech block counterweight dome
-        drawCircle(color = Color(0xFF0F172A), radius = 11f, center = Offset(center.x - 5f, center.y))
-        drawCircle(color = Color(0xFF334155), radius = 9f, center = Offset(center.x - 5f, center.y))
-        drawCircle(color = Color(0xFF94A3B8), radius = 3f, center = Offset(center.x - 7f, center.y - 2f))
+        // Breech block counterweight dome & Reload mechanism
+        val reloadFrac = (1f - (tower.cooldownTimer / tower.spec.attackCooldown)).coerceIn(0f, 1f)
+        val breechSlide = if (tower.cooldownTimer > 0f && !tower.isFiring) {
+            val openFrac = kotlin.math.sin(reloadFrac * Math.PI.toFloat())
+            openFrac * 6f
+        } else 0f
+
+        drawCircle(color = Color(0xFF0F172A), radius = 11f, center = Offset(center.x - 5f - breechSlide, center.y))
+        drawCircle(color = Color(0xFF334155), radius = 9f, center = Offset(center.x - 5f - breechSlide, center.y))
+        drawCircle(color = Color(0xFF94A3B8), radius = 3f, center = Offset(center.x - 7f - breechSlide, center.y - 2f))
+
+        // Reload action: wisp of smoke from open breech and chambering artillery shell
+        if (tower.cooldownTimer > 0f && !tower.isFiring) {
+            if (reloadFrac < 0.45f) {
+                val smokeAlpha = (1f - reloadFrac * 2.2f).coerceIn(0f, 0.65f)
+                drawCircle(color = Color(0xFF94A3B8).copy(alpha = smokeAlpha), radius = 3.5f + reloadFrac * 6f, center = Offset(center.x - 14f - breechSlide, center.y - 1f))
+            } else if (reloadFrac in 0.45f..0.85f) {
+                val shellProgress = ((reloadFrac - 0.45f) / 0.40f).coerceIn(0f, 1f)
+                val shellX = center.x - 16f + shellProgress * 12f
+                drawRoundRect(
+                    color = Color(0xFFD97706),
+                    topLeft = Offset(shellX - 3.5f, center.y - 2.5f),
+                    size = Size(7f, 5f),
+                    cornerRadius = CornerRadius(1.5f, 1.5f)
+                )
+                drawCircle(color = Color(0xFFFEF08A), radius = 1.6f, center = Offset(shellX + 3.5f, center.y))
+            }
+        }
 
         // Massive Artillery Firing Animation: Expanding Fireball Blast & Billowing Smoke
         if (tower.isFiring) {
@@ -2563,6 +3385,24 @@ private fun DrawScope.drawRapidFireTower(center: Offset, tower: Tower, time: Flo
             drawCircle(color = Color(0xFFFDE047), radius = 4f, center = Offset(tipX + 2f, center.y + flashOffset))
             drawCircle(color = Color(0xFFFFFFFF), radius = 2f, center = Offset(tipX + 2f, center.y + flashOffset))
             drawLine(Color(0xFFFEF08A), Offset(tipX - 1f, center.y + flashOffset), Offset(tipX + 9f, center.y + flashOffset), strokeWidth = 2f, cap = StrokeCap.Round)
+        }
+
+        // Overheating thermal radiation glow when active
+        val heatGlow = if (tower.isFiring) 0.85f else (tower.cooldownTimer / tower.spec.attackCooldown).coerceIn(0f, 1f) * 0.65f
+        if (heatGlow > 0.05f) {
+            val barrelLen = if (tower.spec.level == 1) 26f else if (tower.spec.level == 2) 32f else 36f
+            drawLine(
+                color = Color(0xFFEF4444).copy(alpha = heatGlow * 0.80f),
+                start = Offset(center.x + 6f, center.y),
+                end = Offset(center.x + barrelLen - recoil, center.y),
+                strokeWidth = 2.5f * heatGlow,
+                cap = StrokeCap.Round
+            )
+            drawCircle(
+                color = Color(0xFFF97316).copy(alpha = heatGlow * 0.55f),
+                radius = 4.5f * heatGlow,
+                center = Offset(center.x + barrelLen - recoil, center.y)
+            )
         }
     }
 }
@@ -2870,28 +3710,42 @@ private fun DrawScope.drawEnemies(
             }
         }
 
-        // 2. Character Sprite facing movement direction
+        // 2. Character Sprite facing movement direction with hit flash and knock reaction
         val spriteAlpha = if (enemy.isStealthed) 0.35f else 1.0f
+        val flashFrac = if (enemy.isHitFlashing) (enemy.hitFlashTimer / 0.14f).coerceIn(0f, 1f) else 0f
+        val knockOffset = if (flashFrac > 0f) {
+            val backRad = Math.toRadians((enemy.headingAngle + 180f).toDouble())
+            val knockDist = flashFrac * (if (enemy.spec.isBoss) 2f else 5.5f)
+            Offset((cos(backRad) * knockDist).toFloat(), (sin(backRad) * knockDist).toFloat())
+        } else Offset.Zero
+        val spriteCenter = center + knockOffset
+
         withTransform({
-            // Apply stealth shimmer if stealthed
-            if (spriteAlpha < 1.0f) {
-                // Dimmed ghostly appearance
-            }
+            translate(knockOffset.x, knockOffset.y)
         }) {
-            rotate(degrees = enemy.headingAngle, pivot = center) {
+            rotate(degrees = enemy.headingAngle, pivot = spriteCenter) {
                 when (enemy.spec.type) {
-                    EnemyType.SCOUT -> drawScoutEnemy(center, enemy, time)
-                    EnemyType.SOLDIER -> drawSoldierEnemy(center, enemy, time)
-                    EnemyType.HEAVY -> drawHeavyEnemy(center, enemy, time)
-                    EnemyType.RUNNER -> drawRunnerEnemy(center, enemy, time)
-                    EnemyType.SHIELD -> drawShieldEnemy(center, enemy, time)
-                    EnemyType.FLYING -> drawFlyingEnemy(center, enemy, time)
-                    EnemyType.HEALER -> drawHealerEnemy(center, enemy, time)
-                    EnemyType.SUMMONER -> drawSummonerEnemy(center, enemy, time)
-                    EnemyType.STEALTH -> drawStealthEnemy(center, enemy, time)
-                    EnemyType.BOSS -> drawBossEnemy(center, enemy, time)
+                    EnemyType.SCOUT -> drawScoutEnemy(spriteCenter, enemy, time)
+                    EnemyType.SOLDIER -> drawSoldierEnemy(spriteCenter, enemy, time)
+                    EnemyType.HEAVY -> drawHeavyEnemy(spriteCenter, enemy, time)
+                    EnemyType.RUNNER -> drawRunnerEnemy(spriteCenter, enemy, time)
+                    EnemyType.SHIELD -> drawShieldEnemy(spriteCenter, enemy, time)
+                    EnemyType.FLYING -> drawFlyingEnemy(spriteCenter, enemy, time)
+                    EnemyType.HEALER -> drawHealerEnemy(spriteCenter, enemy, time)
+                    EnemyType.SUMMONER -> drawSummonerEnemy(spriteCenter, enemy, time)
+                    EnemyType.STEALTH -> drawStealthEnemy(spriteCenter, enemy, time)
+                    EnemyType.BOSS -> drawBossEnemy(spriteCenter, enemy, time)
                 }
             }
+        }
+
+        // Tactile hit flash overlay and damage glow
+        if (flashFrac > 0f) {
+            drawCircle(
+                color = Color.White.copy(alpha = flashFrac * 0.72f),
+                radius = enemy.spec.radius * 1.06f,
+                center = spriteCenter
+            )
         }
 
         // 2b. Slow Status Aura & Orbiting Frost Crystals

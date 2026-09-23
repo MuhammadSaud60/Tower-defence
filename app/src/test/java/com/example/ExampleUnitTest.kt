@@ -927,4 +927,232 @@ class ExampleUnitTest {
         engine.setTowerManualTarget(tower.id, targetObj.id, com.example.entities.TargetType.DESTRUCTIBLE)
         assertEquals(targetObj.id, engine.towers.first { it.id == tower.id }.manualTargetId)
     }
+
+    @Test
+    fun testSnowSummitMapAndWaveRoster() {
+        val map = GameMap.createSnowSummitMap(isUnlocked = true, stars = 3)
+        assertEquals("snow_summit_descent", map.id)
+        assertEquals("Frostpeak Descent", map.name)
+        assertEquals(EnvironmentType.SNOW_VALLEY, map.environmentType)
+        assertEquals(20, map.totalWaves)
+
+        // Enemy location from top (y < 0) and tower at bottom (y = 1680)
+        assertTrue(map.paths.isNotEmpty())
+        for (path in map.paths) {
+            assertTrue("Path must start at top", path.startPoint.y < 100f)
+            assertEquals("Path must end at base at bottom of mountain", map.basePosition, path.endPoint)
+        }
+        assertTrue("Base tower must be at bottom of mountain", map.basePosition.y > 1500f)
+
+        // Lots of snow-covered stones & rocks
+        assertTrue("Abundance of snow-covered stones", map.destructibles.size >= 10)
+        for (d in map.destructibles) {
+            for (path in map.paths) {
+                val dist = path.distanceToPath(d.position)
+                val minAllowed = (path.pathWidth / 2f) + d.collisionRadius
+                assertTrue("Destructible ${d.id} is off-road: dist=$dist, min=$minAllowed", dist >= minAllowed)
+            }
+        }
+
+        // Test wave composition in WaveManager
+        val waveManager = WaveManager(
+            maxWaves = map.totalWaves,
+            paths = map.paths,
+            mapId = map.id
+        )
+
+        // Waves 1 to 5: Fast and small enemies in large amount
+        val fastSmallTypes = setOf(EnemyType.RUNNER, EnemyType.SCOUT, EnemyType.FLYING)
+        for (w in 1..5) {
+            if (w > 1) waveManager.advanceToNextWave()
+            waveManager.startCurrentWave()
+            val roster = waveManager.currentWaveQueue
+            assertTrue("Wave $w has large amount of enemies (size >= 30)", roster.size >= 30)
+            for (item in roster) {
+                assertTrue(
+                    "Wave $w enemy ${item.spec.type} must be fast or small",
+                    fastSmallTypes.contains(item.spec.type)
+                )
+                assertFalse("Wave $w must not contain bosses", item.spec.isBoss)
+            }
+        }
+
+        // Waves 6 to 15: Medium enemies + bosses
+        for (w in 6..15) {
+            waveManager.advanceToNextWave()
+            waveManager.startCurrentWave()
+            val roster = waveManager.currentWaveQueue
+            val hasBoss = roster.any { it.spec.isBoss }
+            val hasMedium = roster.any { !it.spec.isBoss }
+            assertTrue("Wave $w must contain at least one boss", hasBoss)
+            assertTrue("Wave $w must contain medium enemies", hasMedium)
+        }
+
+        // Waves 16 to 20: ONLY bosses in large amount
+        for (w in 16..20) {
+            waveManager.advanceToNextWave()
+            waveManager.startCurrentWave()
+            val roster = waveManager.currentWaveQueue
+            assertTrue("Wave $w must have large amount of bosses (>= 10)", roster.size >= 10)
+            for (item in roster) {
+                assertTrue(
+                    "Wave $w must contain ONLY bosses! Found ${item.spec.name} (${item.spec.type})",
+                    item.spec.isBoss
+                )
+            }
+        }
+    }
+
+    @Test
+    fun testCloudyForestTwoClearingsAndExpandMechanic() {
+        val map = com.example.data.GameMap.createCloudyForestMap(isUnlocked = true)
+        assertEquals("cloudy_dense_forest", map.id)
+
+        // 1. Exactly 2 initial empty locations (clearings)
+        assertEquals(2, map.initialBuildClearings.size)
+        val clearing1 = map.initialBuildClearings[0]
+        val clearing2 = map.initialBuildClearings[1]
+
+        // 2. Initial empty locations have NO tree and NO stone
+        for (d in map.destructibles) {
+            assertTrue(
+                "Destructible ${d.id} is too close to clearing 1 ($clearing1)",
+                d.position.distanceTo(clearing1) >= 80f
+            )
+            assertTrue(
+                "Destructible ${d.id} is too close to clearing 2 ($clearing2)",
+                d.position.distanceTo(clearing2) >= 80f
+            )
+        }
+
+        // 3. Dense forest: large amount of destructibles covering all other buildable ground
+        assertTrue("Dense forest should have abundant destructibles", map.destructibles.size >= 50)
+
+        // 4. Test GameEngine integration
+        val engine = com.example.game.GameEngine()
+        engine.loadMap(map)
+
+        // Starting coins allow building at least 2 guns (260 coins)
+        assertTrue("Player should have at least 260 starting coins", engine.gameState.value.coins >= 260)
+
+        // Initial clearings are valid build locations right away
+        assertTrue("Clearing 1 must be valid for tower placement", engine.isBuildableLocation(clearing1))
+        assertTrue("Clearing 2 must be valid for tower placement", engine.isBuildableLocation(clearing2))
+
+        // Place a tower at clearing 1
+        val placedTower1 = engine.placeTowerAt(com.example.entities.TowerType.MACHINE_GUN, clearing1.x, clearing1.y)
+        assertTrue("Must be able to place gun on clearing 1", placedTower1)
+
+        // Target an adjacent destructible
+        val adjacentDestructible = engine.destructibles.firstOrNull {
+            it.position.distanceTo(clearing1) <= 200f
+        }
+        assertNotNull("There should be destructible trees/stones near clearing 1", adjacentDestructible)
+
+        // While destructible is alive, its position is BLOCKED for tower placement
+        assertFalse(
+            "Position of alive destructible must be blocked",
+            engine.isBuildableLocation(adjacentDestructible!!.position)
+        )
+
+        // Simulate gun destroying the destructible
+        engine.destructibles.remove(adjacentDestructible)
+
+        // Now that the destructible is cleared, that spot becomes a valid location to place MORE guns!
+        assertTrue(
+            "Cleared spot must become valid for setting more guns",
+            engine.isBuildableLocation(adjacentDestructible.position)
+        )
+    }
+
+    @Test
+    fun testDesertHardLevel18MapSpecs() {
+        val map = GameMap.createDesertDuneBastionMap(isUnlocked = true, stars = 0)
+        assertEquals("desert_dune_bastion", map.id)
+        assertEquals(EnvironmentType.DESERT_CANYON, map.environmentType)
+        assertEquals(2, map.paths.size)
+        assertEquals(15, map.totalWaves)
+        assertEquals(1000, map.startingCoins)
+        assertEquals("Hard", map.difficulty)
+        assertTrue(map.hasDesertWind)
+        assertTrue("Should have boulder decorations", map.decorations.any { it.type == com.example.data.DecorationType.BOULDER })
+        assertTrue("Should have destructible stones", map.destructibles.isNotEmpty())
+    }
+
+    @Test
+    fun testDesertHardWaveRosterSpecifications() {
+        val map = GameMap.createDesertDuneBastionMap(isUnlocked = true, stars = 0)
+        val wm = WaveManager(
+            maxWaves = map.totalWaves,
+            paths = map.paths,
+            mapId = map.id
+        )
+
+        // Wave 1: First the boss attacking with small enemies
+        val wave1 = wm.javaClass.getDeclaredMethod("getRosterForWave", Int::class.java).apply {
+            isAccessible = true
+        }.invoke(wm, 1) as List<com.example.systems.WaveSpawnItem>
+
+        assertTrue("Wave 1 must not be empty", wave1.isNotEmpty())
+        assertTrue("Wave 1 FIRST enemy must be a boss", wave1.first().spec.isBoss)
+        val wave1Followers = wave1.drop(1)
+        assertTrue("Wave 1 following enemies must be small enemies (Scouts/Minion Scouts)", wave1Followers.all {
+            it.spec.type == EnemyType.SCOUT || it.spec.name.contains("Scout", ignoreCase = true)
+        })
+
+        // Waves 2 to 6: Fastest enemies with medium level enemies (no bosses)
+        for (w in 2..6) {
+            val waveRoster = wm.javaClass.getDeclaredMethod("getRosterForWave", Int::class.java).apply {
+                isAccessible = true
+            }.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+
+            assertFalse("Waves 2-6 must NOT have bosses (Wave $w)", waveRoster.any { it.spec.isBoss })
+            assertTrue("Waves 2-6 must only contain fastest (Runner/Scout) and medium (Soldier/Shield/Flying) enemies (Wave $w)",
+                waveRoster.all {
+                    it.spec.type in listOf(EnemyType.RUNNER, EnemyType.SCOUT, EnemyType.SOLDIER, EnemyType.SHIELD, EnemyType.FLYING)
+                }
+            )
+            assertTrue("Waves 2-6 must contain fastest enemies", waveRoster.any { it.spec.type == EnemyType.RUNNER })
+            assertTrue("Waves 2-6 must contain medium enemies", waveRoster.any { it.spec.type == EnemyType.SOLDIER || it.spec.type == EnemyType.SHIELD })
+        }
+
+        // Waves 7 to 11: All type enemies with different bosses
+        val bossesEncountered = mutableSetOf<String>()
+        for (w in 7..11) {
+            val waveRoster = wm.javaClass.getDeclaredMethod("getRosterForWave", Int::class.java).apply {
+                isAccessible = true
+            }.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+
+            val bossesInWave = waveRoster.filter { it.spec.isBoss }
+            assertTrue("Wave $w must contain at least one boss", bossesInWave.isNotEmpty())
+            bossesEncountered.add(bossesInWave.first().spec.name)
+
+            val enemyTypesInWave = waveRoster.map { it.spec.type }.toSet()
+            assertTrue("Wave $w must have multiple enemy types", enemyTypesInWave.size >= 5)
+        }
+        assertEquals("Waves 7-11 must feature 5 different bosses", 5, bossesEncountered.size)
+
+        // Waves 12 to 15: ONLY bosses in large amount
+        val expectedMinBosses = mapOf(12 to 6, 13 to 8, 14 to 12, 15 to 16)
+        for (w in 12..15) {
+            val waveRoster = wm.javaClass.getDeclaredMethod("getRosterForWave", Int::class.java).apply {
+                isAccessible = true
+            }.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+
+            assertTrue("Wave $w must contain ONLY bosses", waveRoster.all { it.spec.isBoss })
+            val minBosses = expectedMinBosses[w] ?: 6
+            assertTrue(
+                "Wave $w must have at least $minBosses bosses, had ${waveRoster.size}",
+                waveRoster.size >= minBosses
+            )
+        }
+    }
+
+    @Test
+    fun testDesertHardStartingCoinsInEngine() {
+        val map = GameMap.createDesertDuneBastionMap(isUnlocked = true, stars = 0)
+        val engine = com.example.game.GameEngine()
+        engine.loadMap(map)
+        assertEquals(1000, engine.gameState.value.coins)
+    }
 }

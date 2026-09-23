@@ -1,13 +1,9 @@
 package com.example.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,7 +15,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -41,13 +36,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -61,15 +56,15 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Premium mobile game contextual tower selection overlay.
+ * Premium circular radial menu for tower actions.
+ * Appears directly around the selected tower in the circle style requested by the player.
  *
- * Features:
- * - Positioned near the selected tower without covering gameplay
- * - Procedural tower weapon artwork preview
- * - Quick-action Upgrade, Ability / Focus, and Sell buttons
- * - Spring popup entrance animation
- * - Strict screen bounds clamping for phones and tablets in landscape
- * - Avoids bulky bottom panels
+ * Options:
+ * - UPGRADE (Top 12:00) with price pill below
+ * - TARGET FOCUS (Right 3:00) with strategy pill below
+ * - SELL (Left 9:00) with refund pill below
+ * - DISMISS (Bottom 6:00)
+ * - Tower info summary badge
  */
 @Composable
 fun TowerRadialMenu(
@@ -86,30 +81,26 @@ fun TowerRadialMenu(
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
+    val context = LocalContext.current
+    val audioPlayer = remember { AndroidAudioPlayer(context) }
 
-    val panelWidthDp = 224.dp
-    val panelHeightDp = 196.dp
-    val panelWidthPx = with(density) { panelWidthDp.toPx() }
-    val panelHeightPx = with(density) { panelHeightDp.toPx() }
-    val marginPx = with(density) { 10.dp.toPx() }
-    val topHudReservePx = with(density) { 52.dp.toPx() }
-    val towerOffsetPx = with(density) { 42.dp.toPx() }
-
-    // Smart horizontal placement:
-    // Place to the right if space allows, otherwise place to the left of the tower
-    val desiredX = if (screenX + towerOffsetPx + panelWidthPx <= maxWidthPx - marginPx) {
-        screenX + towerOffsetPx
-    } else if (screenX - towerOffsetPx - panelWidthPx >= marginPx) {
-        screenX - towerOffsetPx - panelWidthPx
-    } else {
-        ((maxWidthPx - panelWidthPx) / 2f).coerceIn(marginPx, maxWidthPx - panelWidthPx - marginPx)
-    }
-
-    // Smart vertical placement: vertically align with tower, strictly inside safe viewport
-    val desiredY = (screenY - panelHeightPx / 2f).coerceIn(
-        marginPx + topHudReservePx,
-        maxHeightPx - panelHeightPx - marginPx
+    // Bouncy spring expansion outward from center
+    val animProgress by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "tower_radial_expand"
     )
+
+    val radialDistanceDp = 76.dp
+    val radialDistancePx = with(density) { radialDistanceDp.toPx() } * animProgress
+
+    // Safe bounds clamping so buttons never render offscreen
+    val marginPx = with(density) { 68.dp.toPx() }
+    val clampedCenterX = screenX.coerceIn(marginPx, maxWidthPx - marginPx)
+    val clampedCenterY = screenY.coerceIn(marginPx, maxHeightPx - marginPx)
 
     val canAffordUpgrade = playerCoins >= tower.spec.upgradeCost
     val isMaxLevel = tower.isMaxLevel
@@ -124,307 +115,307 @@ fun TowerRadialMenu(
         onStrategyChange(next)
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        // Connector line pointing to tower
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val panelCenterX = desiredX + if (desiredX > screenX) 0f else panelWidthPx
-            val panelCenterY = desiredY + panelHeightPx / 2f
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("tower_contextual_panel")
+    ) {
+        // 1. Center Reticle ring directly around the selected gun
+        Box(
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        (clampedCenterX - with(density) { 22.dp.toPx() }).roundToInt(),
+                        (clampedCenterY - with(density) { 22.dp.toPx() }).roundToInt()
+                    )
+                }
+                .size(44.dp)
+                .background(Color(0x3338BDF8), CircleShape)
+                .border(2.dp, Color(0xFF38BDF8), CircleShape)
+                .scale(animProgress)
+                .testTag("tower_center_reticle")
+        )
 
-            drawLine(
-                color = Color(0x6638BDF8),
-                start = Offset(screenX, screenY),
-                end = Offset(panelCenterX, panelCenterY),
-                strokeWidth = 2f
-            )
-            drawCircle(
-                color = Color(0xFF38BDF8),
-                radius = 3f,
-                center = Offset(screenX, screenY)
-            )
-        }
+        // 2. Compact info summary chip above the radial circle
+        val statsWidthDp = 220.dp
+        val statsWidthPx = with(density) { statsWidthDp.toPx() }
+        val statsTopPx = (clampedCenterY - radialDistancePx - with(density) { 56.dp.toPx() })
+            .coerceIn(with(density) { 8.dp.toPx() }, maxHeightPx - with(density) { 36.dp.toPx() })
+        val statsLeftPx = (clampedCenterX - statsWidthPx / 2f)
+            .coerceIn(with(density) { 8.dp.toPx() }, maxWidthPx - statsWidthPx - with(density) { 8.dp.toPx() })
 
-        // Popup Contextual Card
-        AnimatedVisibility(
-            visible = true,
-            enter = scaleIn(
-                initialScale = 0.78f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium
-                )
-            ) + fadeIn(tween(140)),
-            modifier = Modifier.offset {
-                IntOffset(desiredX.roundToInt(), desiredY.roundToInt())
-            }
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xF50B1220),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38BDF8)),
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .offset { IntOffset(statsLeftPx.roundToInt(), statsTopPx.roundToInt()) }
+                .width(statsWidthDp)
+                .scale(animProgress)
+                .testTag("tower_stats_chip")
         ) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color(0xF50B1220),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF38BDF8)),
-                shadowElevation = 14.dp,
-                modifier = Modifier
-                    .width(panelWidthDp)
-                    .testTag("tower_contextual_panel")
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Header: Tower Weapon Artwork, Name, Level Badge, and Close Button
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            // Tower Procedural Image
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(Color(0xFF1E293B), RoundedCornerShape(8.dp))
-                                    .border(1.dp, Color(0xFF475569), RoundedCornerShape(8.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Canvas(modifier = Modifier.size(32.dp)) {
-                                    WeaponArtwork.drawWeapon(
-                                        drawScope = this,
-                                        type = tower.spec.type,
-                                        cx = size.width / 2f,
-                                        cy = size.height / 2f,
-                                        scale = 0.38f,
-                                        isLocked = false,
-                                        recoilProgress = 0f,
-                                        animTime = 0f,
-                                        level = tower.spec.level
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            // Name & Level
-                            Column {
-                                Text(
-                                    text = tower.spec.name,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 1
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .background(
-                                                if (isMaxLevel) Color(0xFF78350F) else Color(0xFF1E293B),
-                                                RoundedCornerShape(3.dp)
-                                            )
-                                            .border(
-                                                0.5.dp,
-                                                if (isMaxLevel) Color(0xFFFBBF24) else Color(0xFF38BDF8),
-                                                RoundedCornerShape(3.dp)
-                                            )
-                                            .padding(horizontal = 4.dp, vertical = 1.dp)
-                                    ) {
-                                        Text(
-                                            text = if (isMaxLevel) "MAX LVL" else "LVL ${tower.spec.level}",
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = if (isMaxLevel) Color(0xFFFDE68A) else Color(0xFF7DD3FC)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Close button (48x48 interactive touch boundary)
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clickable(onClick = onClose),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = Color(0xFF94A3B8),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Compact Stats Bar
-                    Row(
+                    Text(
+                        text = tower.spec.name.uppercase(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF0F172A), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 3.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .background(
+                                if (isMaxLevel) Color(0xFF78350F) else Color(0xFF1E293B),
+                                RoundedCornerShape(3.dp)
+                            )
+                            .border(
+                                0.5.dp,
+                                if (isMaxLevel) Color(0xFFFBBF24) else Color(0xFF38BDF8),
+                                RoundedCornerShape(3.dp)
+                            )
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = "DMG ${tower.spec.damage.toInt()}",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF87171)
-                        )
-                        Text(
-                            text = "RNG ${tower.spec.range.toInt()}",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF38BDF8)
-                        )
-                        Text(
-                            text = "SPD ${String.format(Locale.US, "%.1f/s", 1f / tower.spec.attackCooldown)}",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFBBF24)
+                            text = if (isMaxLevel) "MAX" else "LVL ${tower.spec.level}",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (isMaxLevel) Color(0xFFFDE68A) else Color(0xFF7DD3FC)
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Action 1: Upgrade Button
-                    ContextualMenuAction(
-                        icon = if (isMaxLevel) Icons.Default.Star else Icons.Default.ArrowUpward,
-                        title = if (isMaxLevel) "MAX LEVEL" else "UPGRADE",
-                        badge = if (isMaxLevel) "MAX" else "${tower.spec.upgradeCost}🪙",
-                        badgeColor = if (isMaxLevel) Color(0xFFFBBF24) else if (canAffordUpgrade) Color(0xFF86EFAC) else Color(0xFFFCA5A5),
-                        bgColor = if (isMaxLevel) Color(0xFF1E293B) else if (canAffordUpgrade) Color(0xFF14532D) else Color(0xFF1E293B),
-                        borderColor = if (isMaxLevel) Color(0xFF94A3B8) else if (canAffordUpgrade) Color(0xFF22C55E) else Color(0xFF475569),
-                        enabled = !isMaxLevel && canAffordUpgrade,
-                        onClick = onUpgrade,
-                        testTag = "radial_action_upgrade"
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "DMG ${tower.spec.damage.toInt()}",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF87171)
                     )
-
-                    Spacer(modifier = Modifier.height(5.dp))
-
-                    // Action 2: Ability / Target Focus Button
-                    val stratName = when (tower.targetingStrategy) {
-                        TargetingStrategy.FIRST -> "FIRST"
-                        TargetingStrategy.LAST -> "LAST"
-                        TargetingStrategy.STRONGEST -> "STRONG"
-                        TargetingStrategy.CLOSEST -> "CLOSE"
-                    }
-                    ContextualMenuAction(
-                        icon = Icons.Default.MyLocation,
-                        title = "ABILITY / FOCUS",
-                        badge = stratName,
-                        badgeColor = Color(0xFF7DD3FC),
-                        bgColor = Color(0xFF0369A1),
-                        borderColor = Color(0xFF38BDF8),
-                        enabled = true,
-                        onClick = { cycleStrategy() },
-                        testTag = "radial_action_target"
+                    Text(
+                        text = "RNG ${tower.spec.range.toInt()}",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF38BDF8)
                     )
-
-                    Spacer(modifier = Modifier.height(5.dp))
-
-                    // Action 3: Sell Button
-                    ContextualMenuAction(
-                        icon = Icons.Default.MonetizationOn,
-                        title = "SELL TOWER",
-                        badge = "+${tower.sellRefundCoins}🪙",
-                        badgeColor = Color(0xFFFDE68A),
-                        bgColor = Color(0xFF7F1D1D),
-                        borderColor = Color(0xFFEF4444),
-                        enabled = true,
-                        onClick = onSell,
-                        testTag = "radial_action_sell"
+                    Text(
+                        text = "SPD ${String.format(Locale.US, "%.1f/s", 1f / tower.spec.attackCooldown)}",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFBBF24)
                     )
                 }
             }
         }
+
+        // 3. TOP (12:00): Circular UPGRADE Button
+        RadialOptionButton(
+            icon = if (isMaxLevel) Icons.Default.Star else Icons.Default.ArrowUpward,
+            label = if (isMaxLevel) "MAX" else "UPGRADE",
+            badge = if (isMaxLevel) "MAX" else "${tower.spec.upgradeCost}🪙",
+            badgeColor = if (isMaxLevel) Color(0xFFFBBF24) else if (canAffordUpgrade) Color(0xFF86EFAC) else Color(0xFFFCA5A5),
+            accentGradient = if (isMaxLevel) listOf(Color(0xFF78350F), Color(0xFF451A03))
+            else if (canAffordUpgrade) listOf(Color(0xFF22C55E), Color(0xFF15803D))
+            else listOf(Color(0xFF475569), Color(0xFF334155)),
+            centerX = clampedCenterX,
+            centerY = clampedCenterY - radialDistancePx,
+            maxWidthPx = maxWidthPx,
+            maxHeightPx = maxHeightPx,
+            scale = animProgress,
+            enabled = !isMaxLevel && canAffordUpgrade,
+            onClick = {
+                audioPlayer.buttonClick()
+                onUpgrade()
+            },
+            testTag = "radial_action_upgrade"
+        )
+
+        // 4. RIGHT (3:00): Circular TARGET FOCUS Button
+        val stratName = when (tower.targetingStrategy) {
+            TargetingStrategy.FIRST -> "FIRST"
+            TargetingStrategy.LAST -> "LAST"
+            TargetingStrategy.STRONGEST -> "STRONG"
+            TargetingStrategy.CLOSEST -> "CLOSE"
+        }
+        RadialOptionButton(
+            icon = Icons.Default.MyLocation,
+            label = "TARGET",
+            badge = stratName,
+            badgeColor = Color(0xFF7DD3FC),
+            accentGradient = listOf(Color(0xFF0284C7), Color(0xFF0369A1)),
+            centerX = clampedCenterX + radialDistancePx,
+            centerY = clampedCenterY,
+            maxWidthPx = maxWidthPx,
+            maxHeightPx = maxHeightPx,
+            scale = animProgress,
+            enabled = true,
+            onClick = {
+                audioPlayer.buttonClick()
+                cycleStrategy()
+            },
+            testTag = "radial_action_target"
+        )
+
+        // 5. LEFT (9:00): Circular SELL Button
+        RadialOptionButton(
+            icon = Icons.Default.MonetizationOn,
+            label = "SELL",
+            badge = "+${tower.sellRefundCoins}🪙",
+            badgeColor = Color(0xFFFDE68A),
+            accentGradient = listOf(Color(0xFFEF4444), Color(0xFF991B1B)),
+            centerX = clampedCenterX - radialDistancePx,
+            centerY = clampedCenterY,
+            maxWidthPx = maxWidthPx,
+            maxHeightPx = maxHeightPx,
+            scale = animProgress,
+            enabled = true,
+            onClick = {
+                audioPlayer.buttonClick()
+                onSell()
+            },
+            testTag = "radial_action_sell"
+        )
+
+        // 6. BOTTOM (6:00): Circular CLOSE Button
+        RadialOptionButton(
+            icon = Icons.Default.Close,
+            label = "CLOSE",
+            badge = "",
+            badgeColor = Color.White,
+            accentGradient = listOf(Color(0xFF475569), Color(0xFF334155)),
+            centerX = clampedCenterX,
+            centerY = clampedCenterY + radialDistancePx,
+            maxWidthPx = maxWidthPx,
+            maxHeightPx = maxHeightPx,
+            scale = animProgress,
+            enabled = true,
+            isSmall = true,
+            onClick = {
+                audioPlayer.buttonClick()
+                onClose()
+            },
+            testTag = "radial_action_close"
+        )
     }
 }
 
 @Composable
-private fun ContextualMenuAction(
+private fun RadialOptionButton(
     icon: ImageVector,
-    title: String,
+    label: String,
     badge: String,
     badgeColor: Color,
-    bgColor: Color,
-    borderColor: Color,
+    accentGradient: List<Color>,
+    centerX: Float,
+    centerY: Float,
+    maxWidthPx: Float,
+    maxHeightPx: Float,
+    scale: Float,
     enabled: Boolean,
+    isSmall: Boolean = false,
     onClick: () -> Unit,
     testTag: String
 ) {
-    val audioPlayer = remember { AndroidAudioPlayer.getInstance() }
+    val density = LocalDensity.current
+    val buttonRadiusDp = if (isSmall) 22.dp else 26.dp
+    val buttonRadiusPx = with(density) { buttonRadiusDp.toPx() }
+    val margin = buttonRadiusPx + with(density) { 16.dp.toPx() }
+
+    val clampedX = centerX.coerceIn(margin, maxWidthPx - margin)
+    val clampedY = centerY.coerceIn(margin, maxHeightPx - margin)
+
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.96f else 1f,
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 0.94f else 1f,
         animationSpec = tween(50),
-        label = "btn_press_scale"
+        label = "press_scale"
     )
 
     Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
-            .fillMaxWidth()
-            .height(34.dp)
-            .scale(scale)
-            .background(
-                if (enabled) bgColor else Color(0xFF1E293B).copy(alpha = 0.6f),
-                RoundedCornerShape(6.dp)
-            )
-            .border(
-                1.dp,
-                if (enabled) borderColor else Color(0xFF334155),
-                RoundedCornerShape(6.dp)
-            )
-            .clickable(
+            .offset {
+                IntOffset(
+                    (clampedX - buttonRadiusPx).roundToInt(),
+                    (clampedY - buttonRadiusPx).roundToInt()
+                )
+            }
+            .scale(scale * pressScale)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled,
-                onClick = {
-                    audioPlayer.buttonClick()
-                    onClick()
-                }
+                onClick = onClick
             )
-            .padding(horizontal = 8.dp)
-            .testTag(testTag),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = if (enabled) Color.White else Color(0xFF64748B),
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = title,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (enabled) Color.White else Color(0xFF64748B),
-                    letterSpacing = 0.5.sp
-                )
+            // Circular Action Button
+            Surface(
+                shape = CircleShape,
+                color = if (enabled) Color(0xFF1E293B) else Color(0xFF0F172A),
+                shadowElevation = if (enabled) 8.dp else 2.dp,
+                modifier = Modifier
+                    .size(if (isSmall) 44.dp else 52.dp)
+                    .border(
+                        width = if (enabled) 2.dp else 1.dp,
+                        brush = if (enabled) Brush.linearGradient(accentGradient)
+                        else Brush.linearGradient(listOf(Color(0xFF475569), Color(0xFF334155))),
+                        shape = CircleShape
+                    )
+                    .shadow(elevation = 6.dp, shape = CircleShape)
+                    .testTag(testTag)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = if (enabled) Brush.radialGradient(
+                                listOf(accentGradient[0].copy(alpha = 0.5f), Color(0xFF0F172A))
+                            ) else Brush.radialGradient(listOf(Color(0xFF1E293B), Color(0xFF0F172A)))
+                        )
+                        .alpha(if (enabled) 1f else 0.45f)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = if (enabled) Color.White else Color(0xFF94A3B8),
+                        modifier = Modifier.size(if (isSmall) 20.dp else 24.dp)
+                    )
+                }
             }
 
-            Box(
-                modifier = Modifier
-                    .background(Color(0x55000000), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = badge,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Black,
-                    color = if (enabled) badgeColor else Color(0xFF64748B)
-                )
+            // External Badge Pill placed cleanly below the circle (Never obscures the icon!)
+            if (badge.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xF20F172A),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (enabled) accentGradient[0].copy(alpha = 0.8f) else Color(0xFF475569)
+                    ),
+                    shadowElevation = 4.dp
+                ) {
+                    Text(
+                        text = badge,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (enabled) badgeColor else Color(0xFF94A3B8),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                    )
+                }
             }
         }
     }

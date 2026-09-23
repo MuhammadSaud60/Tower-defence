@@ -34,8 +34,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dangerous
+import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Pause
@@ -509,7 +511,8 @@ fun PauseDialog(
 
 /**
  * Professional mobile game tactical Defeat / Game Over screen.
- * Darker military failure atmosphere with battle stats and tactical action buttons.
+ * Darker military failure atmosphere with battle stats, Tactical Revive (Continue Battle opportunity),
+ * and tactile action buttons (Retry, Upgrades, Campaign).
  */
 @Composable
 fun GameOverDialog(
@@ -520,6 +523,7 @@ fun GameOverDialog(
     enemiesKilled: Int,
     onRestart: () -> Unit,
     onMainMenu: () -> Unit,
+    onContinueBattle: (() -> Unit)? = null,
     onUpgradeTowers: (() -> Unit)? = null
 ) {
     val audioPlayer = remember { AndroidAudioPlayer.getInstance() }
@@ -529,7 +533,7 @@ fun GameOverDialog(
         audioPlayer.defeat()
         entranceScale.animateTo(
             targetValue = 1f,
-            animationSpec = tween(350, easing = FastOutSlowInEasing)
+            animationSpec = tween(380, easing = FastOutSlowInEasing)
         )
     }
 
@@ -537,26 +541,26 @@ fun GameOverDialog(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(1000f)
-            .background(Color.Black.copy(alpha = 0.85f))
+            .background(Color.Black.copy(alpha = 0.86f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = {}
             )
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 24.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         // Dramatic central failure panel
         Box(
             modifier = Modifier
                 .scale(entranceScale.value)
-                .widthIn(min = 380.dp, max = 620.dp)
-                .fillMaxWidth(0.85f)
+                .widthIn(min = 400.dp, max = 660.dp)
+                .fillMaxWidth(0.90f)
                 .wrapContentHeight()
                 .background(
                     brush = Brush.verticalGradient(
-                        listOf(Color(0xFF220E12), Color(0xFF13090B), Color(0xFF0A0406))
+                        listOf(Color(0xFF220B10), Color(0xFF14070A), Color(0xFF090305))
                     ),
                     shape = RoundedCornerShape(16.dp)
                 )
@@ -574,24 +578,24 @@ fun GameOverDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                    .padding(horizontal = 18.dp, vertical = 12.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Left Column: Defeat Emblem, Title, Wave Reached
+                    // Left Column: Defeat Crest, Title, Wave Progress Pill
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(0.9f)
+                        modifier = Modifier.weight(0.95f)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(50.dp)
+                                .size(54.dp)
                                 .background(
                                     brush = Brush.radialGradient(
-                                        listOf(Color(0x66EF4444), Color.Transparent)
+                                        listOf(Color(0x77EF4444), Color.Transparent)
                                     ),
                                     shape = CircleShape
                                 ),
@@ -605,13 +609,13 @@ fun GameOverDialog(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
 
                         Text(
                             text = "DEFEAT",
-                            fontSize = 22.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp,
+                            letterSpacing = 2.5.sp,
                             color = Color(0xFFEF4444)
                         )
 
@@ -625,13 +629,13 @@ fun GameOverDialog(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Wave progress pill
+                        // Wave progress badge
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .background(Color(0x66000000), RoundedCornerShape(6.dp))
+                                .background(Color(0x88000000), RoundedCornerShape(6.dp))
                                 .border(1.dp, Color(0x44EF4444), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = "WAVE REACHED: ",
@@ -641,24 +645,25 @@ fun GameOverDialog(
                             )
                             Text(
                                 text = "$currentWave / $totalWaves",
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Color(0xFFFFD166)
                             )
                         }
                     }
 
-                    // Right Column: Clean Battle statistics & Action buttons
+                    // Right Column: Progress metrics & Action buttons
                     Column(
-                        modifier = Modifier.weight(1.3f)
+                        modifier = Modifier.weight(1.25f)
                     ) {
+                        // Tactical Battle Statistics Box
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(Color(0xFF0F0709), RoundedCornerShape(8.dp))
                                 .border(1.dp, Color(0xFF2E1218), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             GameStatRow("Enemies Destroyed", "$enemiesKilled", valueColor = Color(0xFFFFD166))
                             GameStatRow("Bounty Collected", "$coinsEarned 🪙", valueColor = Color(0xFF38BDF8))
@@ -666,7 +671,22 @@ fun GameOverDialog(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Action Buttons: Retry + Upgrade Towers + Retreat
+                        // Tactical Revive Opportunity (Continue Battle)
+                        if (onContinueBattle != null) {
+                            GameButton(
+                                text = "CONTINUE BATTLE (+50% HP)",
+                                icon = Icons.Default.Healing,
+                                variant = GameButtonVariant.GOLD,
+                                height = 42.dp,
+                                onClick = onContinueBattle,
+                                modifier = Modifier.fillMaxWidth(),
+                                testTag = "game_over_continue_button"
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+
+                        // Secondary Action Buttons: Retry + Upgrades
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()

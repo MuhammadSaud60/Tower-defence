@@ -91,11 +91,11 @@ fun TowerBuildRadialMenu(
     )
 
     // Radius distance for the radial options
-    val radialDistanceDp = 76.dp
+    val radialDistanceDp = 78.dp
     val radialDistancePx = with(density) { radialDistanceDp.toPx() } * animProgress
 
     // Safe bounds clamping so buttons never render offscreen
-    val marginPx = with(density) { 56.dp.toPx() }
+    val marginPx = with(density) { 68.dp.toPx() }
     val clampedCenterX = screenX.coerceIn(marginPx, maxWidthPx - marginPx)
     val clampedCenterY = screenY.coerceIn(marginPx, maxHeightPx - marginPx)
 
@@ -238,9 +238,9 @@ private fun RadialBuildButton(
     onClick: () -> Unit
 ) {
     val density = LocalDensity.current
-    val buttonRadiusDp = 28.dp
+    val buttonRadiusDp = 27.dp
     val buttonRadiusPx = with(density) { buttonRadiusDp.toPx() }
-    val margin = buttonRadiusPx + with(density) { 10.dp.toPx() }
+    val margin = buttonRadiusPx + with(density) { 16.dp.toPx() }
 
     val clampedX = centerX.coerceIn(margin, maxWidthPx - margin)
     val clampedY = centerY.coerceIn(margin, maxHeightPx - margin)
@@ -284,13 +284,13 @@ private fun RadialBuildButton(
                 }
             }
 
-            // Circular Weapon Button
+            // Circular Weapon Button (Dedicated clean portal for weapon artwork)
             Surface(
                 shape = CircleShape,
                 color = if (canAfford) Color(0xFF1E293B) else Color(0xFF0F172A),
                 shadowElevation = if (canAfford) 8.dp else 2.dp,
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(54.dp)
                     .border(
                         width = if (isHighlighted) 3.dp else if (canAfford) 2.dp else 1.dp,
                         brush = if (isHighlighted) Brush.linearGradient(listOf(Color(0xFFFACC15), Color(0xFFF59E0B)))
@@ -304,6 +304,7 @@ private fun RadialBuildButton(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
+                        .fillMaxSize()
                         .background(
                             brush = if (canAfford) Brush.radialGradient(
                                 listOf(accentGradient[0].copy(alpha = 0.45f), Color(0xFF0F172A))
@@ -330,39 +331,43 @@ private fun RadialBuildButton(
                             )
                         }
                     } else {
-                        // Render Weapon Artwork in Center
+                        // Render Weapon Artwork in Center - 100% visible, unobstructed!
                         androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                            val cx = size.width / 2f
-                            val cy = size.height / 2f - 4f
                             WeaponArtwork.drawWeapon(
                                 drawScope = this,
                                 type = towerType,
-                                cx = cx,
-                                cy = cy,
-                                scale = 0.42f,
+                                cx = size.width / 2f,
+                                cy = size.height / 2f,
+                                scale = 0.50f,
                                 isLocked = false,
                                 recoilProgress = 0f,
                                 animTime = 0f,
                                 level = 1
                             )
                         }
-
-                        // Bottom Cost Badge
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 2.dp)
-                                .background(Color(0xCC0F172A), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = "${cost}🪙",
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (canAfford) Color(0xFFFFD166) else Color(0xFFEF4444)
-                            )
-                        }
                     }
+                }
+            }
+
+            // External Price Pill placed BELOW the circle (Never hides the gun artwork!)
+            if (!isLocked) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xF20F172A),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (canAfford) Color(0xFFEAB308) else Color(0xFF475569)
+                    ),
+                    shadowElevation = 4.dp
+                ) {
+                    Text(
+                        text = "${cost}🪙",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (canAfford) Color(0xFFFFD166) else Color(0xFFEF4444),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                    )
                 }
             }
         }

@@ -368,6 +368,121 @@ data class EnemySpec(
                 AbilityDefinition.summonIceMinions(cooldown = 7.0f)
             )
         )
+
+        /**
+         * Dune Golem: Ancient sandstone juggernaut formed from hardened desert sediment.
+         */
+        fun createDuneGolem(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier == 1) "Dune Golem" else "Ancient Sand Golem",
+            baseHp = if (tier == 1) 1600f else 3600f,
+            armor = if (tier == 1) 24f else 34f,
+            baseSpeed = 46f,
+            rewardCoins = if (tier == 1) 90 else 200,
+            baseDamage = 25,
+            radius = 42f,
+            primaryColorHex = 0xFFD4A373L, // Sandstone Ochre
+            secondaryColorHex = 0xFFBC6C25L, // Terra Cotta
+            isBoss = true,
+            regenRate = 12f,
+            bulletResistance = 0.65f,
+            abilities = listOf(
+                AbilityDefinition.iceArmor(0.65f),
+                AbilityDefinition.iceShockwave(cooldown = 8.0f, radius = 190f)
+            )
+        )
+
+        /**
+         * Sandstorm Titan: Colossal desert brute wielding spinning whirlwind sand defenses.
+         */
+        fun createSandstormTitan(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier == 1) "Sandstorm Titan" else "Dune Colossus",
+            baseHp = if (tier == 1) 2400f else 4800f,
+            armor = if (tier == 1) 30f else 40f,
+            baseSpeed = 42f,
+            rewardCoins = if (tier == 1) 120 else 240,
+            baseDamage = 25,
+            radius = 44f,
+            primaryColorHex = 0xFFE76F51L, // Desert Terracotta
+            secondaryColorHex = 0xFFF4A261L, // Radiant Sand Glow
+            isBoss = true,
+            regenRate = 18f,
+            bulletResistance = 0.70f,
+            abilities = listOf(
+                AbilityDefinition.iceArmor(0.70f),
+                AbilityDefinition.iceShockwave(cooldown = 7.5f, radius = 210f)
+            )
+        )
+
+        /**
+         * Desert Warlord: Swift armored nomad commander charging across dunes with speed bursts.
+         */
+        fun createDesertWarlord(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier == 1) "Desert Warlord" else "Nomad Warmaster",
+            baseHp = if (tier == 1) 2000f else 4400f,
+            armor = if (tier == 1) 22f else 32f,
+            baseSpeed = 58f,
+            rewardCoins = if (tier == 1) 110 else 230,
+            baseDamage = 25,
+            radius = 40f,
+            primaryColorHex = 0xFFCA8A04L, // Golden Dune Amber
+            secondaryColorHex = 0xFFB45309L, // Deep Bronze
+            isBoss = true,
+            regenRate = 22f,
+            bulletResistance = 0.60f,
+            abilities = listOf(
+                AbilityDefinition.speedBurst(cooldown = 6.0f, duration = 2.0f, speedMultiplierBonus = 0.45f),
+                AbilityDefinition.iceShockwave(cooldown = 8.5f, radius = 185f)
+            )
+        )
+
+        /**
+         * Solar Dreadnought: Sunfire-forged desert siege fortress with heavy blast armor plating.
+         */
+        fun createSolarDreadnought(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier == 1) "Solar Dreadnought" else "Sunfire Colossus",
+            baseHp = if (tier == 1) 4200f else 7200f,
+            armor = if (tier == 1) 38f else 48f,
+            baseSpeed = 36f,
+            rewardCoins = if (tier == 1) 220 else 360,
+            baseDamage = 35,
+            radius = 46f,
+            primaryColorHex = 0xFF9A3412L, // Obsidian Sun Rust
+            secondaryColorHex = 0xFFEA580CL, // Solar Blaze Flare
+            isBoss = true,
+            regenRate = 26f,
+            bulletResistance = 0.78f,
+            abilities = listOf(
+                AbilityDefinition.iceArmor(0.78f),
+                AbilityDefinition.iceShockwave(cooldown = 7.0f, radius = 220f)
+            )
+        )
+
+        /**
+         * Dune Apex Overlord: Supreme pharaoh sovereign of the Great Sand Sea with impenetrable armor and crushing shocks.
+         */
+        fun createDuneApexOverlord(): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = "Dune Apex Overlord",
+            baseHp = 8800f,
+            armor = 50f,
+            baseSpeed = 34f,
+            rewardCoins = 400,
+            baseDamage = 40,
+            radius = 48f,
+            primaryColorHex = 0xFF78350FL, // Ancient Pharaoh Bronze
+            secondaryColorHex = 0xFFFBBF24L, // Blinding Solar Crown
+            isBoss = true,
+            regenRate = 38f,
+            bulletResistance = 0.82f,
+            abilities = listOf(
+                AbilityDefinition.iceArmor(0.82f),
+                AbilityDefinition.iceShockwave(cooldown = 6.5f, radius = 230f)
+            )
+        )
     }
 }
 

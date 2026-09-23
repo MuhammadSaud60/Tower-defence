@@ -44,6 +44,11 @@ class ProgressionManager(context: Context) {
             "frozen_fortress" -> getStarsForMap("ice_mountain") >= 1 || totalStars >= 17
             "arctic_base" -> getStarsForMap("frozen_fortress") >= 1 || totalStars >= 19
             "night_fortress", "map_9_night" -> getStarsForMap("arctic_base") >= 1 || getStarsForMap("frozen_fortress") >= 1 || getStarsForMap("snow_valley") >= 1 || totalStars >= 21
+            "eclipse_frontier", "solstice_frontier" -> getStarsForMap("night_fortress") >= 1 || getStarsForMap("arctic_base") >= 1 || totalStars >= 23
+            "storm_twin_bastion", "tempest_bastion" -> getStarsForMap("eclipse_frontier") >= 1 || getStarsForMap("night_fortress") >= 1 || totalStars >= 25
+            "cloudy_dense_forest", "cloudy_forest" -> getStarsForMap("storm_twin_bastion") >= 1 || getStarsForMap("tempest_bastion") >= 1 || totalStars >= 27
+            "snow_summit_descent", "frostpeak_descent" -> getStarsForMap("cloudy_dense_forest") >= 1 || getStarsForMap("cloudy_forest") >= 1 || totalStars >= 29
+            "desert_dune_bastion", "dune_storm_stronghold" -> getStarsForMap("snow_summit_descent") >= 1 || getStarsForMap("frostpeak_descent") >= 1 || totalStars >= 31
             else -> false
         }
     }
@@ -84,7 +89,12 @@ class ProgressionManager(context: Context) {
                 getStarsForMap("ice_mountain") +
                 getStarsForMap("frozen_fortress") +
                 getStarsForMap("arctic_base") +
-                getStarsForMap("night_fortress")
+                getStarsForMap("night_fortress") +
+                getStarsForMap("eclipse_frontier") +
+                maxOf(getStarsForMap("storm_twin_bastion"), getStarsForMap("tempest_bastion")) +
+                maxOf(getStarsForMap("cloudy_dense_forest"), getStarsForMap("cloudy_forest")) +
+                maxOf(getStarsForMap("snow_summit_descent"), getStarsForMap("frostpeak_descent")) +
+                maxOf(getStarsForMap("desert_dune_bastion"), getStarsForMap("dune_storm_stronghold"))
     }
 
     // =========================================================================

@@ -684,8 +684,32 @@ object AudioSynthesizer {
                     writePcm16(bytes, i, sampleVal)
                 }
             }
-            EnvironmentType.NIGHT_FORTRESS -> {
-                // Nocturnal fortress ambience: deep twilight breeze, rhythmic night crickets, and subtle mystic chime harmonics
+            EnvironmentType.TEMPEST_RAIN -> {
+                // Torrential heavy thunderstorm downpour: rushing rain patter, howling wind, and distant low rumble
+                var thunderPhase = 0.0
+                for (i in 0 until totalSamples) {
+                    val t = i.toFloat() / sampleRate
+                    val rawNoise = (Random.nextFloat() * 2f - 1f)
+                    // Rain texture: shaped medium-high pass water rush
+                    filterVal = filterVal * 0.72f + rawNoise * 0.28f
+                    val rainPatter = filterVal * (0.24f + 0.06f * sin(2.0 * PI * 0.45 * t).toFloat())
+
+                    // Howling gust of storm wind
+                    val gust = (Random.nextFloat() * 2f - 1f) * (0.08f + 0.05f * sin(2.0 * PI * 0.20 * t).toFloat())
+
+                    // Low rolling thunder sub-rumble at t in [0.8s..1.9s]
+                    val thunder = if (t in 0.8f..1.9f) {
+                        val subT = t - 0.8f
+                        thunderPhase += 2.0 * PI * (55.0 + 20.0 * sin(subT * 4.0)) / sampleRate
+                        sin(thunderPhase).toFloat() * sin(subT / 1.1f * PI.toFloat()) * 0.16f
+                    } else 0f
+
+                    val sampleVal = ((rainPatter + gust + thunder) * 0.32f).coerceIn(-1f, 1f)
+                    writePcm16(bytes, i, sampleVal)
+                }
+            }
+            EnvironmentType.NIGHT_FORTRESS, EnvironmentType.DAY_NIGHT -> {
+                // Nocturnal fortress & Day-Night solstice ambience: deep twilight breeze, rhythmic night crickets, and subtle mystic chime harmonics
                 for (i in 0 until totalSamples) {
                     val t = i.toFloat() / sampleRate
                     val rawNoise = (Random.nextFloat() * 2f - 1f)
@@ -702,6 +726,30 @@ object AudioSynthesizer {
                     val mysticChime = sin(2.0 * PI * 880.0 * t).toFloat() * (0.015f + 0.008f * sin(2.0 * PI * 0.67 * t).toFloat())
 
                     val sampleVal = ((nightBreeze + crickets + mysticChime) * 0.26f).coerceIn(-1f, 1f)
+                    writePcm16(bytes, i, sampleVal)
+                }
+            }
+            EnvironmentType.CLOUDY_FOREST -> {
+                // Overcast daytime woods: deep rustling oak & pine canopy breeze with gentle intermittent bird calls
+                for (i in 0 until totalSamples) {
+                    val t = i.toFloat() / sampleRate
+                    val rawNoise = (Random.nextFloat() * 2f - 1f)
+                    filterVal = filterVal * 0.88f + rawNoise * 0.12f
+
+                    // Gentle cloudy daytime wind sighing through the tree canopy
+                    val canopyWind = filterVal * (0.16f + 0.05f * sin(2.0 * PI * 0.22 * t).toFloat())
+
+                    // Soft rustle of leaves (higher frequency noise)
+                    val leafRustle = (Random.nextFloat() * 2f - 1f) * 0.03f * (0.5f + 0.5f * sin(2.0 * PI * 0.35 * t).toFloat())
+
+                    // Distant woodland warbler chirp around t in [1.2..1.5s]
+                    val birdSong = if (t in 1.15f..1.45f) {
+                        val subT = t - 1.15f
+                        val chirpFreq = 2400.0 + 600.0 * sin(2.0 * PI * 8.0 * subT)
+                        sin(2.0 * PI * chirpFreq * subT).toFloat() * sin(subT / 0.3f * PI.toFloat()) * 0.035f
+                    } else 0f
+
+                    val sampleVal = ((canopyWind + leafRustle + birdSong) * 0.28f).coerceIn(-1f, 1f)
                     writePcm16(bytes, i, sampleVal)
                 }
             }

@@ -70,6 +70,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.data.EnvironmentType
 import com.example.entities.Point2D
 import com.example.game.GameStatus
 import com.example.game.GameState
@@ -395,38 +396,21 @@ fun GameScreen(
             }
         }
 
-        // 6. Bottom Tactical Tower Selection Deck & Weapon Preview (visible when game is running/prep)
-        if (gameState.gameStatus == GameStatus.PLAYING || gameState.gameStatus == GameStatus.PREPARATION) {
-            Column(
+        // 6. Tower Placement Preview (active only during tower placement confirmation)
+        if ((gameState.gameStatus == GameStatus.PLAYING || gameState.gameStatus == GameStatus.PREPARATION) &&
+            gameState.isBuildingTower && gameState.selectedTowerSpec != null
+        ) {
+            val spec = gameState.selectedTowerSpec!!
+            Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(bottom = 12.dp)
             ) {
-                // Tower Preview Panel (active when placing a tower)
-                if (gameState.isBuildingTower && gameState.selectedTowerSpec != null) {
-                    val spec = gameState.selectedTowerSpec!!
-                    TowerPreviewPanel(
-                        type = spec.type,
-                        cost = spec.cost,
-                        playerCoins = gameState.coins,
-                        onCancel = { viewModel.cancelTowerBuild() }
-                    )
-                }
-
-                // Premium Mobile Strategy Weapon Shop Deck
-                TowerShopDeck(
+                TowerPreviewPanel(
+                    type = spec.type,
+                    cost = spec.cost,
                     playerCoins = gameState.coins,
-                    selectedType = if (gameState.isBuildingTower) gameState.selectedTowerSpec?.type else null,
-                    progressionManager = viewModel.progressionManager,
-                    onSelectTower = { type ->
-                        if (gameState.isBuildingTower && gameState.selectedTowerSpec?.type == type) {
-                            viewModel.cancelTowerBuild()
-                        } else {
-                            viewModel.selectTowerToBuild(type)
-                        }
-                    }
+                    onCancel = { viewModel.cancelTowerBuild() }
                 )
             }
         }
@@ -450,6 +434,7 @@ fun GameScreen(
                 enemiesKilled = gameState.enemiesKilledTotal,
                 onRestart = { viewModel.restart() },
                 onMainMenu = onNavigateToMapSelect,
+                onContinueBattle = { viewModel.continueBattle() },
                 onUpgradeTowers = onNavigateToResearch
             )
         }
@@ -797,6 +782,30 @@ private fun GameHudBar(
                             fontWeight = FontWeight.Black,
                             color = if (gameState.isBossWave) Color(0xFFFF4D4D) else Color(0xFF38BDF8)
                         )
+                        if (gameState.currentMap.environmentType == EnvironmentType.DAY_NIGHT) {
+                            Spacer(modifier = Modifier.width(5.dp))
+                            val isDayPhase = gameState.currentWave <= 10
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (isDayPhase) Color(0x44F59E0B) else Color(0x44818CF8),
+                                        RoundedCornerShape(3.dp)
+                                    )
+                                    .border(
+                                        0.8.dp,
+                                        if (isDayPhase) Color(0xFFF59E0B) else Color(0xFFA78BFA),
+                                        RoundedCornerShape(3.dp)
+                                    )
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = if (isDayPhase) "☀️ DAY" else "🌙 NIGHT",
+                                    fontSize = 7.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (isDayPhase) Color(0xFFFDE68A) else Color(0xFFDDD6FE)
+                                )
+                            }
+                        }
                         if (gameState.isBossWave) {
                             Spacer(modifier = Modifier.width(5.dp))
                             Box(

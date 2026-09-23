@@ -38,6 +38,9 @@ class GameEngine(
         paths = currentMap.paths,
         isSnowValley = currentMap.environmentType == EnvironmentType.SNOW_VALLEY,
         isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS,
+        isDayNight = currentMap.environmentType == EnvironmentType.DAY_NIGHT || currentMap.id == "eclipse_frontier",
+        isTempestRain = currentMap.environmentType == EnvironmentType.TEMPEST_RAIN || currentMap.id == "storm_twin_bastion",
+        isCloudyForest = currentMap.environmentType == EnvironmentType.CLOUDY_FOREST || currentMap.id == "cloudy_dense_forest",
         mapId = currentMap.id
     )
     private val combatSystem = CombatSystem()
@@ -66,6 +69,7 @@ class GameEngine(
     private var selectedDestructibleId: String? = null
     private var placementNotice: String? = null
     private var placementNoticeTimer = 0f
+    private var screenShakeIntensity = 0f
     private var waveTransitionTimer = 0f
     private var enemiesKilledTotal = 0
     private var bossesKilledTotal = 0
@@ -123,6 +127,7 @@ class GameEngine(
 
         val clampedDt = min(dt, 0.05f) * gameSpeedMultiplier
         gameTime += clampedDt
+        screenShakeIntensity = (screenShakeIntensity - clampedDt * 3.5f).coerceAtLeast(0f)
 
         // 1. Game Over Check
         if (base.isDestroyed) {
@@ -223,6 +228,7 @@ class GameEngine(
         if (newEnemy != null) {
             enemies.add(newEnemy)
             if (newEnemy.spec.isBoss) {
+                screenShakeIntensity = kotlin.math.max(screenShakeIntensity, 0.55f)
                 audioPlayer.playSound(GameSound.BOSS_APPEARANCE)
                 showNotice("WARNING: ${newEnemy.spec.name} has arrived!")
                 visualEffects.add(
@@ -246,6 +252,7 @@ class GameEngine(
 
             if (updated.reachedBase) {
                 base = base.takeDamage(updated.spec.baseDamage)
+                screenShakeIntensity = kotlin.math.max(screenShakeIntensity, 0.45f)
                 audioPlayer.playSound(GameSound.ENEMY_HIT)
                 if (base.isDestroyed) {
                     changeGameState(GameStatus.GAME_OVER)
@@ -343,12 +350,14 @@ class GameEngine(
 
         // Discrete impact sound events
         if (combatResult.hasCannonImpact) {
+            screenShakeIntensity = kotlin.math.max(screenShakeIntensity, 0.38f)
             audioPlayer.cannonImpact()
         }
         if (combatResult.hasFrostImpact) {
             audioPlayer.frostImpact()
         }
         if (combatResult.hasBossImpact) {
+            screenShakeIntensity = kotlin.math.max(screenShakeIntensity, 0.32f)
             audioPlayer.bossImpact()
         }
         if (combatResult.hasHeavyEnemyHit) {
@@ -398,9 +407,11 @@ class GameEngine(
             audioPlayer.stealthCloak()
         }
         if (combatResult.hasBossShockwave) {
+            screenShakeIntensity = kotlin.math.max(screenShakeIntensity, 0.65f)
             audioPlayer.bossShockwave()
         }
         if (combatResult.hasBossPhaseChange) {
+            screenShakeIntensity = kotlin.math.max(screenShakeIntensity, 0.70f)
             audioPlayer.bossPhaseChange()
             showNotice("WARNING: BOSS ENTERED NEXT PHASE!")
         }
@@ -418,6 +429,7 @@ class GameEngine(
         if (combatResult.bossDefeated) {
             bossesKilledTotal++
             damageDealtTotal += 3000L
+            screenShakeIntensity = kotlin.math.max(screenShakeIntensity, 0.90f)
             showNotice("BOSS DEFEATED! Massive Coin Reward!")
             audioPlayer.bossDefeated()
         }
@@ -687,7 +699,13 @@ class GameEngine(
     @Synchronized
     fun selectBuildPosition(point: Point2D?) {
         selectedExistingTower = null
-        selectedBuildPos = point
+        val snappedPoint = if (point != null) {
+            val nearestClearing = currentMap.initialBuildClearings.firstOrNull { it.distanceTo(point) <= 45f }
+            nearestClearing ?: point
+        } else {
+            null
+        }
+        selectedBuildPos = snappedPoint
         publishState()
     }
 
@@ -695,18 +713,19 @@ class GameEngine(
     fun placeTowerAt(type: TowerType, virtualX: Float, virtualY: Float): Boolean {
         val spec = getEffectiveTowerSpec(type, 1)
         val radius = spec.size / 2f
-        val targetPoint = Point2D(virtualX, virtualY)
+        val rawPoint = Point2D(virtualX, virtualY)
+        val targetPoint = currentMap.initialBuildClearings.firstOrNull { it.distanceTo(rawPoint) <= 45f } ?: rawPoint
 
         val obstacle = destructibles.firstOrNull {
             it.isAlive && it.position.distanceTo(targetPoint) < (radius + it.radius + 6f)
         }
         if (obstacle != null) {
-            showNotice("Cannot build: Blocked by ${obstacle.type.displayName}!")
+            showNotice("Cannot build: Blocked by ${obstacle.type.displayName}! Target it with guns to clear space.")
             audioPlayer.invalidPlacement()
             return false
         }
 
-        if (!isValidTowerPlacement(virtualX, virtualY, radius)) {
+        if (!isValidTowerPlacement(targetPoint.x, targetPoint.y, radius)) {
             showNotice("Cannot build here! Check paths, water, or obstacles.")
             audioPlayer.invalidPlacement()
             return false
@@ -757,7 +776,15 @@ class GameEngine(
     fun validatePlacement(virtualX: Float, virtualY: Float): Pair<Boolean, String?> {
         val spec = selectedTowerSpec ?: TowerSpec.create(TowerType.MACHINE_GUN, 1)
         val radius = spec.size / 2f
-        val targetPoint = Point2D(virtualX, virtualY)
+        val rawPoint = Point2D(virtualX, virtualY)
+        val targetPoint = currentMap.initialBuildClearings.firstOrNull { it.distanceTo(rawPoint) <= 45f } ?: rawPoint
+
+        val obstacle = destructibles.firstOrNull {
+            it.isAlive && it.position.distanceTo(targetPoint) < (radius + it.radius + 6f)
+        }
+        if (obstacle != null) {
+            return false to "Blocked by ${obstacle.type.displayName}! Target it with guns to clear space."
+        }
 
         if (!currentMap.canPlaceAt(targetPoint, radius)) {
             return false to "Cannot build here! Check road, water, or base."
@@ -768,13 +795,6 @@ class GameEngine(
         }
         if (tooCloseToOther) {
             return false to "Too close to another tower!"
-        }
-
-        val obstacle = destructibles.firstOrNull {
-            it.isAlive && it.position.distanceTo(targetPoint) < (radius + it.radius + 6f)
-        }
-        if (obstacle != null) {
-            return false to "Blocked by ${obstacle.type.displayName}!"
         }
 
         if (!economySystem.canAfford(spec.cost)) {
@@ -793,7 +813,8 @@ class GameEngine(
         }
 
         val spec = selectedTowerSpec ?: TowerSpec.create(TowerType.MACHINE_GUN, 1)
-        val targetPoint = Point2D(virtualX, virtualY)
+        val rawPoint = Point2D(virtualX, virtualY)
+        val targetPoint = currentMap.initialBuildClearings.firstOrNull { it.distanceTo(rawPoint) <= 45f } ?: rawPoint
 
         if (!economySystem.spend(spec.cost)) {
             showNotice("Not enough coins! Need ${spec.cost}🪙")
@@ -853,6 +874,31 @@ class GameEngine(
         publishState()
     }
 
+    /**
+     * Emergency Field Reinforcements / Ad-continue recovery.
+     * Restores 50% fortress integrity, eliminates nearby immediate base breach hazards,
+     * grants an emergency tactical shield barrier and resumes the ongoing battle.
+     */
+    @Synchronized
+    fun continueBattle(reviveHpPercent: Float = 0.5f) {
+        if (gameStatus == GameStatus.GAME_OVER) {
+            val restoredHp = (base.maxHp * reviveHpPercent).toInt().coerceAtLeast(1)
+            base = base.copy(currentHp = restoredHp)
+            
+            // Push back or eliminate enemies that reached base or are immediately breaching it
+            val survivors = enemies.filter { it.isAlive && !it.reachedBase }
+            enemies.clear()
+            enemies.addAll(survivors)
+
+            gameStatus = GameStatus.PLAYING
+            stateBeforePause = GameStatus.PLAYING
+            showNotice("EMERGENCY PROTOCOL ACTIVATED! BATTLE RESUMED")
+            audioPlayer.playSound(GameSound.TOWER_UPGRADED)
+            audioPlayer.resumeAmbienceAndMusic()
+            publishState()
+        }
+    }
+
     @Synchronized
     fun restart(isNewMission: Boolean = true) {
         val baseHpMult = 1f + (progressionManager?.getBaseHpBonus() ?: 0f)
@@ -873,10 +919,18 @@ class GameEngine(
             paths = currentMap.paths,
             isSnowValley = currentMap.environmentType == EnvironmentType.SNOW_VALLEY,
             isNightFortress = currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS,
+            isDayNight = currentMap.environmentType == EnvironmentType.DAY_NIGHT || currentMap.id == "eclipse_frontier",
+            isTempestRain = currentMap.environmentType == EnvironmentType.TEMPEST_RAIN || currentMap.id == "storm_twin_bastion",
+            isCloudyForest = currentMap.environmentType == EnvironmentType.CLOUDY_FOREST || currentMap.id == "cloudy_dense_forest",
             mapId = currentMap.id
         )
+        val baseStartingCoins = currentMap.startingCoins ?: if (currentMap.environmentType == EnvironmentType.CLOUDY_FOREST || currentMap.id == "cloudy_dense_forest" || currentMap.allowedBuildSpots != null) {
+            260
+        } else {
+            GameConfig.STARTING_COINS
+        }
         val startingGoldBonus = progressionManager?.getStartingGoldBonus() ?: 0
-        economySystem.reset(GameConfig.STARTING_COINS + startingGoldBonus)
+        economySystem.reset(baseStartingCoins + startingGoldBonus)
         if (isNewMission) {
             gameStatus = GameStatus.PREPARATION
             preparationCountdown = 5.0f
@@ -969,7 +1023,8 @@ class GameEngine(
             starsEarned = stars,
             finalScore = score,
             gameTime = gameTime,
-            tutorialRecommendedPlot = tutPlot
+            tutorialRecommendedPlot = tutPlot,
+            screenShakeIntensity = screenShakeIntensity
         )
     }
 }

@@ -52,12 +52,24 @@ data class TunnelRegion(
     val exit: Point2D
 )
 
+data class WaterPond(
+    val center: Point2D,
+    val radius: Float
+)
+
 data class BlockedArea(
     val left: Float,
     val top: Float,
     val right: Float,
     val bottom: Float,
     val reason: String = "Obstacle"
+)
+
+data class BridgeSegment(
+    val id: String,
+    val start: Point2D,
+    val end: Point2D,
+    val width: Float = 56f
 )
 
 data class GameMap(
@@ -72,7 +84,10 @@ data class GameMap(
     val decorations: List<MapDecoration> = emptyList(),
     val waterPondCenter: Point2D? = null,
     val waterPondRadius: Float = 0f,
+    val waterPonds: List<WaterPond> = emptyList(),
     val tunnelRegion: TunnelRegion? = null,
+    val tunnelRegions: List<TunnelRegion> = emptyList(),
+    val bridges: List<BridgeSegment> = emptyList(),
     val blockedAreas: List<BlockedArea> = emptyList(),
     val destructibles: List<DestructibleObject> = emptyList(),
     val worldWidth: Float = 2000f,
@@ -85,8 +100,11 @@ data class GameMap(
     val initialBuildClearings: List<Point2D> = emptyList(),
     val startingCoins: Int? = null,
     val difficulty: String = "Normal",
-    val hasDesertWind: Boolean = false
+    val hasDesertWind: Boolean = false,
+    val hasRain: Boolean = (environmentType == EnvironmentType.TEMPEST_RAIN)
 ) {
+    val isRaining: Boolean get() = hasRain || environmentType == EnvironmentType.TEMPEST_RAIN
+
     // Single-path backward-compatible constructor
     constructor(
         id: String,
@@ -113,7 +131,9 @@ data class GameMap(
         initialBuildClearings: List<Point2D> = emptyList(),
         startingCoins: Int? = null,
         difficulty: String = "Normal",
-        hasDesertWind: Boolean = false
+        hasDesertWind: Boolean = false,
+        bridges: List<BridgeSegment> = emptyList(),
+        hasRain: Boolean = (environmentType == EnvironmentType.TEMPEST_RAIN)
     ) : this(
         id = id,
         name = name,
@@ -127,6 +147,7 @@ data class GameMap(
         waterPondCenter = waterPondCenter,
         waterPondRadius = waterPondRadius,
         tunnelRegion = tunnelRegion,
+        bridges = bridges,
         blockedAreas = blockedAreas,
         destructibles = destructibles,
         worldWidth = worldWidth,
@@ -139,7 +160,8 @@ data class GameMap(
         initialBuildClearings = initialBuildClearings,
         startingCoins = startingCoins,
         difficulty = difficulty,
-        hasDesertWind = hasDesertWind
+        hasDesertWind = hasDesertWind,
+        hasRain = hasRain
     )
 
     val path: GamePath get() = paths.first()
@@ -147,9 +169,27 @@ data class GameMap(
 
     fun getPath(index: Int): GamePath = paths.getOrElse(index % paths.size) { paths.first() }
 
+    fun getAllTunnelRegions(): List<TunnelRegion> {
+        if (tunnelRegions.isNotEmpty()) return tunnelRegions
+        return listOfNotNull(tunnelRegion)
+    }
+
+    fun getAllWaterPonds(): List<WaterPond> {
+        val list = mutableListOf<WaterPond>()
+        if (waterPondCenter != null && waterPondRadius > 0f) {
+            list.add(WaterPond(waterPondCenter, waterPondRadius))
+        }
+        list.addAll(waterPonds)
+        return list
+    }
+
     fun isPointInTunnel(point: Point2D): Boolean {
-        val t = tunnelRegion ?: return false
-        return point.x in t.boundsLeft..t.boundsRight && point.y in t.boundsTop..t.boundsBottom
+        for (t in getAllTunnelRegions()) {
+            if (point.x in t.boundsLeft..t.boundsRight && point.y in t.boundsTop..t.boundsBottom) {
+                return true
+            }
+        }
+        return false
     }
 
     /**
@@ -172,15 +212,14 @@ data class GameMap(
         }
 
         // 3. Water collision
-        if (waterPondCenter != null && waterPondRadius > 0f) {
-            if (candidate.distanceTo(waterPondCenter) < (waterPondRadius + towerRadius)) {
+        for (wp in getAllWaterPonds()) {
+            if (candidate.distanceTo(wp.center) < (wp.radius + towerRadius)) {
                 return false
             }
         }
 
         // 4. Solid cavern mountain obstruction for tunnel map
-        if (tunnelRegion != null) {
-            val t = tunnelRegion
+        for (t in getAllTunnelRegions()) {
             if (candidate.x in (t.boundsLeft - towerRadius)..(t.boundsRight + towerRadius) &&
                 candidate.y in (t.boundsTop - towerRadius)..(t.boundsBottom + towerRadius)
             ) {
@@ -238,15 +277,14 @@ data class GameMap(
         }
 
         // 3. Water body clearance
-        if (waterPondCenter != null && waterPondRadius > 0f) {
-            if (candidate.distanceTo(waterPondCenter) < (waterPondRadius + collisionRadius + 15f)) {
+        for (wp in getAllWaterPonds()) {
+            if (candidate.distanceTo(wp.center) < (wp.radius + collisionRadius + 15f)) {
                 return false
             }
         }
 
         // 4. Solid cavern mountain obstruction for tunnel map
-        if (tunnelRegion != null) {
-            val t = tunnelRegion
+        for (t in getAllTunnelRegions()) {
             if (candidate.x in (t.boundsLeft - collisionRadius)..(t.boundsRight + collisionRadius) &&
                 candidate.y in (t.boundsTop - collisionRadius)..(t.boundsBottom + collisionRadius)
             ) {
@@ -477,6 +515,34 @@ data class GameMap(
                 createDesertDuneBastionMap(
                     isUnlocked = isMapUnlocked("desert_dune_bastion") || isMapUnlocked("dune_storm_stronghold"),
                     stars = maxOf(getStars("desert_dune_bastion"), getStars("dune_storm_stronghold"))
+                ),
+                createEmeraldTwinPassMap(
+                    isUnlocked = isMapUnlocked("emerald_twin_pass") || isMapUnlocked("emerald_serpent_pass"),
+                    stars = maxOf(getStars("emerald_twin_pass"), getStars("emerald_serpent_pass"))
+                ),
+                createForestRingBastionMap(
+                    isUnlocked = isMapUnlocked("forest_ring_bastion") || isMapUnlocked("sylvan_ring_sanctuary"),
+                    stars = maxOf(getStars("forest_ring_bastion"), getStars("sylvan_ring_sanctuary"))
+                ),
+                createFrozenPassMap(
+                    isUnlocked = isMapUnlocked("frozen_pass"),
+                    stars = getStars("frozen_pass")
+                ),
+                createObsidianCrossfireMap(
+                    isUnlocked = isMapUnlocked("obsidian_crossfire"),
+                    stars = getStars("obsidian_crossfire")
+                ),
+                createTempestRavineMap(
+                    isUnlocked = isMapUnlocked("tempest_ravine"),
+                    stars = getStars("tempest_ravine")
+                ),
+                createEclipseCitadelMap(
+                    isUnlocked = isMapUnlocked("eclipse_citadel"),
+                    stars = getStars("eclipse_citadel")
+                ),
+                createApexDragonSanctumMap(
+                    isUnlocked = isMapUnlocked("apex_dragon_sanctum"),
+                    stars = getStars("apex_dragon_sanctum")
                 )
             )
         }
@@ -2344,6 +2410,854 @@ data class GameMap(
             val finalMap = baseMap.copy(
                 decorations = decor,
                 destructibles = destructibles
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // ==========================================
+        // MAP 19 — EMERALD SERPENT PASS (Level 19)
+        // Difficulty: Hard • 15 Waves
+        // Area: Large green + water + trees
+        // Paths: Two zig-zag paths with 2 rock mountain tunnels
+        // Starting Coins: 1500
+        // ==========================================
+        fun createEmeraldTwinPassMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2200f, 800f)
+
+            // Path 1 (Northern Zig-Zag Path): Winding northern sylvan route through Tunnel 1
+            val pathNorth = GamePath(
+                id = "emerald_zigzag_north",
+                waypoints = listOf(
+                    Point2D(-40f, 360f),
+                    Point2D(320f, 360f),
+                    Point2D(540f, 200f),
+                    Point2D(720f, 360f), // Enters Tunnel 1
+                    Point2D(980f, 360f), // Exits Tunnel 1
+                    Point2D(1240f, 200f),
+                    Point2D(1520f, 440f),
+                    Point2D(1800f, 440f),
+                    Point2D(2020f, 700f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            // Path 2 (Southern Zig-Zag Path): Winding southern meadow route through Tunnel 2
+            val pathSouth = GamePath(
+                id = "emerald_zigzag_south",
+                waypoints = listOf(
+                    Point2D(-40f, 1240f),
+                    Point2D(320f, 1240f),
+                    Point2D(540f, 1400f),
+                    Point2D(800f, 1160f),
+                    Point2D(1080f, 1240f), // Enters Tunnel 2
+                    Point2D(1340f, 1240f), // Exits Tunnel 2
+                    Point2D(1600f, 1400f),
+                    Point2D(1820f, 1160f),
+                    Point2D(2020f, 900f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            // Tunnel 1: Northern Mountain Ridge Cavern
+            val tunnelNorth = TunnelRegion(
+                id = "emerald_tunnel_north",
+                boundsLeft = 700f,
+                boundsTop = 260f,
+                boundsRight = 1000f,
+                boundsBottom = 460f,
+                entrance = Point2D(720f, 360f),
+                exit = Point2D(980f, 360f)
+            )
+
+            // Tunnel 2: Southern Highland Ridge Cavern
+            val tunnelSouth = TunnelRegion(
+                id = "emerald_tunnel_south",
+                boundsLeft = 1060f,
+                boundsTop = 1140f,
+                boundsRight = 1360f,
+                boundsBottom = 1340f,
+                entrance = Point2D(1080f, 1240f),
+                exit = Point2D(1340f, 1240f)
+            )
+
+            val baseMap = GameMap(
+                id = "emerald_twin_pass",
+                name = "Emerald Serpent Pass",
+                description = "Highland Emerald Realm (Hard • 15 Waves): A sprawling lush green valley with shimmering lakes, dense ancient trees, and two zig-zag paths carving through mountain tunnels. Starts with 1500 coins against twin boss assaults!",
+                environmentType = EnvironmentType.GREEN_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathNorth, pathSouth),
+                basePosition = basePos,
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1100f, 800f),
+                defaultZoom = 0.85f,
+                totalWaves = 15,
+                missionChapter = "HIGHLANDS",
+                startingCoins = 1500,
+                difficulty = "Hard",
+                waterPondCenter = Point2D(1100f, 780f),
+                waterPondRadius = 160f,
+                waterPonds = listOf(WaterPond(Point2D(1700f, 820f), 95f)),
+                tunnelRegion = tunnelNorth,
+                tunnelRegions = listOf(tunnelNorth, tunnelSouth)
+            )
+
+            val decor = mutableListOf<MapDecoration>()
+
+            // 1. Lush Greenery & Trees along northern forest line
+            val northTrees = listOf(
+                Point2D(160f, 140f) to DecorationType.OAK_TREE,
+                Point2D(340f, 100f) to DecorationType.PINE_TREE,
+                Point2D(520f, 80f) to DecorationType.OAK_TREE,
+                Point2D(700f, 120f) to DecorationType.PINE_TREE,
+                Point2D(880f, 110f) to DecorationType.OAK_TREE,
+                Point2D(1080f, 90f) to DecorationType.PINE_TREE,
+                Point2D(1280f, 80f) to DecorationType.OAK_TREE,
+                Point2D(1460f, 120f) to DecorationType.PINE_TREE,
+                Point2D(1680f, 110f) to DecorationType.OAK_TREE,
+                Point2D(1900f, 130f) to DecorationType.PINE_TREE,
+                Point2D(2120f, 160f) to DecorationType.OAK_TREE
+            )
+            northTrees.forEachIndexed { idx, (pos, type) ->
+                if (baseMap.canSpawnEnvironmentObject(pos, collisionRadius = 32f, roadSafetyMargin = 25f)) {
+                    decor.add(MapDecoration("emerald_ntree_$idx", type, pos, 64f, (idx * 45f) % 360f))
+                }
+            }
+
+            // 2. Lush Greenery & Trees along southern forest line
+            val southTrees = listOf(
+                Point2D(160f, 1480f) to DecorationType.OAK_TREE,
+                Point2D(360f, 1500f) to DecorationType.PINE_TREE,
+                Point2D(560f, 1520f) to DecorationType.OAK_TREE,
+                Point2D(760f, 1490f) to DecorationType.PINE_TREE,
+                Point2D(960f, 1510f) to DecorationType.OAK_TREE,
+                Point2D(1160f, 1520f) to DecorationType.PINE_TREE,
+                Point2D(1420f, 1510f) to DecorationType.OAK_TREE,
+                Point2D(1660f, 1490f) to DecorationType.PINE_TREE,
+                Point2D(1880f, 1480f) to DecorationType.OAK_TREE,
+                Point2D(2120f, 1460f) to DecorationType.PINE_TREE
+            )
+            southTrees.forEachIndexed { idx, (pos, type) ->
+                if (baseMap.canSpawnEnvironmentObject(pos, collisionRadius = 32f, roadSafetyMargin = 25f)) {
+                    decor.add(MapDecoration("emerald_stree_$idx", type, pos, 64f, (idx * 55f) % 360f))
+                }
+            }
+
+            // 3. Central Meadow Trees & Bushes around lakes
+            val meadowFlora = listOf(
+                Point2D(460f, 680f) to DecorationType.OAK_TREE,
+                Point2D(560f, 860f) to DecorationType.PINE_TREE,
+                Point2D(750f, 640f) to DecorationType.BUSH,
+                Point2D(840f, 920f) to DecorationType.FLOWER_PATCH,
+                Point2D(1360f, 650f) to DecorationType.OAK_TREE,
+                Point2D(1440f, 880f) to DecorationType.FLOWER_PATCH,
+                Point2D(1540f, 700f) to DecorationType.PINE_TREE,
+                Point2D(1860f, 660f) to DecorationType.BUSH,
+                Point2D(1880f, 960f) to DecorationType.OAK_TREE
+            )
+            meadowFlora.forEachIndexed { idx, (pos, type) ->
+                if (baseMap.canSpawnEnvironmentObject(pos, collisionRadius = 28f, roadSafetyMargin = 25f)) {
+                    decor.add(MapDecoration("emerald_flora_$idx", type, pos, 54f, (idx * 40f) % 360f))
+                }
+            }
+
+            // 4. Mountain Boulders flanking tunnel portals
+            val tunnelBoulders = listOf(
+                Point2D(660f, 250f) to 58f,
+                Point2D(1020f, 250f) to 56f,
+                Point2D(1020f, 1120f) to 58f,
+                Point2D(1380f, 1120f) to 56f
+            )
+            tunnelBoulders.forEachIndexed { idx, (pos, sz) ->
+                if (baseMap.canSpawnEnvironmentObject(pos, collisionRadius = sz / 2f, roadSafetyMargin = 25f)) {
+                    decor.add(MapDecoration("emerald_tboulder_$idx", DecorationType.BOULDER, pos, sz, (idx * 60f) % 360f))
+                }
+            }
+
+            // 5. Tactical Destructible Trees that players can harvest/clear to unlock prime tower spots
+            val destructibles = mutableListOf<DestructibleObject>()
+            val candidateTreePositions = listOf(
+                Point2D(420f, 520f),
+                Point2D(640f, 520f),
+                Point2D(860f, 520f),
+                Point2D(1100f, 520f),
+                Point2D(1340f, 480f),
+                Point2D(1640f, 560f),
+                Point2D(420f, 1060f),
+                Point2D(640f, 1020f),
+                Point2D(900f, 1060f),
+                Point2D(1460f, 1060f),
+                Point2D(1680f, 1020f),
+                Point2D(1920f, 800f)
+            )
+
+            var tId = 1
+            for (p in candidateTreePositions) {
+                if (baseMap.canSpawnEnvironmentObject(p, collisionRadius = 24f, roadSafetyMargin = 28f)) {
+                    val isOak = tId % 2 == 0
+                    destructibles.add(
+                        DestructibleObject(
+                            id = "emerald_tree_${tId++}",
+                            type = if (isOak) DestructibleType.OAK_TREE else DestructibleType.PINE_TREE,
+                            position = p,
+                            maxHp = 120f,
+                            currentHp = 120f,
+                            rewardTokens = 15,
+                            radius = 22f
+                        )
+                    )
+                }
+            }
+
+            val finalMap = baseMap.copy(
+                decorations = decor,
+                destructibles = destructibles
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // ==========================================
+        // MAP 20 — SYLVAN RING BASTION (Level 20)
+        // Difficulty: Expert • 25 Waves
+        // Area: Dense Forest + Central Water Lake & Rivers
+        // Paths: Circular route around lake with 2 Mountain Tunnels + 3 Timber Bridges
+        // Starting Coins: 1800
+        // ==========================================
+        fun createForestRingBastionMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(1200f, 800f)
+
+            // Grand Circular Path: Carves around the central lake, crossing river channels on timber bridges and slicing through mountain caverns
+            val ringPath = GamePath(
+                id = "sylvan_ring_circuit",
+                waypoints = listOf(
+                    Point2D(-40f, 800f),      // West Spawn outside boundary
+                    Point2D(220f, 800f),      // Approach to West Ridge
+                    Point2D(300f, 800f),      // Tunnel 1 Entrance
+                    Point2D(540f, 800f),      // Tunnel 1 Exit
+                    Point2D(660f, 680f),      // Emerge into the ring basin
+                    Point2D(820f, 480f),      // Northern curve
+                    Point2D(980f, 400f),      // Approach Northern Bridge
+                    Point2D(1040f, 400f),     // Bridge 1 Start (Northern River)
+                    Point2D(1360f, 400f),     // Bridge 1 End
+                    Point2D(1520f, 480f),     // East forest canopy curve
+                    Point2D(1700f, 640f),     // Descend along eastern bank
+                    Point2D(1780f, 800f),     // Approach East Ridge
+                    Point2D(1780f, 860f),     // Tunnel 2 Entrance
+                    Point2D(1780f, 1000f),    // Inside Tunnel 2
+                    Point2D(1780f, 1120f),    // Tunnel 2 Exit
+                    Point2D(1680f, 1260f),    // Southern forest curve
+                    Point2D(1520f, 1380f),    // Approach Southern Bridge
+                    Point2D(1360f, 1380f),    // Bridge 2 Start (Southern River)
+                    Point2D(1040f, 1380f),    // Bridge 2 End
+                    Point2D(860f, 1380f),     // South-West forest bank
+                    Point2D(700f, 1220f),     // Ascend West bank completing circular ring
+                    Point2D(660f, 1020f),     // Western Lake bank
+                    Point2D(740f, 880f),      // Turn inward toward Citadel Causeway
+                    Point2D(940f, 800f),      // Bridge 3 Start (Citadel Causeway Bridge)
+                    Point2D(1140f, 800f),     // Bridge 3 End onto Island Base
+                    basePos                   // Island Citadel Fortress Base (1200f, 800f)
+                ),
+                pathWidth = 52f
+            )
+
+            // Tunnel 1: West Ridge Mountain Cavern
+            val tunnelWest = TunnelRegion(
+                id = "sylvan_tunnel_west",
+                boundsLeft = 280f,
+                boundsTop = 680f,
+                boundsRight = 560f,
+                boundsBottom = 920f,
+                entrance = Point2D(300f, 800f),
+                exit = Point2D(540f, 800f)
+            )
+
+            // Tunnel 2: East Ridge Mountain Cavern
+            val tunnelEast = TunnelRegion(
+                id = "sylvan_tunnel_east",
+                boundsLeft = 1680f,
+                boundsTop = 840f,
+                boundsRight = 1880f,
+                boundsBottom = 1140f,
+                entrance = Point2D(1780f, 860f),
+                exit = Point2D(1780f, 1120f)
+            )
+
+            // Bridges crossing over water channels
+            val bridges = listOf(
+                BridgeSegment("bridge_north", Point2D(1040f, 400f), Point2D(1360f, 400f), width = 56f),
+                BridgeSegment("bridge_south", Point2D(1360f, 1380f), Point2D(1040f, 1380f), width = 56f),
+                BridgeSegment("bridge_citadel", Point2D(940f, 800f), Point2D(1140f, 800f), width = 58f)
+            )
+
+            // Water features: Central scenic lake, river channels, and sylvan ponds
+            val centerLake = Point2D(1200f, 800f)
+            val centerLakeRadius = 230f
+            val northRiver = WaterPond(Point2D(1200f, 400f), 125f)
+            val southRiver = WaterPond(Point2D(1200f, 1380f), 125f)
+            val northwestPond = WaterPond(Point2D(460f, 320f), 95f)
+            val southeastPond = WaterPond(Point2D(1980f, 1320f), 105f)
+
+            val baseMap = GameMap(
+                id = "forest_ring_bastion",
+                name = "Sylvan Ring Bastion",
+                description = "Primeval Ring Citadel (Expert • 25 Waves): A scenic sylvan basin nestled in dense ancient forest and tranquil blue waters. Enemies march along a circular river route crossing timber bridges and cutting through two mountain ridge tunnels. 25 relentless waves culminating in synchronized triple-threat assaults!",
+                environmentType = EnvironmentType.GREEN_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(ringPath),
+                basePosition = basePos,
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1200f, 800f),
+                defaultZoom = 0.85f,
+                totalWaves = 25,
+                missionChapter = "SYLVAN REALM",
+                startingCoins = 1800,
+                difficulty = "Expert",
+                waterPondCenter = centerLake,
+                waterPondRadius = centerLakeRadius,
+                waterPonds = listOf(northRiver, southRiver, northwestPond, southeastPond),
+                tunnelRegion = tunnelWest,
+                tunnelRegions = listOf(tunnelWest, tunnelEast),
+                bridges = bridges
+            )
+
+            val decor = mutableListOf<MapDecoration>()
+
+            // 1. Dense Ancient Sylvan Forest Canopy (Oak & Pine Trees around border)
+            val perimeterForest = listOf(
+                Point2D(140f, 140f) to DecorationType.OAK_TREE,
+                Point2D(340f, 120f) to DecorationType.PINE_TREE,
+                Point2D(640f, 100f) to DecorationType.OAK_TREE,
+                Point2D(880f, 110f) to DecorationType.PINE_TREE,
+                Point2D(1120f, 90f) to DecorationType.OAK_TREE,
+                Point2D(1440f, 100f) to DecorationType.PINE_TREE,
+                Point2D(1680f, 110f) to DecorationType.OAK_TREE,
+                Point2D(1920f, 130f) to DecorationType.PINE_TREE,
+                Point2D(2160f, 160f) to DecorationType.OAK_TREE,
+                Point2D(2260f, 400f) to DecorationType.PINE_TREE,
+                Point2D(2240f, 650f) to DecorationType.OAK_TREE,
+                Point2D(2220f, 920f) to DecorationType.PINE_TREE,
+                Point2D(2250f, 1180f) to DecorationType.OAK_TREE,
+                Point2D(2160f, 1440f) to DecorationType.PINE_TREE,
+                Point2D(1920f, 1480f) to DecorationType.OAK_TREE,
+                Point2D(1680f, 1500f) to DecorationType.PINE_TREE,
+                Point2D(1440f, 1510f) to DecorationType.OAK_TREE,
+                Point2D(1120f, 1520f) to DecorationType.PINE_TREE,
+                Point2D(880f, 1500f) to DecorationType.OAK_TREE,
+                Point2D(640f, 1480f) to DecorationType.PINE_TREE,
+                Point2D(380f, 1460f) to DecorationType.OAK_TREE,
+                Point2D(160f, 1420f) to DecorationType.PINE_TREE,
+                Point2D(120f, 1150f) to DecorationType.OAK_TREE,
+                Point2D(130f, 550f) to DecorationType.PINE_TREE
+            )
+            var decId = 0
+            for ((pos, type) in perimeterForest) {
+                decor.add(MapDecoration(id = "sylvan_dec_${decId++}", type = type, position = pos, size = 38f))
+            }
+
+            // 2. Scenic Mountain Boulders around the tunnel ridges
+            val mountainBoulders = listOf(
+                Point2D(260f, 640f),
+                Point2D(580f, 640f),
+                Point2D(260f, 960f),
+                Point2D(580f, 960f),
+                Point2D(1640f, 800f),
+                Point2D(1920f, 800f),
+                Point2D(1640f, 1180f),
+                Point2D(1920f, 1180f)
+            )
+            for (pos in mountainBoulders) {
+                decor.add(MapDecoration(id = "sylvan_dec_${decId++}", type = DecorationType.BOULDER, position = pos, size = 32f))
+            }
+
+            // 3. Glowing Emerald Mushrooms & Wildflowers along the lake edge
+            val floraDecor = listOf(
+                Point2D(980f, 620f) to DecorationType.GLOW_MUSHROOM,
+                Point2D(1420f, 620f) to DecorationType.FLOWER_PATCH,
+                Point2D(1420f, 980f) to DecorationType.GLOW_MUSHROOM,
+                Point2D(980f, 980f) to DecorationType.FLOWER_PATCH,
+                Point2D(1080f, 260f) to DecorationType.FLOWER_PATCH,
+                Point2D(1320f, 260f) to DecorationType.GLOW_MUSHROOM,
+                Point2D(1080f, 1500f) to DecorationType.FLOWER_PATCH,
+                Point2D(1320f, 1500f) to DecorationType.GLOW_MUSHROOM
+            )
+            for ((pos, type) in floraDecor) {
+                decor.add(MapDecoration(id = "sylvan_dec_${decId++}", type = type, position = pos, size = 26f))
+            }
+
+            // 4. Natural Destructibles (Clearing rewards tokens and creates open gun spots)
+            val destructibles = mutableListOf(
+                DestructibleObject(
+                    id = "destructible_tree_nw",
+                    type = DestructibleType.OAK_TREE,
+                    position = Point2D(340f, 500f),
+                    maxHp = 140f,
+                    currentHp = 140f,
+                    rewardTokens = 15,
+                    radius = 24f
+                ),
+                DestructibleObject(
+                    id = "destructible_rock_ne",
+                    type = DestructibleType.LARGE_BOULDER,
+                    position = Point2D(1560f, 280f),
+                    maxHp = 180f,
+                    currentHp = 180f,
+                    rewardTokens = 20,
+                    radius = 25f
+                ),
+                DestructibleObject(
+                    id = "destructible_crate_e",
+                    type = DestructibleType.WOODEN_CRATE,
+                    position = Point2D(1960f, 600f),
+                    maxHp = 100f,
+                    currentHp = 100f,
+                    rewardTokens = 15,
+                    radius = 22f
+                ),
+                DestructibleObject(
+                    id = "destructible_tree_se",
+                    type = DestructibleType.PINE_TREE,
+                    position = Point2D(1480f, 1520f),
+                    maxHp = 150f,
+                    currentHp = 150f,
+                    rewardTokens = 18,
+                    radius = 24f
+                ),
+                DestructibleObject(
+                    id = "destructible_rock_sw",
+                    type = DestructibleType.LARGE_BOULDER,
+                    position = Point2D(500f, 1160f),
+                    maxHp = 170f,
+                    currentHp = 170f,
+                    rewardTokens = 20,
+                    radius = 25f
+                )
+            )
+
+            val finalMap = baseMap.copy(
+                decorations = decor,
+                destructibles = destructibles
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // ==========================================
+        // MAP 21 — FROZEN PASS (Hard / Endgame)
+        // Long winding mountain pass with hairpin S-curves, limited buildable perches,
+        // pine trees and ice boulders, and 25 waves with 3-6 bosses every wave (10 on wave 25).
+        // ==========================================
+        fun createFrozenPassMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2200f, 1400f)
+
+            val pathWinding = GamePath(
+                id = "frozen_pass_main",
+                waypoints = listOf(
+                    Point2D(-40f, 260f),
+                    Point2D(500f, 260f),
+                    Point2D(800f, 480f),
+                    Point2D(400f, 720f),
+                    Point2D(800f, 960f),
+                    Point2D(1300f, 960f),
+                    Point2D(1600f, 600f),
+                    Point2D(1200f, 280f),
+                    Point2D(1900f, 280f),
+                    Point2D(2150f, 650f),
+                    Point2D(1800f, 1050f),
+                    Point2D(1350f, 1400f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val decor = listOf(
+                MapDecoration("fp_dec_1", DecorationType.PINE_TREE, Point2D(150f, 120f), 38f),
+                MapDecoration("fp_dec_2", DecorationType.BOULDER, Point2D(650f, 150f), 32f),
+                MapDecoration("fp_dec_3", DecorationType.SNOW_PILE, Point2D(950f, 480f), 28f),
+                MapDecoration("fp_dec_4", DecorationType.FROZEN_BUSH, Point2D(250f, 720f), 24f),
+                MapDecoration("fp_dec_5", DecorationType.PINE_TREE, Point2D(1450f, 800f), 38f),
+                MapDecoration("fp_dec_6", DecorationType.BOULDER, Point2D(1400f, 450f), 34f),
+                MapDecoration("fp_dec_7", DecorationType.SNOW_PILE, Point2D(1750f, 450f), 30f),
+                MapDecoration("fp_dec_8", DecorationType.PINE_TREE, Point2D(2250f, 450f), 38f),
+                MapDecoration("fp_dec_9", DecorationType.FROZEN_BUSH, Point2D(2050f, 900f), 26f),
+                MapDecoration("fp_dec_10", DecorationType.BOULDER, Point2D(1600f, 1200f), 32f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("fp_dest_1", DestructibleType.PINE_TREE, Point2D(200f, 480f), 180f, 180f, 25, 24f),
+                DestructibleObject("fp_dest_2", DestructibleType.LARGE_BOULDER, Point2D(1050f, 680f), 220f, 220f, 30, 26f),
+                DestructibleObject("fp_dest_3", DestructibleType.PINE_TREE, Point2D(1550f, 140f), 190f, 190f, 25, 24f),
+                DestructibleObject("fp_dest_4", DestructibleType.LARGE_BOULDER, Point2D(1500f, 1200f), 240f, 240f, 30, 26f),
+                DestructibleObject("fp_dest_5", DestructibleType.LARGE_BOULDER, Point2D(600f, 1200f), 200f, 200f, 28, 25f)
+            )
+
+            val finalMap = GameMap(
+                id = "frozen_pass",
+                name = "Frozen Pass",
+                description = "Winding alpine mountain pass with treacherous glacial switchbacks, restricted perches, and constant boss assault battalions.",
+                environmentType = EnvironmentType.SNOW_VALLEY,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathWinding),
+                basePosition = basePos,
+                decorations = decor,
+                destructibles = destructibles,
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1200f, 800f),
+                totalWaves = 25,
+                missionChapter = "GLACIAL RIDGE",
+                startingCoins = 1400,
+                difficulty = "Hard"
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // ==========================================
+        // MAP 22 — OBSIDIAN CROSSFIRE (Hard / Endgame)
+        // Dual intersecting subterranean lava canyon paths with cavern tunnels,
+        // heavy armor mechs, stealth assassins, and 25 intense waves.
+        // ==========================================
+        fun createObsidianCrossfireMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2200f, 800f)
+
+            val pathNorth = GamePath(
+                id = "obsidian_north",
+                waypoints = listOf(
+                    Point2D(200f, -40f),
+                    Point2D(450f, 350f),
+                    Point2D(850f, 550f),
+                    Point2D(1200f, 800f),
+                    Point2D(1550f, 1150f),
+                    Point2D(1900f, 1150f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val pathSouth = GamePath(
+                id = "obsidian_south",
+                waypoints = listOf(
+                    Point2D(200f, 1640f),
+                    Point2D(450f, 1250f),
+                    Point2D(850f, 1050f),
+                    Point2D(1200f, 800f),
+                    Point2D(1550f, 450f),
+                    Point2D(1900f, 450f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val tunnel = TunnelRegion(
+                id = "obsidian_hub_tunnel",
+                boundsLeft = 1050f,
+                boundsTop = 680f,
+                boundsRight = 1350f,
+                boundsBottom = 920f,
+                entrance = Point2D(1050f, 800f),
+                exit = Point2D(1350f, 800f)
+            )
+
+            val decor = listOf(
+                MapDecoration("oc_dec_1", DecorationType.CRYSTAL, Point2D(650f, 800f), 30f),
+                MapDecoration("oc_dec_2", DecorationType.BOULDER, Point2D(1200f, 450f), 36f),
+                MapDecoration("oc_dec_3", DecorationType.BOULDER, Point2D(1200f, 1150f), 36f),
+                MapDecoration("oc_dec_4", DecorationType.CRYSTAL, Point2D(1750f, 800f), 32f),
+                MapDecoration("oc_dec_5", DecorationType.LANTERN_POST, Point2D(1000f, 750f), 24f),
+                MapDecoration("oc_dec_6", DecorationType.LANTERN_POST, Point2D(1400f, 750f), 24f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("oc_dest_1", DestructibleType.LARGE_BOULDER, Point2D(450f, 800f), 220f, 220f, 30, 26f),
+                DestructibleObject("oc_dest_2", DestructibleType.WOODEN_CRATE, Point2D(1200f, 200f), 150f, 150f, 25, 22f),
+                DestructibleObject("oc_dest_3", DestructibleType.WOODEN_CRATE, Point2D(1200f, 1400f), 150f, 150f, 25, 22f),
+                DestructibleObject("oc_dest_4", DestructibleType.LARGE_BOULDER, Point2D(1900f, 800f), 240f, 240f, 30, 26f)
+            )
+
+            val finalMap = GameMap(
+                id = "obsidian_crossfire",
+                name = "Obsidian Crossfire",
+                description = "Subterranean volcanic chasm where dual assault routes intersect beneath obsidian arches and magma bridges.",
+                environmentType = EnvironmentType.OBSIDIAN_TUNNEL,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathNorth, pathSouth),
+                basePosition = basePos,
+                decorations = decor,
+                destructibles = destructibles,
+                tunnelRegion = tunnel,
+                tunnelRegions = listOf(tunnel),
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1200f, 800f),
+                totalWaves = 25,
+                missionChapter = "OBSIDIAN CRUCIBLE",
+                startingCoins = 1500,
+                difficulty = "Hard"
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // ==========================================
+        // MAP 23 — TEMPEST RAVINE (Extreme / Endgame)
+        // Three converging river cataracts under torrential storm rain,
+        // sky drakes, shield vanguards, healers, and multi-boss squads.
+        // ==========================================
+        fun createTempestRavineMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(1200f, 800f)
+
+            val pathNorth = GamePath(
+                id = "tempest_north",
+                waypoints = listOf(
+                    Point2D(1200f, -40f),
+                    Point2D(1200f, 350f),
+                    Point2D(950f, 550f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val pathWest = GamePath(
+                id = "tempest_west",
+                waypoints = listOf(
+                    Point2D(-40f, 800f),
+                    Point2D(450f, 800f),
+                    Point2D(700f, 1100f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val pathEast = GamePath(
+                id = "tempest_east",
+                waypoints = listOf(
+                    Point2D(2440f, 800f),
+                    Point2D(1950f, 800f),
+                    Point2D(1700f, 1100f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val ponds = listOf(
+                WaterPond(Point2D(750f, 500f), 85f),
+                WaterPond(Point2D(1650f, 500f), 85f),
+                WaterPond(Point2D(1200f, 1350f), 105f)
+            )
+
+            val decor = listOf(
+                MapDecoration("tr_dec_1", DecorationType.OAK_TREE, Point2D(450f, 200f), 38f),
+                MapDecoration("tr_dec_2", DecorationType.OAK_TREE, Point2D(1950f, 200f), 38f),
+                MapDecoration("tr_dec_3", DecorationType.BOULDER, Point2D(750f, 750f), 32f),
+                MapDecoration("tr_dec_4", DecorationType.BOULDER, Point2D(1650f, 750f), 32f),
+                MapDecoration("tr_dec_5", DecorationType.GLOW_MUSHROOM, Point2D(1200f, 1050f), 26f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("tr_dest_1", DestructibleType.PINE_TREE, Point2D(450f, 400f), 190f, 190f, 25, 24f),
+                DestructibleObject("tr_dest_2", DestructibleType.PINE_TREE, Point2D(1950f, 400f), 190f, 190f, 25, 24f),
+                DestructibleObject("tr_dest_3", DestructibleType.LARGE_BOULDER, Point2D(450f, 1350f), 220f, 220f, 30, 26f),
+                DestructibleObject("tr_dest_4", DestructibleType.LARGE_BOULDER, Point2D(1950f, 1350f), 220f, 220f, 30, 26f)
+            )
+
+            val finalMap = GameMap(
+                id = "tempest_ravine",
+                name = "Tempest Ravine",
+                description = "Three raging river forks storm through thunderous cataracts into the flooded bastion under heavy torrential rain.",
+                environmentType = EnvironmentType.TEMPEST_RAIN,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathNorth, pathWest, pathEast),
+                basePosition = basePos,
+                decorations = decor,
+                waterPonds = ponds,
+                destructibles = destructibles,
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1200f, 800f),
+                totalWaves = 25,
+                missionChapter = "TEMPEST CATARACTS",
+                startingCoins = 1600,
+                difficulty = "Extreme",
+                hasRain = true
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // ==========================================
+        // MAP 24 — SOLSTICE CITADEL (Master / Endgame)
+        // Dual spiral siege lines circling a cosmic sanctuary during Day/Night cycle,
+        // stealth stalkers, void summoners, and intense boss assault waves.
+        // ==========================================
+        fun createEclipseCitadelMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(1200f, 800f)
+
+            val pathSpiral1 = GamePath(
+                id = "solstice_spiral_1",
+                waypoints = listOf(
+                    Point2D(-40f, 250f),
+                    Point2D(2150f, 250f),
+                    Point2D(2150f, 1350f),
+                    Point2D(650f, 1350f),
+                    Point2D(650f, 650f),
+                    Point2D(1200f, 650f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val pathSpiral2 = GamePath(
+                id = "solstice_spiral_2",
+                waypoints = listOf(
+                    Point2D(2440f, 1350f),
+                    Point2D(250f, 1350f),
+                    Point2D(250f, 450f),
+                    Point2D(1750f, 450f),
+                    Point2D(1750f, 950f),
+                    Point2D(1200f, 950f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val decor = listOf(
+                MapDecoration("ec_dec_1", DecorationType.CRYSTAL, Point2D(1200f, 400f), 32f),
+                MapDecoration("ec_dec_2", DecorationType.CRYSTAL, Point2D(1200f, 1200f), 32f),
+                MapDecoration("ec_dec_3", DecorationType.BOULDER, Point2D(450f, 900f), 36f),
+                MapDecoration("ec_dec_4", DecorationType.BOULDER, Point2D(1950f, 700f), 36f),
+                MapDecoration("ec_dec_5", DecorationType.LANTERN_POST, Point2D(1050f, 750f), 24f),
+                MapDecoration("ec_dec_6", DecorationType.LANTERN_POST, Point2D(1350f, 750f), 24f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("ec_dest_1", DestructibleType.LARGE_BOULDER, Point2D(1200f, 1500f), 240f, 240f, 32, 26f),
+                DestructibleObject("ec_dest_2", DestructibleType.LARGE_BOULDER, Point2D(1200f, 100f), 240f, 240f, 32, 26f),
+                DestructibleObject("ec_dest_3", DestructibleType.OAK_TREE, Point2D(100f, 900f), 180f, 180f, 25, 24f),
+                DestructibleObject("ec_dest_4", DestructibleType.OAK_TREE, Point2D(2300f, 800f), 180f, 180f, 25, 24f)
+            )
+
+            val finalMap = GameMap(
+                id = "eclipse_citadel",
+                name = "Solstice Citadel",
+                description = "Dual spiral siege lines orbiting the cosmic apex sanctuary during celestial day-and-night cycles.",
+                environmentType = EnvironmentType.DAY_NIGHT,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathSpiral1, pathSpiral2),
+                basePosition = basePos,
+                decorations = decor,
+                destructibles = destructibles,
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1200f, 800f),
+                totalWaves = 25,
+                missionChapter = "SOLSTICE SANCTUARY",
+                startingCoins = 1700,
+                difficulty = "Master"
+            )
+            validateMap(finalMap)
+            return finalMap
+        }
+
+        // ==========================================
+        // MAP 25 — APEX DRAGON SANCTUM (Grandmaster / Climax)
+        // Two interlocking serpentine dragon ridges, subterranean tunnels,
+        // all enemy archetypes combined, and 10 colossal Apex Bosses in Wave 25!
+        // ==========================================
+        fun createApexDragonSanctumMap(isUnlocked: Boolean = false, stars: Int = 0): GameMap {
+            val basePos = Point2D(2200f, 800f)
+
+            val pathUpper = GamePath(
+                id = "dragon_spine_upper",
+                waypoints = listOf(
+                    Point2D(-40f, 400f),
+                    Point2D(450f, 400f),
+                    Point2D(750f, 220f),
+                    Point2D(1150f, 220f),
+                    Point2D(1350f, 550f),
+                    Point2D(950f, 800f),
+                    Point2D(1350f, 1150f),
+                    Point2D(1750f, 1150f),
+                    Point2D(1950f, 950f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val pathLower = GamePath(
+                id = "dragon_spine_lower",
+                waypoints = listOf(
+                    Point2D(-40f, 1200f),
+                    Point2D(450f, 1200f),
+                    Point2D(750f, 1380f),
+                    Point2D(1150f, 1380f),
+                    Point2D(1350f, 1050f),
+                    Point2D(950f, 800f),
+                    Point2D(1350f, 450f),
+                    Point2D(1750f, 450f),
+                    Point2D(1950f, 650f),
+                    basePos
+                ),
+                pathWidth = 52f
+            )
+
+            val tunnel = TunnelRegion(
+                id = "dragon_sanctum_tunnel",
+                boundsLeft = 850f,
+                boundsTop = 700f,
+                boundsRight = 1050f,
+                boundsBottom = 900f,
+                entrance = Point2D(850f, 800f),
+                exit = Point2D(1050f, 800f)
+            )
+
+            val decor = listOf(
+                MapDecoration("ads_dec_1", DecorationType.CRYSTAL, Point2D(950f, 500f), 34f),
+                MapDecoration("ads_dec_2", DecorationType.CRYSTAL, Point2D(950f, 1100f), 34f),
+                MapDecoration("ads_dec_3", DecorationType.BOULDER, Point2D(1550f, 800f), 38f),
+                MapDecoration("ads_dec_4", DecorationType.PINE_TREE, Point2D(450f, 200f), 38f),
+                MapDecoration("ads_dec_5", DecorationType.PINE_TREE, Point2D(450f, 1400f), 38f),
+                MapDecoration("ads_dec_6", DecorationType.LANTERN_POST, Point2D(2050f, 750f), 24f)
+            )
+
+            val destructibles = listOf(
+                DestructibleObject("ads_dest_1", DestructibleType.LARGE_BOULDER, Point2D(450f, 800f), 260f, 260f, 35, 26f),
+                DestructibleObject("ads_dest_2", DestructibleType.WOODEN_CRATE, Point2D(950f, 90f), 180f, 180f, 28, 22f),
+                DestructibleObject("ads_dest_3", DestructibleType.WOODEN_CRATE, Point2D(950f, 1510f), 180f, 180f, 28, 22f),
+                DestructibleObject("ads_dest_4", DestructibleType.LARGE_BOULDER, Point2D(1750f, 800f), 260f, 260f, 35, 26f)
+            )
+
+            val finalMap = GameMap(
+                id = "apex_dragon_sanctum",
+                name = "Dragon Sanctum",
+                description = "The ultimate 25-wave endgame crucible. Serpentine dragon ridges, subterranean tunnels, and colossal titan battalions.",
+                environmentType = EnvironmentType.DRAGON_COIL,
+                isUnlocked = isUnlocked,
+                starsEarned = stars,
+                paths = listOf(pathUpper, pathLower),
+                basePosition = basePos,
+                decorations = decor,
+                destructibles = destructibles,
+                tunnelRegion = tunnel,
+                tunnelRegions = listOf(tunnel),
+                worldWidth = 2400f,
+                worldHeight = 1600f,
+                startingCameraCenter = Point2D(1200f, 800f),
+                totalWaves = 25,
+                missionChapter = "APEX CRUCIBLE",
+                startingCoins = 2000,
+                difficulty = "Grandmaster"
             )
             validateMap(finalMap)
             return finalMap

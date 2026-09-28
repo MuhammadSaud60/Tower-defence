@@ -55,7 +55,20 @@ class GameEngine(
 
     init {
         audioPlayer.updateMapAmbience(currentMap.environmentType)
+        audioPlayer.setRainActive(currentMap.isRaining)
     }
+
+    private var isWeatherRainActive = false
+
+    fun toggleWeatherRain(): Boolean {
+        isWeatherRainActive = !isWeatherRainActive
+        val active = currentMap.isRaining || isWeatherRainActive
+        audioPlayer.setRainActive(active)
+        publishState()
+        return isWeatherRainActive
+    }
+
+    fun isRainActive(): Boolean = currentMap.isRaining || isWeatherRainActive
 
     private var gameStatus = GameStatus.PREPARATION
     private var preparationCountdown = 5.0f
@@ -79,9 +92,11 @@ class GameEngine(
     private var gameSpeedMultiplier = 1.0f
     private var gameTime = 0f
     private var lastWaveRewarded = 0
+    private var reviveUsedThisAttempt = false
 
     var progressionManager: com.example.data.ProgressionManager? = null
 
+    fun isReviveUsedThisAttempt(): Boolean = reviveUsedThisAttempt
     fun getEnemiesKilledTotal(): Int = enemiesKilledTotal
     fun getBossesKilledTotal(): Int = bossesKilledTotal
     fun getDestructiblesClearedTotal(): Int = destructiblesClearedTotal
@@ -840,6 +855,7 @@ class GameEngine(
     fun loadMap(map: GameMap) {
         currentMap = map
         audioPlayer.updateMapAmbience(map.environmentType)
+        audioPlayer.setRainActive(map.isRaining || isWeatherRainActive)
         restart(isNewMission = true)
     }
 
@@ -876,13 +892,15 @@ class GameEngine(
 
     /**
      * Emergency Field Reinforcements / Ad-continue recovery.
-     * Restores 50% fortress integrity, eliminates nearby immediate base breach hazards,
-     * grants an emergency tactical shield barrier and resumes the ongoing battle.
+     * Restores 20% base integrity (current health + 20% of maximum health, up to max health),
+     * clears immediate base breach hazards and resumes the ongoing battle.
+     * Available on every defeat.
      */
     @Synchronized
-    fun continueBattle(reviveHpPercent: Float = 0.5f) {
+    fun continueBattle(reviveHpPercent: Float = 0.20f): Boolean {
         if (gameStatus == GameStatus.GAME_OVER) {
-            val restoredHp = (base.maxHp * reviveHpPercent).toInt().coerceAtLeast(1)
+            val bonusHp = (base.maxHp * reviveHpPercent).toInt().coerceAtLeast(1)
+            val restoredHp = (base.currentHp + bonusHp).coerceIn(1, base.maxHp)
             base = base.copy(currentHp = restoredHp)
             
             // Push back or eliminate enemies that reached base or are immediately breaching it
@@ -892,15 +910,18 @@ class GameEngine(
 
             gameStatus = GameStatus.PLAYING
             stateBeforePause = GameStatus.PLAYING
-            showNotice("EMERGENCY PROTOCOL ACTIVATED! BATTLE RESUMED")
+            showNotice("SECOND CHANCE! BATTLE CONTINUES (+20% HP)")
             audioPlayer.playSound(GameSound.TOWER_UPGRADED)
             audioPlayer.resumeAmbienceAndMusic()
             publishState()
+            return true
         }
+        return false
     }
 
     @Synchronized
     fun restart(isNewMission: Boolean = true) {
+        reviveUsedThisAttempt = false
         val baseHpMult = 1f + (progressionManager?.getBaseHpBonus() ?: 0f)
         val effectiveHp = (GameConfig.BASE_MAX_HP * baseHpMult).toInt()
         base = Base(
@@ -1024,7 +1045,9 @@ class GameEngine(
             finalScore = score,
             gameTime = gameTime,
             tutorialRecommendedPlot = tutPlot,
-            screenShakeIntensity = screenShakeIntensity
+            screenShakeIntensity = screenShakeIntensity,
+            isRaining = currentMap.isRaining || isWeatherRainActive,
+            reviveUsedThisAttempt = reviveUsedThisAttempt
         )
     }
 }

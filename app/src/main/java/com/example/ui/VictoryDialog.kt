@@ -100,7 +100,6 @@ fun VictoryDialog(
     val bannerAlpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        audioPlayer.victory()
         entranceScale.animateTo(
             targetValue = 1f,
             animationSpec = spring(dampingRatio = 0.65f, stiffness = 320f)

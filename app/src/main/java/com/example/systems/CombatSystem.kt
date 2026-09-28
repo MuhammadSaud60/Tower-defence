@@ -118,7 +118,7 @@ class CombatSystem(
                     it.isAlive && cooledTower.isObjectInRange(it.position, it.radius)
                 }
                 val manualEnemy = enemies.firstOrNull {
-                    it.id == activeManualTargetId && it.isAlive && !it.reachedBase && cooledTower.isEnemyInRange(it.position)
+                    it.id == activeManualTargetId && it.isAlive && !it.reachedBase && !it.isStealthed && cooledTower.isEnemyInRange(it.position)
                 }
 
                 if (manualDestructible != null) {
@@ -210,7 +210,7 @@ class CombatSystem(
             val targetObj = destructibleMap[proj.targetId] ?: destructibleMap[proj.targetEnemyId]
             val targetPos = when (proj.targetType) {
                 com.example.entities.TargetType.DESTRUCTIBLE -> targetObj?.takeIf { it.isAlive }?.position
-                com.example.entities.TargetType.ENEMY -> targetEnemy?.takeIf { it.isAlive }?.position
+                com.example.entities.TargetType.ENEMY -> targetEnemy?.takeIf { it.isAlive && !it.isStealthed }?.position
             } ?: proj.targetWorldPosition
 
             val updatedProj = proj.advance(dt, targetPos)
@@ -618,14 +618,24 @@ class CombatSystem(
                 )
             }
 
-            if (enemy.isStealthed && enemy.stealthTimer in 3.10f..3.20f) {
+            if (enemy.hasStealthCloakedJustNow || (enemy.isStealthed && enemy.stealthTimer in (enemy.spec.hideDuration - 0.12f)..enemy.spec.hideDuration)) {
                 hasStealthCloak = true
                 newEffects.add(
                     VisualEffect(
                         type = EffectType.STEALTH_SMOKE,
                         position = enemy.position,
-                        maxLifetime = 0.40f,
-                        maxRadius = 26f
+                        maxLifetime = 0.45f,
+                        maxRadius = 28f
+                    )
+                )
+            }
+            if (enemy.hasStealthUncloakedJustNow) {
+                newEffects.add(
+                    VisualEffect(
+                        type = EffectType.STEALTH_SMOKE,
+                        position = enemy.position,
+                        maxLifetime = 0.35f,
+                        maxRadius = 24f
                     )
                 )
             }

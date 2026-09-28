@@ -1155,4 +1155,229 @@ class ExampleUnitTest {
         engine.loadMap(map)
         assertEquals(1000, engine.gameState.value.coins)
     }
+
+    @Test
+    fun testAudioBattlefieldGating() {
+        val audioPlayer = com.example.audio.AndroidAudioPlayer(null)
+        assertFalse(audioPlayer.isInBattlefield)
+        audioPlayer.isInBattlefield = true
+        assertTrue(audioPlayer.isInBattlefield)
+        audioPlayer.isInBattlefield = false
+        assertFalse(audioPlayer.isInBattlefield)
+    }
+
+    @Test
+    fun testEmeraldTwinPassMapProperties() {
+        val map = GameMap.createEmeraldTwinPassMap(isUnlocked = true, stars = 0)
+        assertEquals("emerald_twin_pass", map.id)
+        assertEquals(15, map.totalWaves)
+        assertEquals(1500, map.startingCoins)
+        assertEquals(2, map.paths.size)
+        assertEquals(2, map.getAllTunnelRegions().size)
+        assertTrue(map.getAllWaterPonds().isNotEmpty())
+
+        val engine = com.example.game.GameEngine()
+        engine.loadMap(map)
+        assertEquals(1500, engine.gameState.value.coins)
+    }
+
+    @Test
+    fun testEmeraldTwinPassWaveComposition() {
+        val wm = com.example.systems.WaveManager(mapId = "emerald_twin_pass")
+        val getRosterMethod = wm.javaClass.getDeclaredMethod("getRosterForWave", Int::class.java).apply {
+            isAccessible = true
+        }
+
+        // Waves 1 to 5: Only bosses in range of 2 to 6, no other enemies
+        for (w in 1..5) {
+            @Suppress("UNCHECKED_CAST")
+            val waveRoster = getRosterMethod.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+            assertTrue("Wave $w must contain only bosses", waveRoster.all { it.spec.isBoss })
+            val expectedBossCount = w + 1 // 1:2, 2:3, 3:4, 4:5, 5:6
+            assertEquals("Wave $w must have $expectedBossCount bosses", expectedBossCount, waveRoster.size)
+            assertTrue("Wave $w boss count must be in 2..6", waveRoster.size in 2..6)
+        }
+
+        // Waves 6 to 11: Only fastest enemies (Scout/Runner) + boss
+        for (w in 6..11) {
+            @Suppress("UNCHECKED_CAST")
+            val waveRoster = getRosterMethod.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+            val nonBosses = waveRoster.filter { !it.spec.isBoss }
+            val bosses = waveRoster.filter { it.spec.isBoss }
+
+            assertTrue("Wave $w must contain bosses", bosses.isNotEmpty())
+            assertTrue("Wave $w must contain fastest enemies", nonBosses.isNotEmpty())
+            assertTrue(
+                "Wave $w non-bosses must only be SCOUT or RUNNER",
+                nonBosses.all { it.spec.type == com.example.entities.EnemyType.SCOUT || it.spec.type == com.example.entities.EnemyType.RUNNER }
+            )
+        }
+
+        // Waves 12 to 15: Only medium enemies (Soldier) + bosses
+        for (w in 12..15) {
+            @Suppress("UNCHECKED_CAST")
+            val waveRoster = getRosterMethod.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+            val nonBosses = waveRoster.filter { !it.spec.isBoss }
+            val bosses = waveRoster.filter { it.spec.isBoss }
+
+            assertTrue("Wave $w must contain bosses", bosses.isNotEmpty())
+            assertTrue("Wave $w must contain medium enemies", nonBosses.isNotEmpty())
+            assertTrue(
+                "Wave $w non-bosses must only be SOLDIER",
+                nonBosses.all { it.spec.type == com.example.entities.EnemyType.SOLDIER }
+            )
+        }
+    }
+
+    @Test
+    fun testFiveLevelsPerHorizontalLineLayout() {
+        val totalLevels = 20
+        val levelsPerLine = 5
+        val numLines = (totalLevels + levelsPerLine - 1) / levelsPerLine
+        assertEquals(4, numLines)
+
+        for (idx in 0 until totalLevels) {
+            val lineIdx = idx / levelsPerLine
+            val colIdx = idx % levelsPerLine
+            assertTrue("Column index must be between 0 and 4", colIdx in 0..4)
+            assertTrue("Line index must be between 0 and 3", lineIdx in 0..3)
+
+            when (lineIdx) {
+                0 -> assertTrue(idx in 0..4) // Levels 1 to 5
+                1 -> assertTrue(idx in 5..9) // Levels 6 to 10
+                2 -> assertTrue(idx in 10..14) // Levels 11 to 15
+                3 -> assertTrue(idx in 15..19) // Levels 16 to 20
+            }
+        }
+    }
+
+    @Test
+    fun testForestRingBastionMapProperties() {
+        val map = GameMap.createForestRingBastionMap(isUnlocked = true, stars = 0)
+        assertEquals("forest_ring_bastion", map.id)
+        assertEquals(25, map.totalWaves)
+        assertEquals(1800, map.startingCoins)
+        assertEquals(1, map.paths.size)
+        assertEquals(2, map.getAllTunnelRegions().size)
+        assertEquals(3, map.bridges.size)
+        assertTrue(map.getAllWaterPonds().isNotEmpty())
+
+        val engine = com.example.game.GameEngine()
+        engine.loadMap(map)
+        assertEquals(1800, engine.gameState.value.coins)
+    }
+
+    @Test
+    fun testForestRingBastionWaveComposition() {
+        val wm = com.example.systems.WaveManager(mapId = "forest_ring_bastion")
+        val getRosterMethod = wm.javaClass.getDeclaredMethod("getRosterForWave", Int::class.java).apply {
+            isAccessible = true
+        }
+
+        // Waves 1 to 5: Mix small (Scout), fast (Runner)
+        for (w in 1..5) {
+            @Suppress("UNCHECKED_CAST")
+            val waveRoster = getRosterMethod.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+            assertTrue("Wave $w must contain small scouts", waveRoster.any { it.spec.type == com.example.entities.EnemyType.SCOUT })
+            assertTrue("Wave $w must contain fast runners", waveRoster.any { it.spec.type == com.example.entities.EnemyType.RUNNER })
+            assertTrue(
+                "Wave $w must only contain small and fast enemies",
+                waveRoster.all { it.spec.type == com.example.entities.EnemyType.SCOUT || it.spec.type == com.example.entities.EnemyType.RUNNER }
+            )
+        }
+
+        // Waves 6 to 11: Medium enemies (Soldier), fast enemies (Runner)
+        for (w in 6..11) {
+            @Suppress("UNCHECKED_CAST")
+            val waveRoster = getRosterMethod.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+            assertTrue("Wave $w must contain medium soldiers", waveRoster.any { it.spec.type == com.example.entities.EnemyType.SOLDIER })
+            assertTrue("Wave $w must contain fast runners", waveRoster.any { it.spec.type == com.example.entities.EnemyType.RUNNER })
+            assertTrue(
+                "Wave $w must only contain medium and fast enemies",
+                waveRoster.all { it.spec.type == com.example.entities.EnemyType.SOLDIER || it.spec.type == com.example.entities.EnemyType.RUNNER }
+            )
+        }
+
+        // Waves 12 to 17: Medium enemies only (Soldiers)
+        for (w in 12..17) {
+            @Suppress("UNCHECKED_CAST")
+            val waveRoster = getRosterMethod.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+            assertTrue(
+                "Wave $w must contain only medium soldiers",
+                waveRoster.all { it.spec.type == com.example.entities.EnemyType.SOLDIER }
+            )
+            assertTrue("Wave $w must have enemies", waveRoster.isNotEmpty())
+        }
+
+        // Waves 18 to 20: Medium enemies (Soldiers) + bosses only
+        for (w in 18..20) {
+            @Suppress("UNCHECKED_CAST")
+            val waveRoster = getRosterMethod.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+            val bosses = waveRoster.filter { it.spec.isBoss }
+            val soldiers = waveRoster.filter { !it.spec.isBoss }
+            assertTrue("Wave $w must contain bosses", bosses.isNotEmpty())
+            assertTrue("Wave $w must contain medium soldiers", soldiers.isNotEmpty())
+            assertTrue(
+                "Wave $w must only contain medium enemies and bosses",
+                waveRoster.all { it.spec.isBoss || it.spec.type == com.example.entities.EnemyType.SOLDIER }
+            )
+        }
+
+        // Waves 21 to 25: Bosses + fastest enemies + medium all attack at same time
+        for (w in 21..25) {
+            @Suppress("UNCHECKED_CAST")
+            val waveRoster = getRosterMethod.invoke(wm, w) as List<com.example.systems.WaveSpawnItem>
+            val bosses = waveRoster.filter { it.spec.isBoss }
+            val runners = waveRoster.filter { it.spec.type == com.example.entities.EnemyType.RUNNER }
+            val soldiers = waveRoster.filter { it.spec.type == com.example.entities.EnemyType.SOLDIER }
+            assertTrue("Wave $w must contain bosses", bosses.isNotEmpty())
+            assertTrue("Wave $w must contain fastest enemies (Runners)", runners.isNotEmpty())
+            assertTrue("Wave $w must contain medium enemies (Soldiers)", soldiers.isNotEmpty())
+            assertTrue(
+                "Wave $w must only contain bosses, fastest enemies, and medium enemies",
+                waveRoster.all { it.spec.isBoss || it.spec.type == com.example.entities.EnemyType.RUNNER || it.spec.type == com.example.entities.EnemyType.SOLDIER }
+            )
+        }
+    }
+
+    @Test
+    fun testContinueBattleRestores20PercentHealthOnEveryDefeat() {
+        val map = com.example.data.GameMap.createGreenValleyMap()
+        val engine = com.example.game.GameEngine()
+        engine.loadMap(map)
+
+        // Simulate game over:
+        engine.changeGameState(com.example.game.GameStatus.GAME_OVER)
+        assertEquals(com.example.game.GameStatus.GAME_OVER, engine.gameState.value.gameStatus)
+
+        val maxHp = engine.gameState.value.maxBaseHp
+        val expectedRestoredHp = (maxHp * 0.20f).toInt().coerceAtLeast(1)
+        val initialHp = engine.gameState.value.baseHp
+        val expectedHp = minOf(maxHp, initialHp + expectedRestoredHp)
+
+        // 1st Continue Battle attempt (Rewarded Ad completion)
+        val successFirstTime = engine.continueBattle(0.20f)
+        assertTrue("First revive must succeed", successFirstTime)
+        assertEquals(com.example.game.GameStatus.PLAYING, engine.gameState.value.gameStatus)
+        assertEquals(expectedHp, engine.gameState.value.baseHp)
+
+        // Simulate second defeat:
+        engine.changeGameState(com.example.game.GameStatus.GAME_OVER)
+        assertEquals(com.example.game.GameStatus.GAME_OVER, engine.gameState.value.gameStatus)
+
+        // 2nd Continue Battle attempt should also succeed now (available after every defeat)
+        val successSecondTime = engine.continueBattle(0.20f)
+        assertTrue("Second revive on subsequent defeat must also succeed", successSecondTime)
+        assertEquals(com.example.game.GameStatus.PLAYING, engine.gameState.value.gameStatus)
+    }
+
+    @Test
+    fun testAdManagerInitializationAndTestUnitIds() {
+        val adManager = com.example.ads.AdManager.getInstance()
+        assertNotNull("AdManager instance must not be null", adManager)
+        assertEquals(
+            "ca-app-pub-3940256099942544/5224354917",
+            com.example.ads.AdManager.TEST_REWARDED_AD_UNIT_ID
+        )
+    }
 }

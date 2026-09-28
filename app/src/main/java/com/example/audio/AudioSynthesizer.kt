@@ -773,6 +773,58 @@ object AudioSynthesizer {
         return bytes
     }
 
+    /**
+     * Dedicated, realistic rain soundscape loop (seamless 3.5s buffer).
+     * Features authentic water rush, countless droplet patters on ground and foliage,
+     * gusting winds, and subtle distant low rolling thunder.
+     */
+    fun synthesizeRainSound(sampleRate: Int = DEFAULT_SAMPLE_RATE): ByteArray {
+        val durationSec = 3.5f
+        val totalSamples = (sampleRate * durationSec).toInt()
+        val bytes = ByteArray(totalSamples * 2)
+        var filterVal = 0f
+        var thunderPhase = 0.0
+
+        for (i in 0 until totalSamples) {
+            val t = i.toFloat() / sampleRate
+            val rawNoise = (Random.nextFloat() * 2f - 1f)
+
+            // 1. Continuous rainfall hiss & rushing water texture (medium-high bandpass)
+            filterVal = filterVal * 0.70f + rawNoise * 0.30f
+            val rainPatter = filterVal * (0.30f + 0.07f * sin(2.0 * PI * 0.42 * t).toFloat())
+
+            // 2. High-frequency water droplet clicks on terrain, leaves & puddles
+            val isDroplet = Random.nextFloat() < 0.065f
+            val droplet = if (isDroplet) {
+                val dropFreq = 2200.0 + Random.nextFloat() * 1800.0
+                (sin(2.0 * PI * dropFreq * t) * (0.09f + Random.nextFloat() * 0.07f)).toFloat()
+            } else 0f
+
+            // 3. Storm wind gust swell
+            val gust = (Random.nextFloat() * 2f - 1f) * (0.07f + 0.04f * sin(2.0 * PI * 0.25 * t).toFloat())
+
+            // 4. Distant rolling atmospheric thunder rumble
+            val thunder = if (t in 1.1f..2.5f) {
+                val subT = t - 1.1f
+                thunderPhase += 2.0 * PI * (54.0 + 16.0 * sin(subT * 3.8)) / sampleRate
+                (sin(thunderPhase).toFloat() * sin(subT / 1.4f * PI.toFloat()) * 0.17f)
+            } else 0f
+
+            // Seamless cross-fade loop window: fade at loop boundaries so audio repeats without popping
+            val fadeSamples = (sampleRate * 0.08f).toInt()
+            val fade = when {
+                i < fadeSamples -> i.toFloat() / fadeSamples
+                i > totalSamples - fadeSamples -> (totalSamples - i).toFloat() / fadeSamples
+                else -> 1f
+            }
+
+            val sampleVal = ((rainPatter + droplet + gust + thunder) * 0.38f * fade).coerceIn(-1f, 1f)
+            writePcm16(bytes, i, sampleVal)
+        }
+        return bytes
+    }
+
+
     // --- Background Music Loop ---
 
     /**

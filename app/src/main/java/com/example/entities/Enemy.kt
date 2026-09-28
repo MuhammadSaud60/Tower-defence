@@ -36,8 +36,20 @@ data class EnemySpec(
     val isFlying: Boolean = false,
     val maxArmorHp: Float = 0f,
     val maxShieldHp: Float = 0f,
-    val abilities: List<AbilityDefinition> = emptyList()
+    val abilities: List<AbilityDefinition> = emptyList(),
+    val canHide: Boolean = false,
+    val hideDuration: Float = 3.5f,
+    val hideCooldown: Float = 6.0f
 ) {
+    fun hasHidingAbility(): Boolean = canHide || type == EnemyType.STEALTH || abilities.any { it.type == AbilityType.TEMPORARY_CLOAK }
+
+    fun withHiding(duration: Float = 3.5f, cooldown: Float = 6.0f): EnemySpec = copy(
+        canHide = true,
+        hideDuration = duration,
+        hideCooldown = cooldown,
+        abilities = abilities + AbilityDefinition.temporaryCloak(cooldown = cooldown, duration = duration)
+    )
+
     companion object {
         val SCOUT = EnemySpec(
             type = EnemyType.SCOUT,
@@ -158,7 +170,7 @@ data class EnemySpec(
         val STEALTH = EnemySpec(
             type = EnemyType.STEALTH,
             name = "Shadow Infiltrator",
-            baseHp = 80f,
+            baseHp = 85f,
             armor = 0f,
             baseSpeed = 160f,
             rewardCoins = 9,
@@ -166,7 +178,39 @@ data class EnemySpec(
             radius = 16f,
             primaryColorHex = 0xFF475569L, // Phantom Slate
             secondaryColorHex = 0xFF1E293BL,
-            abilities = listOf(AbilityDefinition.temporaryCloak(cooldown = 6.0f, duration = 3.0f, warningDuration = 0.4f))
+            canHide = true,
+            hideDuration = 3.5f,
+            hideCooldown = 5.5f,
+            abilities = listOf(AbilityDefinition.temporaryCloak(cooldown = 5.5f, duration = 3.5f, warningDuration = 0.4f))
+        )
+
+        val SHADOW_RUNNER = RUNNER.withHiding(duration = 3.0f, cooldown = 5.0f).copy(
+            name = "Shadow Runner",
+            primaryColorHex = 0xFF38BDF8L,
+            secondaryColorHex = 0xFF0F172AL
+        )
+
+        val PHANTOM_SOLDIER = SOLDIER.withHiding(duration = 3.5f, cooldown = 6.0f).copy(
+            name = "Phantom Soldier",
+            primaryColorHex = 0xFF818CF8L,
+            secondaryColorHex = 0xFF312E81L
+        )
+
+        val SHADOW_STALKER = EnemySpec(
+            type = EnemyType.STEALTH,
+            name = "Shadow Stalker",
+            baseHp = 140f,
+            armor = 2f,
+            baseSpeed = 150f,
+            rewardCoins = 12,
+            baseDamage = 12,
+            radius = 18f,
+            primaryColorHex = 0xFF6366F1L,
+            secondaryColorHex = 0xFF0F172AL,
+            canHide = true,
+            hideDuration = 4.0f,
+            hideCooldown = 5.0f,
+            abilities = listOf(AbilityDefinition.temporaryCloak(cooldown = 5.0f, duration = 4.0f, warningDuration = 0.4f))
         )
 
         val MINION_SCOUT = EnemySpec(
@@ -483,6 +527,81 @@ data class EnemySpec(
                 AbilityDefinition.iceShockwave(cooldown = 6.5f, radius = 230f)
             )
         )
+
+        /**
+         * Verdant Colossus: Ancient mossy stone titan with formidable durability and bark plating.
+         */
+        fun createVerdantColossus(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier > 1) "Ancient Verdant Colossus Mk II" else "Verdant Colossus",
+            baseHp = 2200f + (tier - 1) * 1400f,
+            armor = 16f + (tier - 1) * 8f,
+            baseSpeed = 38f,
+            rewardCoins = 110 + (tier - 1) * 50,
+            baseDamage = 20 + (tier - 1) * 8,
+            radius = 42f,
+            primaryColorHex = 0xFF14532DL, // Deep forest green
+            secondaryColorHex = 0xFF86EFACL, // Lush emerald moss
+            isBoss = true,
+            regenRate = 18f,
+            bulletResistance = 0.50f
+        )
+
+        /**
+         * Emerald Gorgon: Serpentine emerald viper beast navigating winding passes with high agility and magic deflection.
+         */
+        fun createEmeraldGorgon(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier > 1) "Grand Emerald Gorgon" else "Emerald Gorgon",
+            baseHp = 2600f + (tier - 1) * 1600f,
+            armor = 20f + (tier - 1) * 9f,
+            baseSpeed = 44f,
+            rewardCoins = 130 + (tier - 1) * 60,
+            baseDamage = 22 + (tier - 1) * 9,
+            radius = 40f,
+            primaryColorHex = 0xFF047857L, // Rich emerald jade
+            secondaryColorHex = 0xFF34D399L, // Vivid seafoam serpent scales
+            isBoss = true,
+            regenRate = 22f
+        )
+
+        /**
+         * Canopy Warden: Ancient highland treant warden with dense wood armor and spore regeneration.
+         */
+        fun createCanopyWarden(tier: Int = 1): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = if (tier > 1) "Elder Canopy Warden" else "Canopy Warden",
+            baseHp = 3400f + (tier - 1) * 1900f,
+            armor = 26f + (tier - 1) * 12f,
+            baseSpeed = 36f,
+            rewardCoins = 160 + (tier - 1) * 70,
+            baseDamage = 26 + (tier - 1) * 10,
+            radius = 44f,
+            primaryColorHex = 0xFF1B4D3EL, // Dark sylvan pine
+            secondaryColorHex = 0xFFA7F3D0L, // Spore glow
+            isBoss = true,
+            regenRate = 28f,
+            bulletResistance = 0.65f
+        )
+
+        /**
+         * Sylvan Apex Overlord: Supreme primeval master of the emerald serpent realm with crushing armor and overwhelming vitality.
+         */
+        fun createSylvanApexOverlord(): EnemySpec = EnemySpec(
+            type = EnemyType.BOSS,
+            name = "Sylvan Apex Overlord",
+            baseHp = 8400f,
+            armor = 48f,
+            baseSpeed = 35f,
+            rewardCoins = 400,
+            baseDamage = 40,
+            radius = 48f,
+            primaryColorHex = 0xFF064E3BL, // Deep primeval jade
+            secondaryColorHex = 0xFF6EE7B7L, // Luminous jade crown
+            isBoss = true,
+            regenRate = 38f,
+            bulletResistance = 0.80f
+        )
     }
 }
 
@@ -543,7 +662,9 @@ data class Enemy(
     val hasPhaseChangedJustNow: Boolean = false,
     val hasHealPulseJustNow: Boolean = false,
     val hasShockwaveJustNow: Boolean = false,
-    val hasSummonJustNow: Boolean = false
+    val hasSummonJustNow: Boolean = false,
+    val hasStealthCloakedJustNow: Boolean = false,
+    val hasStealthUncloakedJustNow: Boolean = false
 ) {
     val healthPercentage: Float get() = (currentHp / maxHp).coerceIn(0f, 1f)
     val isHitFlashing: Boolean get() = hitFlashTimer > 0f
@@ -735,29 +856,33 @@ data class Enemy(
             }
         }
 
-        // 4. Stealth Cloak ability cycle
+        // 4. Stealth Cloak / Hiding ability cycle
         var newIsStealthed = isStealthed
         var newStealthTimer = stealthTimer
         var newStealthCooldown = stealthCooldown
         var newStealthWarning = stealthWarningTimer
+        var stealthCloakedJustNow = false
+        var stealthUncloakedJustNow = false
 
-        if (spec.type == EnemyType.STEALTH) {
+        if (spec.hasHidingAbility()) {
             if (newIsStealthed) {
                 newStealthTimer -= dt
                 if (newStealthTimer <= 0f) {
                     newIsStealthed = false
-                    newStealthCooldown = 6.0f
+                    newStealthCooldown = if (spec.hideCooldown > 0f) spec.hideCooldown else 6.0f
+                    stealthUncloakedJustNow = true
                 }
             } else if (newStealthWarning > 0f) {
                 newStealthWarning -= dt
                 if (newStealthWarning <= 0f) {
                     newIsStealthed = true
-                    newStealthTimer = 3.2f
+                    newStealthTimer = if (spec.hideDuration > 0f) spec.hideDuration else 3.5f
+                    stealthCloakedJustNow = true
                 }
             } else {
                 newStealthCooldown -= dt
                 if (newStealthCooldown <= 0f) {
-                    newStealthWarning = 0.4f
+                    newStealthWarning = 0.45f
                 }
             }
         }
@@ -939,7 +1064,9 @@ data class Enemy(
             hasPhaseChangedJustNow = false,
             hasHealPulseJustNow = triggerHeal,
             hasShockwaveJustNow = triggerShockwave,
-            hasSummonJustNow = triggerSummon
+            hasSummonJustNow = triggerSummon,
+            hasStealthCloakedJustNow = stealthCloakedJustNow,
+            hasStealthUncloakedJustNow = stealthUncloakedJustNow
         )
     }
 }

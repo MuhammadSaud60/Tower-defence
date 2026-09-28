@@ -34,8 +34,8 @@ object GameConfig {
     const val MG_TOWER_DAMAGE = 9f
     const val MG_TOWER_COOLDOWN = 0.22f
 
-    // Cannon Tower stats
-    const val CANNON_TOWER_COST = 100
+    // Cannon Tower stats (Heavy Gun)
+    const val CANNON_TOWER_COST = 150
     const val CANNON_TOWER_RANGE = 310f
     const val CANNON_TOWER_DAMAGE = 65f
     const val CANNON_TOWER_COOLDOWN = 1.5f

@@ -3,8 +3,12 @@ package com.example.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -35,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dangerous
 import androidx.compose.material.icons.filled.Healing
@@ -49,6 +54,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -510,6 +516,166 @@ fun PauseDialog(
 }
 
 /**
+ * Special Opportunity button for watching an AdMob rewarded ad to continue battle after defeat.
+ */
+@Composable
+fun RewardedReviveButton(
+    isAdLoading: Boolean,
+    isAdAvailable: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "revive_glow")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_alpha"
+    )
+
+    if (isAdLoading) {
+        // Ad is currently loading
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .background(Color(0xFF261908), RoundedCornerShape(8.dp))
+                .border(1.dp, Color(0xFFD97706).copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = Color(0xFFFFD166),
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "PREPARING REWARD AD...",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFD166),
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1
+                )
+            }
+        }
+    } else if (!isAdAvailable) {
+        // Ad is currently unavailable
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .background(Color(0xFF1C191E), RoundedCornerShape(8.dp))
+                .border(1.dp, Color(0xFF374151), RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    tint = Color(0xFF6B7280),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "AD UNAVAILABLE • RETRY LEVEL",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF6B7280),
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1
+                )
+            }
+        }
+    } else {
+        // Special Opportunity Button: WATCH AD • CONTINUE BATTLE (+20% HP)
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(46.dp)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        listOf(
+                            Color(0xFF9A3412),
+                            Color(0xFFD97706),
+                            Color(0xFFF59E0B),
+                            Color(0xFFD97706)
+                        )
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .border(
+                    width = 2.dp,
+                    color = Color(0xFFFDE047).copy(alpha = glowAlpha),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick
+                )
+                .testTag("game_over_watch_ad_continue_button")
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(Color(0xFF78350F), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Watch Ad",
+                        tint = Color(0xFFFFFBEB),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "WATCH AD • CONTINUE BATTLE",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFFFFFBEB),
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "+20% HEALTH RESTORED • RESUME WAVE",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFEF3C7),
+                        letterSpacing = 0.4.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Professional mobile game tactical Defeat / Game Over screen.
  * Darker military failure atmosphere with battle stats, Tactical Revive (Continue Battle opportunity),
  * and tactile action buttons (Retry, Upgrades, Campaign).
@@ -523,6 +689,9 @@ fun GameOverDialog(
     enemiesKilled: Int,
     onRestart: () -> Unit,
     onMainMenu: () -> Unit,
+    isAdLoading: Boolean = false,
+    isAdAvailable: Boolean = true,
+    onWatchAdContinue: (() -> Unit)? = null,
     onContinueBattle: (() -> Unit)? = null,
     onUpgradeTowers: (() -> Unit)? = null
 ) {
@@ -530,7 +699,6 @@ fun GameOverDialog(
     val entranceScale = remember { Animatable(0.85f) }
 
     LaunchedEffect(Unit) {
-        audioPlayer.defeat()
         entranceScale.animateTo(
             targetValue = 1f,
             animationSpec = tween(380, easing = FastOutSlowInEasing)
@@ -671,16 +839,14 @@ fun GameOverDialog(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Tactical Revive Opportunity (Continue Battle)
-                        if (onContinueBattle != null) {
-                            GameButton(
-                                text = "CONTINUE BATTLE (+50% HP)",
-                                icon = Icons.Default.Healing,
-                                variant = GameButtonVariant.GOLD,
-                                height = 42.dp,
-                                onClick = onContinueBattle,
-                                modifier = Modifier.fillMaxWidth(),
-                                testTag = "game_over_continue_button"
+                        // Tactical Revive Opportunity (Watch Ad / Continue Battle)
+                        if (onWatchAdContinue != null || onContinueBattle != null) {
+                            RewardedReviveButton(
+                                isAdLoading = isAdLoading,
+                                isAdAvailable = isAdAvailable,
+                                onClick = {
+                                    onWatchAdContinue?.invoke() ?: onContinueBattle?.invoke()
+                                }
                             )
 
                             Spacer(modifier = Modifier.height(6.dp))

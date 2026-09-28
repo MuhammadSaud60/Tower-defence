@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,7 +65,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -163,6 +167,14 @@ enum class WorldSector(
         themeColor = Color(0xFF10B981),
         accentColor = Color(0xFF34D399),
         bgColors = listOf(Color(0xFF042F1A), Color(0xFF021B0F), Color(0xFF010E08))
+    ),
+    HIGHLANDS(
+        title = "EMERALD HIGHLANDS",
+        subtitle = "Sylvan Lakes, Twin Zig-Zag Tunnels & Twin Bosses",
+        icon = Icons.Default.Forest,
+        themeColor = Color(0xFF10B981),
+        accentColor = Color(0xFF34D399),
+        bgColors = listOf(Color(0xFF064E3B), Color(0xFF022C22), Color(0xFF021B0F))
     )
 }
 
@@ -272,13 +284,41 @@ fun MapSelectionScreen(
             GameMap.createDesertDuneBastionMap(
                 isUnlocked = progressionManager.isMapUnlocked("desert_dune_bastion") || progressionManager.isMapUnlocked("dune_storm_stronghold"),
                 stars = maxOf(progressionManager.getStarsForMap("desert_dune_bastion"), progressionManager.getStarsForMap("dune_storm_stronghold"))
+            ),
+            GameMap.createEmeraldTwinPassMap(
+                isUnlocked = progressionManager.isMapUnlocked("emerald_twin_pass") || progressionManager.isMapUnlocked("emerald_serpent_pass"),
+                stars = maxOf(progressionManager.getStarsForMap("emerald_twin_pass"), progressionManager.getStarsForMap("emerald_serpent_pass"))
+            ),
+            GameMap.createForestRingBastionMap(
+                isUnlocked = progressionManager.isMapUnlocked("forest_ring_bastion") || progressionManager.isMapUnlocked("sylvan_ring_sanctuary"),
+                stars = maxOf(progressionManager.getStarsForMap("forest_ring_bastion"), progressionManager.getStarsForMap("sylvan_ring_sanctuary"))
+            ),
+            GameMap.createFrozenPassMap(
+                isUnlocked = progressionManager.isMapUnlocked("frozen_pass"),
+                stars = progressionManager.getStarsForMap("frozen_pass")
+            ),
+            GameMap.createObsidianCrossfireMap(
+                isUnlocked = progressionManager.isMapUnlocked("obsidian_crossfire"),
+                stars = progressionManager.getStarsForMap("obsidian_crossfire")
+            ),
+            GameMap.createTempestRavineMap(
+                isUnlocked = progressionManager.isMapUnlocked("tempest_ravine"),
+                stars = progressionManager.getStarsForMap("tempest_ravine")
+            ),
+            GameMap.createEclipseCitadelMap(
+                isUnlocked = progressionManager.isMapUnlocked("eclipse_citadel"),
+                stars = progressionManager.getStarsForMap("eclipse_citadel")
+            ),
+            GameMap.createApexDragonSanctumMap(
+                isUnlocked = progressionManager.isMapUnlocked("apex_dragon_sanctum"),
+                stars = progressionManager.getStarsForMap("apex_dragon_sanctum")
             )
         )
     }
 
     val totalStars = remember { progressionManager.getTotalStars() }
 
-    // 18 Campaign Nodes structured for the Zig-Zag Chain
+    // 25 Campaign Nodes structured for the Zig-Zag Chain (5 horizontal lines of 5 levels)
     val campaignNodes = remember(maps) {
         listOf(
             CampaignMissionNode(maps[0], 1, WorldSector.FOREST, false, null),
@@ -298,7 +338,14 @@ fun MapSelectionScreen(
             CampaignMissionNode(maps[14], 15, WorldSector.TEMPEST, true, "Twin Siege Bosses"),
             CampaignMissionNode(maps[15], 16, WorldSector.CLOUDY, true, "Ancient Forest Titan"),
             CampaignMissionNode(maps[16], 17, WorldSector.SNOW, true, "Summit Boss Avalanche"),
-            CampaignMissionNode(maps[17], 18, WorldSector.DESERT, true, "Desert Boss Incursion (Hard)")
+            CampaignMissionNode(maps[17], 18, WorldSector.DESERT, true, "Desert Boss Incursion (Hard)"),
+            CampaignMissionNode(maps[18], 19, WorldSector.HIGHLANDS, true, "Twin Boss Serpent Pass (Hard)"),
+            CampaignMissionNode(maps[19], 20, WorldSector.HIGHLANDS, true, "Sylvan Ring Citadel (25 Waves)"),
+            CampaignMissionNode(maps[20], 21, WorldSector.SNOW, true, "Frozen Pass Titans (Hard)"),
+            CampaignMissionNode(maps[21], 22, WorldSector.DESERT, true, "Obsidian Dreadnoughts (Hard)"),
+            CampaignMissionNode(maps[22], 23, WorldSector.TEMPEST, true, "Tempest Leviathans (Extreme)"),
+            CampaignMissionNode(maps[23], 24, WorldSector.ECLIPSE, true, "Solstice Overlords (Master)"),
+            CampaignMissionNode(maps[24], 25, WorldSector.HIGHLANDS, true, "Apex Dragon Sovereigns (10 Bosses)")
         )
     }
 
@@ -308,23 +355,10 @@ fun MapSelectionScreen(
         if (lastUnlockedIndex != -1) lastUnlockedIndex else 0
     }
 
-    // Selected mission for inspection preview
-    var selectedNode by remember {
-        mutableStateOf<CampaignMissionNode?>(
-            campaignNodes.getOrNull(currentMissionIndex)
-        )
-    }
-
     val mapScrollState = rememberScrollState()
 
-    // Smoothly scroll to the current unlocked frontline mission on launch
-    LaunchedEffect(currentMissionIndex) {
-        val targetScroll = (currentMissionIndex * 80 - 150).coerceAtLeast(0)
-        mapScrollState.animateScrollTo(targetScroll, animationSpec = tween(700, easing = FastOutSlowInEasing))
-    }
-
-    // Active Sector based on selected node or frontline
-    val activeSector = selectedNode?.sector ?: campaignNodes[currentMissionIndex].sector
+    // Active Sector based on frontline mission
+    val activeSector = campaignNodes[currentMissionIndex].sector
 
     Box(
         modifier = Modifier
@@ -459,7 +493,8 @@ fun MapSelectionScreen(
             }
 
             // ==========================================
-            // WORLD MAP: S-CURVE ZIG-ZAG CHAIN OF ALL 17 LEVELS
+            // WORLD MAP: 5 LEVELS PER HORIZONTAL LINE
+            // Each line displays 5 levels horizontally with dedicated road segments
             // ==========================================
             BoxWithConstraints(
                 modifier = Modifier
@@ -467,171 +502,179 @@ fun MapSelectionScreen(
                     .weight(1f)
             ) {
                 val scopeMaxWidth = maxWidth
-                val scopeMaxHeight = maxHeight
                 val containerWidthPx = constraints.maxWidth.toFloat()
                 val containerHeightPx = constraints.maxHeight.toFloat()
                 val isLandscape = scopeMaxWidth >= 580.dp
                 val density = LocalDensity.current
 
-                // 17 Node positions computed for the Zig-Zag Chain
-                val nodePositions: List<Offset> = remember(containerWidthPx, containerHeightPx, isLandscape) {
-                    if (isLandscape) {
-                        // Landscape 3-Row S-Curve Zig-Zag Chain
-                        // Row 0: L1 -> L2 -> L3 (Boss) -> L4 -> L5 (Left to Right)
-                        // U-Curve right!
-                        // Row 1: L10 <- L9 <- L8 (Boss) <- L7 <- L6 (Right to Left)
-                        // U-Curve left!
-                        // Row 2: L11 -> L12 -> L13 (Boss) -> L14 (Apex) -> L15 (Twin Siege) -> L16 (Cloudy Forest) -> L17 (Frostpeak Descent) (Left to Right)
-                        val padX = with(density) { 56.dp.toPx() }
-                        val netW = (containerWidthPx - padX * 2f).coerceAtLeast(100f)
+                val levelsPerLine = 5
+                val numLines = (campaignNodes.size + levelsPerLine - 1) / levelsPerLine
 
-                        val r0Y = containerHeightPx * 0.17f
-                        val r1Y = containerHeightPx * 0.50f
-                        val r2Y = containerHeightPx * 0.83f
+                // Layout parameters: 5 levels spaced horizontally across each line
+                val padX = with(density) { (if (isLandscape) 44.dp else 22.dp).toPx() }
+                val maxLineWidth = with(density) { (if (isLandscape) 720.dp else 440.dp).toPx() }
+                val netW = (containerWidthPx - padX * 2f).coerceAtLeast(100f).coerceAtMost(maxLineWidth)
+                val startX = (containerWidthPx - netW) / 2f
 
-                        val positions = mutableListOf<Offset>()
-                        // Row 0 (5 nodes): indices 0, 1, 2, 3, 4
-                        val r0Fracs = listOf(0.04f, 0.27f, 0.50f, 0.73f, 0.96f)
-                        r0Fracs.forEach { f -> positions.add(Offset(padX + netW * f, r0Y)) }
+                // Spacing parameters: 4 rows of 5 levels nicely proportioned for landscape and portrait
+                val startY = with(density) { (if (isLandscape) 36.dp else 46.dp).toPx() }
+                val rowStepY = with(density) { (if (isLandscape) 82.dp else 104.dp).toPx() }
 
-                        // Row 1 (5 nodes, Right to Left!): indices 5, 6, 7, 8, 9
-                        val r1Fracs = listOf(0.96f, 0.73f, 0.50f, 0.27f, 0.04f)
-                        r1Fracs.forEach { f -> positions.add(Offset(padX + netW * f, r1Y)) }
-
-                        // Row 2 (8 nodes, Left to Right!): indices 10, 11, 12, 13, 14, 15, 16, 17
-                        val r2Fracs = listOf(0.04f, 0.17f, 0.30f, 0.43f, 0.57f, 0.70f, 0.83f, 0.96f)
-                        r2Fracs.forEach { f -> positions.add(Offset(padX + netW * f, r2Y)) }
-
-                        positions
-                    } else {
-                        // Portrait vertical winding zig-zag chain
-                        val stepY = with(density) { 62.dp.toPx() }
-                        val startY = with(density) { 36.dp.toPx() }
-                        val xFracs = listOf(
-                            0.28f, 0.65f, 0.82f, 0.50f, 0.20f,
-                            0.45f, 0.80f, 0.60f, 0.20f, 0.45f,
-                            0.72f, 0.80f, 0.50f, 0.75f, 0.35f,
-                            0.65f, 0.30f, 0.70f
-                        )
-                        xFracs.mapIndexed { idx, frac ->
-                            Offset(containerWidthPx * frac, startY + idx * stepY)
-                        }
+                // Compute node positions: 5 levels per horizontal line
+                val nodePositions: List<Offset> = remember(containerWidthPx, containerHeightPx, isLandscape, campaignNodes.size) {
+                    val positions = mutableListOf<Offset>()
+                    for (idx in campaignNodes.indices) {
+                        val lineIdx = idx / levelsPerLine
+                        val colIdx = idx % levelsPerLine
+                        val x = startX + (colIdx.toFloat() / (levelsPerLine - 1).toFloat()) * netW
+                        val y = startY + lineIdx * rowStepY
+                        positions.add(Offset(x, y))
                     }
+                    positions
                 }
 
-                // Generate connecting paths between nodes (including U-loops)
-                val segmentPaths: List<Path> = remember(nodePositions, isLandscape) {
-                    if (nodePositions.size < 2) return@remember emptyList()
-                    val paths = mutableListOf<Path>()
-                    for (i in 0 until nodePositions.size - 1) {
-                        val p1 = nodePositions[i]
-                        val p2 = nodePositions[i + 1]
-                        val path = Path().apply {
-                            moveTo(p1.x, p1.y)
-                            if (isLandscape) {
-                                when (i) {
-                                    4 -> {
-                                        // U-Loop around the right edge from Row 0 to Row 1
-                                        val loopRight = maxOf(p1.x, p2.x) + with(density) { 48.dp.toPx() }
-                                        cubicTo(loopRight, p1.y, loopRight, p2.y, p2.x, p2.y)
-                                    }
-                                    9 -> {
-                                        // U-Loop around the left edge from Row 1 to Row 2
-                                        val loopLeft = minOf(p1.x, p2.x) - with(density) { 48.dp.toPx() }
-                                        cubicTo(loopLeft, p1.y, loopLeft, p2.y, p2.x, p2.y)
-                                    }
-                                    else -> {
-                                        // Horizontal chain link
-                                        val midX = (p1.x + p2.x) / 2f
-                                        val midY = (p1.y + p2.y) / 2f + (if (i % 2 == 0) -6f else 6f)
-                                        quadraticTo(midX, midY, p2.x, p2.y)
-                                    }
-                                }
-                            } else {
-                                val midX = (p1.x + p2.x) / 2f + (if (i % 2 == 0) 24f else -24f)
-                                val midY = (p1.y + p2.y) / 2f
+                // Generous clearance ensuring smooth scrolling across all devices and complete visibility of the 4th row
+                val lastNodeY = nodePositions.lastOrNull()?.y ?: 400f
+                val bottomClearancePx = with(density) { (if (isLandscape) 88.dp else 115.dp).toPx() }
+                val totalContentHeightPx = maxOf(lastNodeY + bottomClearancePx, containerHeightPx + with(density) { 60.dp.toPx() })
+                val totalMapHeightDp = with(density) { totalContentHeightPx.toDp() }
+
+                // Smoothly scroll to the player's active frontline mission
+                LaunchedEffect(currentMissionIndex) {
+                    val targetLine = currentMissionIndex / levelsPerLine
+                    val targetScrollPx = ((targetLine * rowStepY) - with(density) { 30.dp.toPx() }).coerceAtLeast(0f)
+                    mapScrollState.animateScrollTo(
+                        targetScrollPx.roundToInt(),
+                        animationSpec = tween(650, easing = FastOutSlowInEasing)
+                    )
+                }
+
+                // Generate road segments horizontally within each line of 5 levels (not one continuous chain)
+                val roadSegments: List<CampaignRoadSegment> = remember(nodePositions) {
+                    val segs = mutableListOf<CampaignRoadSegment>()
+                    if (nodePositions.size < 2) return@remember segs
+
+                    for (lineIdx in 0 until numLines) {
+                        val lineStart = lineIdx * levelsPerLine
+                        val lineEnd = minOf((lineIdx + 1) * levelsPerLine, nodePositions.size)
+                        for (i in lineStart until lineEnd - 1) {
+                            val p1 = nodePositions[i]
+                            val p2 = nodePositions[i + 1]
+                            val path = Path().apply {
+                                moveTo(p1.x, p1.y)
+                                val midX = (p1.x + p2.x) / 2f
+                                val midY = (p1.y + p2.y) / 2f + (if (i % 2 == 0) -2.5f else 2.5f)
                                 quadraticTo(midX, midY, p2.x, p2.y)
                             }
+                            segs.add(CampaignRoadSegment(path, i, i + 1))
                         }
-                        paths.add(path)
                     }
-                    paths
+                    segs
                 }
 
-                val mapContentModifier = if (isLandscape) {
-                    Modifier.fillMaxSize()
-                } else {
-                    Modifier
-                        .fillMaxWidth()
-                        .height(with(density) { (nodePositions.lastOrNull()?.y ?: 800f).toDp() + 90.dp })
+                // Scroll container taking the full viewport area
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
                         .verticalScroll(mapScrollState)
+                ) {
+                    // Inner content Box with exact total map height so verticalScroll properly scrolls all rows
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(totalMapHeightDp)
+                    ) {
+                        // Procedural metallic chain and energy lines connecting levels horizontally in each line
+                        CampaignChainCanvas(
+                            segments = roadSegments,
+                            nodes = campaignNodes,
+                            currentMissionIndex = currentMissionIndex,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(totalMapHeightDp)
+                        )
+
+                        // Render All Level Nodes
+                        campaignNodes.forEachIndexed { index, node ->
+                            if (index < nodePositions.size) {
+                                val pos = nodePositions[index]
+                                val isCompleted = node.map.isUnlocked && node.map.starsEarned > 0
+                                val isCurrent = (index == currentMissionIndex)
+                                val nodeSizeDp = if (node.isBoss) 52.dp else 44.dp
+                                val halfSizePx = with(density) { (nodeSizeDp / 2f).toPx() }
+
+                                CampaignNodeMarker(
+                                    node = node,
+                                    isCompleted = isCompleted,
+                                    isCurrent = isCurrent,
+                                    isSelected = isCurrent,
+                                    onClick = {
+                                        // Clicking directly starts the mission; no separate start button needed
+                                        if (node.map.isUnlocked) {
+                                            audioPlayer.waveStart()
+                                            onSelectMap(node.map)
+                                        } else {
+                                            audioPlayer.buttonClick()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .offset {
+                                            IntOffset(
+                                                x = (pos.x - halfSizePx).roundToInt(),
+                                                y = (pos.y - halfSizePx).roundToInt()
+                                            )
+                                        }
+                                )
+                            }
+                        }
+                    }
                 }
 
-                Box(modifier = mapContentModifier) {
-                    // Procedural metallic chain and energy lines
-                    CampaignChainCanvas(
-                        segmentPaths = segmentPaths,
-                        nodes = campaignNodes,
-                        currentMissionIndex = currentMissionIndex,
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    // Render all 13 Level Nodes
-                    campaignNodes.forEachIndexed { index, node ->
-                        if (index < nodePositions.size) {
-                            val pos = nodePositions[index]
-                            val isCompleted = node.map.isUnlocked && node.map.starsEarned > 0
-                            val isCurrent = (index == currentMissionIndex)
-                            val isSelected = (selectedNode?.map?.id == node.map.id)
-                            val nodeSizeDp = if (node.isBoss) 60.dp else 50.dp
-                            val halfSizePx = with(density) { (nodeSizeDp / 2f).toPx() }
-
-                            CampaignNodeMarker(
-                                node = node,
-                                isCompleted = isCompleted,
-                                isCurrent = isCurrent,
-                                isSelected = isSelected,
-                                onClick = {
-                                    audioPlayer.buttonClick()
-                                    if (selectedNode?.map?.id == node.map.id && node.map.isUnlocked) {
-                                        // Double tap starts the mission directly
-                                        audioPlayer.waveStart()
-                                        onSelectMap(node.map)
-                                    } else {
-                                        selectedNode = node
-                                    }
-                                },
-                                modifier = Modifier
-                                    .offset {
-                                        IntOffset(
-                                            x = (pos.x - halfSizePx).roundToInt(),
-                                            y = (pos.y - halfSizePx).roundToInt()
-                                        )
-                                    }
+                // Sleek floating scroll cue at the bottom when more levels exist below the current viewport
+                if (mapScrollState.canScrollForward) {
+                    Surface(
+                        color = Color(0xEE0F172A),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.6f)),
+                        shadowElevation = 8.dp,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowDownward,
+                                contentDescription = "Scroll down for more missions",
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "SCROLL DOWN",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFE2E8F0),
+                                letterSpacing = 0.5.sp
                             )
                         }
                     }
                 }
             }
-
-            // ==========================================
-            // COMPACT DOCKED BOTTOM MISSION PREVIEW STRIP
-            // Displays selected level info and prominent START MISSION button
-            // Fixed height ensures it NEVER squishes the campaign map!
-            // ==========================================
-            val activeNode = selectedNode ?: campaignNodes.getOrNull(currentMissionIndex) ?: campaignNodes.first()
-            MissionPreviewPanel(
-                node = activeNode,
-                onStartMission = {
-                    if (activeNode.map.isUnlocked) {
-                        audioPlayer.waveStart()
-                        onSelectMap(activeNode.map)
-                    }
-                }
-            )
         }
     }
 }
+
+/**
+ * Represents a road segment linking two adjacent levels horizontally within a line.
+ */
+data class CampaignRoadSegment(
+    val path: Path,
+    val fromIndex: Int,
+    val toIndex: Int
+)
 
 /**
  * Procedural canvas drawing an authentic fantasy campaign road:
@@ -642,7 +685,7 @@ fun MapSelectionScreen(
  */
 @Composable
 private fun CampaignChainCanvas(
-    segmentPaths: List<Path>,
+    segments: List<CampaignRoadSegment>,
     nodes: List<CampaignMissionNode>,
     currentMissionIndex: Int,
     modifier: Modifier = Modifier
@@ -671,11 +714,11 @@ private fun CampaignChainCanvas(
     val pathMeasure = remember { PathMeasure() }
 
     Canvas(modifier = modifier) {
-        for (i in segmentPaths.indices) {
-            val path = segmentPaths[i]
-            val nextNode = nodes.getOrNull(i + 1) ?: continue
+        for (segment in segments) {
+            val path = segment.path
+            val nextNode = nodes.getOrNull(segment.toIndex) ?: continue
             val isSegmentUnlocked = nextNode.map.isUnlocked
-            val isFrontline = (i == currentMissionIndex)
+            val isFrontline = (segment.toIndex == currentMissionIndex)
             val sector = nextNode.sector
 
             // 1. Deep path trench / drop shadow
@@ -824,7 +867,7 @@ private fun CampaignNodeMarker(
 ) {
     val isUnlocked = node.map.isUnlocked
     val isBoss = node.isBoss
-    val nodeSize = if (isBoss) 62.dp else 48.dp
+    val nodeSize = if (isBoss) 52.dp else 44.dp
 
     // Pulse animation for current active mission
     val infiniteTransition = rememberInfiniteTransition(label = "node_pulse")
@@ -931,17 +974,17 @@ private fun CampaignNodeMarker(
                         imageVector = if (node.levelNumber == 13) Icons.Default.Castle else Icons.Default.CrisisAlert,
                         contentDescription = "Boss",
                         tint = if (isUnlocked) Color(0xFFFEE2E2) else Color(0xFF64748B),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Text(
                         text = "LV.${node.levelNumber}",
-                        fontSize = 9.sp,
+                        fontSize = 8.sp,
                         fontWeight = FontWeight.Black,
                         color = if (isUnlocked) Color(0xFFFECDD3) else Color(0xFF94A3B8)
                     )
                     Text(
                         text = if (node.levelNumber == 13) "APEX" else "BOSS",
-                        fontSize = 7.sp,
+                        fontSize = 6.sp,
                         fontWeight = FontWeight.Black,
                         color = if (isUnlocked) Color(0xFFF87171) else Color(0xFF64748B),
                         letterSpacing = 0.5.sp
@@ -952,11 +995,11 @@ private fun CampaignNodeMarker(
                         imageVector = Icons.Default.Lock,
                         contentDescription = "Locked",
                         tint = Color(0xFF64748B),
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                     Text(
                         text = "${node.levelNumber}",
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF64748B)
                     )
@@ -964,7 +1007,7 @@ private fun CampaignNodeMarker(
                     // Standard Unlocked Level
                     Text(
                         text = "${node.levelNumber}",
-                        fontSize = 16.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Black,
                         color = if (isCurrent) Color.White else Color(0xFFF1F5F9)
                     )
@@ -982,203 +1025,9 @@ private fun CampaignNodeMarker(
                                 imageVector = Icons.Default.Star,
                                 contentDescription = null,
                                 tint = Color(0xFFFBBF24),
-                                modifier = Modifier.size(9.dp)
+                                modifier = Modifier.size(8.dp)
                             )
                         }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Tactical Mission Command Dock.
- * Slim docked panel at bottom showing mission briefing, rewards, and glowing battle launch button.
- */
-@Composable
-private fun MissionPreviewPanel(
-    node: CampaignMissionNode,
-    onStartMission: () -> Unit
-) {
-    val map = node.map
-    val isUnlocked = map.isUnlocked
-    val isBoss = node.isBoss
-
-    Surface(
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        color = Color(0xF7091120),
-        border = androidx.compose.foundation.BorderStroke(
-            1.5.dp,
-            if (isBoss) Color(0xFFEF4444).copy(alpha = 0.8f) else Color(0xFF0284C7).copy(alpha = 0.8f)
-        ),
-        shadowElevation = 12.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(58.dp)
-            .testTag("mission_preview_panel")
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 6.dp)
-        ) {
-            // LEFT: Level badge + Mission title + Waves & Sector info
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                // Level Number Badge
-                Box(
-                    modifier = Modifier
-                        .background(
-                            brush = if (isBoss) {
-                                Brush.verticalGradient(listOf(Color(0xFFEF4444), Color(0xFF991B1B)))
-                            } else {
-                                Brush.verticalGradient(listOf(Color(0xFF0284C7), Color(0xFF075985)))
-                            },
-                            shape = RoundedCornerShape(6.dp)
-                        )
-                        .border(
-                            1.dp,
-                            if (isBoss) Color(0xFFFCA5A5) else Color(0xFF7DD3FC),
-                            RoundedCornerShape(6.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = if (isBoss) "BOSS LV.${node.levelNumber}" else "LV.${node.levelNumber}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White,
-                        letterSpacing = 0.5.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Column(
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = map.name.uppercase(),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            letterSpacing = 0.5.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (isBoss && !node.bossName.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "• ${node.bossName}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFF43F5E),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                    Text(
-                        text = "${node.sector.title} • ${map.totalWaves} WAVES • ${map.difficulty.uppercase()}${if (map.startingCoins != null) " • ${map.startingCoins} COINS" else ""}",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (map.difficulty == "Hard") Color(0xFFF87171) else Color(0xFF94A3B8),
-                        letterSpacing = 0.5.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // RIGHT: Rewards + Action Button
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Bounty Coins
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(Color(0xFF0F172A), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color(0xFFCA8A04), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MonetizationOn,
-                        contentDescription = null,
-                        tint = Color(0xFFFBBF24),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "+${60 + node.levelNumber * 20}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFFFDE68A)
-                    )
-                }
-
-                // XP Energy
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(Color(0xFF0F172A), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color(0xFF0284C7), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Bolt,
-                        contentDescription = null,
-                        tint = Color(0xFF38BDF8),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "+${100 + node.levelNumber * 25}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF7DD3FC)
-                    )
-                }
-
-                // START / LOCKED BUTTON
-                if (isUnlocked) {
-                    GameButton(
-                        text = "START MISSION",
-                        icon = Icons.Default.PlayArrow,
-                        variant = if (isBoss) GameButtonVariant.DANGER else GameButtonVariant.GOLD,
-                        height = 38.dp,
-                        onClick = onStartMission,
-                        modifier = Modifier.widthIn(min = 145.dp),
-                        testTag = "start_mission_button"
-                    )
-                } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(Color(0xFF1E293B), RoundedCornerShape(6.dp))
-                            .border(1.dp, Color(0xFF334155), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "Locked",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "LOCKED",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF94A3B8),
-                            letterSpacing = 0.5.sp
-                        )
                     }
                 }
             }

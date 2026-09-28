@@ -129,6 +129,10 @@ interface AudioPlayer {
     fun bossPhaseChange() = playSound(GameSound.BOSS_PHASE_CHANGE)
 
     // Ambience & Music
+    var isInBattlefield: Boolean
+
+    val isRainActive: Boolean
+    fun setRainActive(isRaining: Boolean)
     fun updateMapAmbience(environmentType: EnvironmentType)
     fun pauseAmbienceAndMusic()
     fun resumeAmbienceAndMusic()
@@ -150,6 +154,29 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
     private var appContext: Context? = context?.applicationContext
     private var prefs: SharedPreferences? = null
 
+    override var isInBattlefield: Boolean = false
+        set(value) {
+            field = value
+            if (value) {
+                sfxMixer.resume()
+                if (!isMuted && !isGlobalMuted) {
+                    if (isMusicEnabled) {
+                        try { bgmTrack?.play() } catch (_: Exception) {}
+                    }
+                    if (isAmbienceEnabled) {
+                        try { currentAmbienceTrack?.play() } catch (_: Exception) {}
+                        if (isRainRequested) {
+                            try { rainTrack?.play() } catch (_: Exception) {}
+                        }
+                    }
+                }
+            } else {
+                try { bgmTrack?.pause() } catch (_: Exception) {}
+                try { currentAmbienceTrack?.pause() } catch (_: Exception) {}
+                try { rainTrack?.pause() } catch (_: Exception) {}
+            }
+        }
+
     override var isMuted: Boolean = false
         set(value) {
             field = value
@@ -166,7 +193,7 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         set(value) {
             field = value
             savePreference(KEY_MUSIC_ENABLED, value)
-            if (value && !isMuted && !isGlobalMuted) {
+            if (value && !isMuted && !isGlobalMuted && isInBattlefield) {
                 try { bgmTrack?.play() } catch (_: Exception) {}
             } else {
                 try { bgmTrack?.pause() } catch (_: Exception) {}
@@ -178,10 +205,14 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             field = value
             savePreference(KEY_AMBIENCE_ENABLED, value)
             val current = currentAmbienceTrack
-            if (value && !isMuted && !isGlobalMuted) {
+            if (value && !isMuted && !isGlobalMuted && isInBattlefield) {
                 try { current?.play() } catch (_: Exception) {}
+                if (isRainRequested) {
+                    try { rainTrack?.play() } catch (_: Exception) {}
+                }
             } else {
                 try { current?.pause() } catch (_: Exception) {}
+                try { rainTrack?.pause() } catch (_: Exception) {}
             }
         }
 
@@ -206,6 +237,7 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             field = clamped
             savePreference(KEY_AMBIENCE_VOLUME, clamped)
             try { currentAmbienceTrack?.setVolume(clamped) } catch (_: Exception) {}
+            try { rainTrack?.setVolume(clamped * 0.95f) } catch (_: Exception) {}
         }
 
     // Direct PCM SFX software mixer using a single AudioTrack stream (zero Codec2 / SoundPool dependency)
@@ -219,10 +251,15 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
     private var isReleased = false
     private var loaderThread: Thread? = null
 
-    // BGM & Ambience: exactly 1 looping track for BGM and 1 for current active environment
+    // BGM & Ambience: looping track for BGM, active environment ambience, and dedicated rain soundscape
     private var bgmTrack: AudioTrack? = null
     private var currentAmbienceTrack: AudioTrack? = null
     private var currentEnvironment: EnvironmentType? = null
+    private var rainTrack: AudioTrack? = null
+    @Volatile private var isRainRequested: Boolean = false
+
+    override val isRainActive: Boolean
+        get() = isRainRequested
 
     // Variations rotation indices
     private var mgIndex = 0
@@ -298,7 +335,7 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
                 val bgmData = AudioSynthesizer.synthesizeBackgroundMusic(sampleRate)
                 if (!isReleased) {
                     bgmTrack = createLoopingTrack(bgmData, sampleRate, musicVolume)
-                    if (isMusicEnabled && !isMuted && !isGlobalMuted) {
+                    if (isMusicEnabled && !isMuted && !isGlobalMuted && isInBattlefield) {
                         try {
                             bgmTrack?.play()
                         } catch (_: Exception) {}
@@ -415,20 +452,28 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         if (muted) {
             try { bgmTrack?.pause() } catch (_: Exception) {}
             try { currentAmbienceTrack?.pause() } catch (_: Exception) {}
+            try { rainTrack?.pause() } catch (_: Exception) {}
             sfxMixer.pause()
         } else {
             sfxMixer.resume()
-            if (isMusicEnabled && !isGlobalMuted) {
+            if (isMusicEnabled && !isGlobalMuted && isInBattlefield) {
                 try { bgmTrack?.play() } catch (_: Exception) {}
             }
-            if (isAmbienceEnabled && !isGlobalMuted) {
+            if (isAmbienceEnabled && !isGlobalMuted && isInBattlefield) {
                 try { currentAmbienceTrack?.play() } catch (_: Exception) {}
+                if (isRainRequested) {
+                    try { rainTrack?.play() } catch (_: Exception) {}
+                }
             }
         }
     }
 
     override fun playSound(sound: GameSound) {
         if (isMuted || isGlobalMuted || !isSfxEnabled) return
+
+        // Prevent in-game combat and wave sounds from playing automatically outside of active gameplay
+        val isUiSound = sound == GameSound.BUTTON_CLICK || sound == GameSound.COIN_REWARD
+        if (!isUiSound && !isInBattlefield) return
 
         // Event-based throttling to prevent sound stacking and lag
         val now = System.currentTimeMillis()
@@ -455,6 +500,7 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             GameSound.HEAL_PULSE -> 200L
             GameSound.SUMMON_MINIONS -> 250L
             GameSound.STEALTH_CLOAK -> 180L
+            GameSound.BOSS_APPEARANCE -> 1000L
             GameSound.BOSS_SHOCKWAVE -> 300L
             GameSound.BOSS_PHASE_CHANGE -> 500L
             else -> 0L
@@ -499,8 +545,35 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         }
     }
 
+    override fun setRainActive(isRaining: Boolean) {
+        if (isRainRequested == isRaining && (rainTrack != null || !isRaining)) return
+        isRainRequested = isRaining
+
+        if (isRaining) {
+            if (rainTrack == null) {
+                try {
+                    val sampleRate = AudioSynthesizer.DEFAULT_SAMPLE_RATE
+                    val rainData = AudioSynthesizer.synthesizeRainSound(sampleRate)
+                    rainTrack = createLoopingTrack(rainData, sampleRate, ambienceVolume * 0.95f)
+                } catch (e: Exception) {
+                    Log.w("AudioPlayer", "Failed to synthesize rain sound: ${e.message}")
+                }
+            }
+            if (isAmbienceEnabled && !isMuted && !isGlobalMuted && isInBattlefield) {
+                try { rainTrack?.play() } catch (_: Exception) {}
+            }
+        } else {
+            try { rainTrack?.pause() } catch (_: Exception) {}
+        }
+    }
+
     override fun updateMapAmbience(environmentType: EnvironmentType) {
-        if (currentEnvironment == environmentType && currentAmbienceTrack != null) return
+        if (currentEnvironment == environmentType && currentAmbienceTrack != null) {
+            if (environmentType == EnvironmentType.TEMPEST_RAIN) {
+                setRainActive(true)
+            }
+            return
+        }
         currentEnvironment = environmentType
 
         try {
@@ -512,11 +585,18 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             val ambData = AudioSynthesizer.synthesizeAmbience(sampleRate, environmentType)
             currentAmbienceTrack = createLoopingTrack(ambData, sampleRate, ambienceVolume)
 
-            if (isAmbienceEnabled && !isMuted && !isGlobalMuted) {
+            if (isAmbienceEnabled && !isMuted && !isGlobalMuted && isInBattlefield) {
                 currentAmbienceTrack?.play()
             }
         } catch (e: Exception) {
             Log.w("AudioPlayer", "Error updating map ambience: ${e.message}")
+        }
+
+        // Automatic rain sound activation for rainy environment
+        if (environmentType == EnvironmentType.TEMPEST_RAIN) {
+            setRainActive(true)
+        } else if (!isRainRequested) {
+            setRainActive(false)
         }
     }
 
@@ -524,6 +604,7 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
         try {
             bgmTrack?.pause()
             currentAmbienceTrack?.pause()
+            rainTrack?.pause()
             sfxMixer.pause()
         } catch (_: Exception) {}
     }
@@ -531,9 +612,14 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
     override fun resumeAmbienceAndMusic() {
         try {
             sfxMixer.resume()
-            if (!isMuted && !isGlobalMuted) {
+            if (!isMuted && !isGlobalMuted && isInBattlefield) {
                 if (isMusicEnabled) bgmTrack?.play()
-                if (isAmbienceEnabled) currentAmbienceTrack?.play()
+                if (isAmbienceEnabled) {
+                    currentAmbienceTrack?.play()
+                    if (isRainRequested) {
+                        rainTrack?.play()
+                    }
+                }
             }
         } catch (_: Exception) {}
     }
@@ -550,6 +636,10 @@ class AndroidAudioPlayer(context: Context? = null) : AudioPlayer {
             currentAmbienceTrack?.stop()
             currentAmbienceTrack?.release()
             currentAmbienceTrack = null
+
+            rainTrack?.stop()
+            rainTrack?.release()
+            rainTrack = null
 
             sfxMixer.stop()
             soundMap.clear()

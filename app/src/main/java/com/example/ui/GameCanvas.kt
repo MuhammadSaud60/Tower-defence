@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.BridgeSegment
 import com.example.data.DecorationType
 import com.example.data.EnvironmentType
 import com.example.data.GameConfig
@@ -292,6 +293,11 @@ fun GameCanvas(
                     drawDirtRoad(composeP, gamePath, currentMap.environmentType, gameState.currentWave)
                 }
 
+                // 3.5. Bridges across rivers and water channels
+                if (currentMap.bridges.isNotEmpty()) {
+                    drawBridges(currentMap.bridges, gameState.gameTime)
+                }
+
                 // 4. Ground Decorations (Trees, Rocks, Bushes, Crystals, Snow Piles)
                 drawDecorations(currentMap.decorations, currentMap.environmentType, gameState.currentWave)
 
@@ -321,15 +327,15 @@ fun GameCanvas(
                 }
 
                 // 6. Tunnel entrances/exits if present
-                if (gameState.currentMap.tunnelRegion != null) {
-                    drawTunnelPortals(gameState.currentMap.tunnelRegion!!)
+                for (tunnel in gameState.currentMap.getAllTunnelRegions()) {
+                    drawTunnelPortals(tunnel)
                 }
 
                 // 6.5. Weather Effects: Lightweight Falling Snow and Heavy Rain in background (behind towers and enemies)
                 if (currentMap.environmentType == EnvironmentType.SNOW_VALLEY) {
                     drawFallingSnowWeatherEffect(worldWidth, worldHeight, gameState.gameTime)
                 }
-                if (currentMap.environmentType == EnvironmentType.TEMPEST_RAIN) {
+                if (currentMap.environmentType == EnvironmentType.TEMPEST_RAIN || gameState.isRaining) {
                     drawHeavyRainWeatherEffect(worldWidth, worldHeight, gameState.gameTime)
                 }
                 if (currentMap.environmentType == EnvironmentType.NIGHT_FORTRESS ||
@@ -360,8 +366,8 @@ fun GameCanvas(
                 drawEnemies(gameState.enemies, gameState.gameTime, currentMap.environmentType)
 
                 // 10. Tunnel Mountain Canopy (Drawn OVER enemies so enemies pass under it!)
-                if (gameState.currentMap.tunnelRegion != null) {
-                    drawTunnelCavernCanopy(gameState.currentMap.tunnelRegion!!, gameState.gameTime)
+                for (tunnel in gameState.currentMap.getAllTunnelRegions()) {
+                    drawTunnelCavernCanopy(tunnel, gameState.gameTime)
                 }
 
                 // 11. Ballistic Projectiles
@@ -376,7 +382,7 @@ fun GameCanvas(
                 ) {
                     drawNightFirefliesAndGlow(worldWidth, worldHeight, gameState.gameTime)
                 }
-                if (currentMap.environmentType == EnvironmentType.TEMPEST_RAIN) {
+                if (currentMap.environmentType == EnvironmentType.TEMPEST_RAIN || gameState.isRaining) {
                     drawTempestLightningAndPuddleRipples(worldWidth, worldHeight, gameState.gameTime)
                 }
 
@@ -1530,8 +1536,12 @@ private fun DrawScope.drawGrassTufts() {
 }
 
 private fun DrawScope.drawWaterPond(map: GameMap, time: Float) {
-    val center = map.waterPondCenter ?: return
-    val r = map.waterPondRadius
+    for (pond in map.getAllWaterPonds()) {
+        drawSingleWaterPond(map, pond.center, pond.radius, time)
+    }
+}
+
+private fun DrawScope.drawSingleWaterPond(map: GameMap, center: Point2D, r: Float, time: Float) {
     if (r <= 0f) return
 
     val pondOffset = Offset(center.x, center.y)
@@ -1937,6 +1947,114 @@ private fun DrawScope.drawDirtRoad(composePath: Path, path: GamePath, env: Envir
             drawCircle(color = Color(0xFF38BDF8), radius = 2.5f, center = Offset(wp.x, wp.y))
             drawCircle(color = Color.White, radius = 1.0f, center = Offset(wp.x, wp.y))
         }
+    }
+}
+
+/**
+ * Procedural timber bridge rendering across rivers, lakes, and water channels.
+ * Features heavy timber understructures, cross-planks, railings, and stone abutments.
+ */
+private fun DrawScope.drawBridges(bridges: List<BridgeSegment>, gameTime: Float) {
+    for (bridge in bridges) {
+        val dx = bridge.end.x - bridge.start.x
+        val dy = bridge.end.y - bridge.start.y
+        val length = kotlin.math.hypot(dx, dy)
+        if (length < 1f) continue
+        val ux = dx / length
+        val uy = dy / length
+        val nx = -uy
+        val ny = ux
+        val halfW = bridge.width / 2f
+
+        // 1. Bridge Drop Shadow cast onto water
+        drawLine(
+            color = Color(0x66000000),
+            start = Offset(bridge.start.x + 8f, bridge.start.y + 10f),
+            end = Offset(bridge.end.x + 8f, bridge.end.y + 10f),
+            strokeWidth = bridge.width + 8f,
+            cap = StrokeCap.Square
+        )
+
+        // 2. Dark heavy timber sub-structure
+        drawLine(
+            color = Color(0xFF2D1810),
+            start = Offset(bridge.start.x, bridge.start.y),
+            end = Offset(bridge.end.x, bridge.end.y),
+            strokeWidth = bridge.width,
+            cap = StrokeCap.Square
+        )
+        drawLine(
+            color = Color(0xFF4E342E),
+            start = Offset(bridge.start.x, bridge.start.y),
+            end = Offset(bridge.end.x, bridge.end.y),
+            strokeWidth = bridge.width - 6f,
+            cap = StrokeCap.Square
+        )
+
+        // 3. Wooden cross-planks across the bridge length
+        val plankSpacing = 14f
+        var dist = 6f
+        while (dist <= length - 6f) {
+            val px = bridge.start.x + ux * dist
+            val py = bridge.start.y + uy * dist
+            // Alternate subtle plank wood tones
+            val plankColor = if (((dist / plankSpacing).toInt()) % 2 == 0) Color(0xFF795548) else Color(0xFF6D4C41)
+            drawLine(
+                color = plankColor,
+                start = Offset(px + nx * (halfW - 2f), py + ny * (halfW - 2f)),
+                end = Offset(px - nx * (halfW - 2f), py - ny * (halfW - 2f)),
+                strokeWidth = 3.5f,
+                cap = StrokeCap.Round
+            )
+            // Iron fasteners / nails
+            drawCircle(
+                color = Color(0xFF1B0E07),
+                radius = 1.8f,
+                center = Offset(px + nx * (halfW - 5f), py + ny * (halfW - 5f))
+            )
+            drawCircle(
+                color = Color(0xFF1B0E07),
+                radius = 1.8f,
+                center = Offset(px - nx * (halfW - 5f), py - ny * (halfW - 5f))
+            )
+            dist += plankSpacing
+        }
+
+        // 4. Sturdy safety railings on both flanks
+        val railColor = Color(0xFFA1887F)
+        val postColor = Color(0xFF3E2723)
+        // Flank A Railing
+        drawLine(
+            color = railColor,
+            start = Offset(bridge.start.x + nx * (halfW - 1f), bridge.start.y + ny * (halfW - 1f)),
+            end = Offset(bridge.end.x + nx * (halfW - 1f), bridge.end.y + ny * (halfW - 1f)),
+            strokeWidth = 4f,
+            cap = StrokeCap.Round
+        )
+        // Flank B Railing
+        drawLine(
+            color = railColor,
+            start = Offset(bridge.start.x - nx * (halfW - 1f), bridge.start.y - ny * (halfW - 1f)),
+            end = Offset(bridge.end.x - nx * (halfW - 1f), bridge.end.y - ny * (halfW - 1f)),
+            strokeWidth = 4f,
+            cap = StrokeCap.Round
+        )
+
+        // 5. Timber vertical posts every 32px
+        var postDist = 6f
+        while (postDist <= length - 4f) {
+            val postX = bridge.start.x + ux * postDist
+            val postY = bridge.start.y + uy * postDist
+            drawCircle(color = postColor, radius = 3.5f, center = Offset(postX + nx * (halfW - 1f), postY + ny * (halfW - 1f)))
+            drawCircle(color = postColor, radius = 3.5f, center = Offset(postX - nx * (halfW - 1f), postY - ny * (halfW - 1f)))
+            postDist += 32f
+        }
+
+        // 6. Solid stone pillar abutments anchoring the bridge at both ends
+        drawCircle(color = Color(0xFF607D8B), radius = 7f, center = Offset(bridge.start.x + nx * halfW, bridge.start.y + ny * halfW))
+        drawCircle(color = Color(0xFF607D8B), radius = 7f, center = Offset(bridge.start.x - nx * halfW, bridge.start.y - ny * halfW))
+        drawCircle(color = Color(0xFF607D8B), radius = 7f, center = Offset(bridge.end.x + nx * halfW, bridge.end.y + ny * halfW))
+        drawCircle(color = Color(0xFF607D8B), radius = 7f, center = Offset(bridge.end.x - nx * halfW, bridge.end.y - ny * halfW))
     }
 }
 
@@ -3748,6 +3866,63 @@ private fun DrawScope.drawEnemies(
             )
         }
 
+        // 2a. Stealth Cloaking Shroud & Warning
+        if (enemy.isStealthed) {
+            // Ethereal cloaking shadow shroud
+            val pulse = sin(time * 7f) * 2f
+            drawCircle(
+                color = Color(0x351E1B4B),
+                radius = enemy.spec.radius * 1.30f + pulse,
+                center = center
+            )
+            drawCircle(
+                color = Color(0x60A855F7),
+                radius = enemy.spec.radius * 1.10f + pulse * 0.5f,
+                center = center,
+                style = Stroke(width = 1.8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f), time * 14f))
+            )
+            // Floating cloaked status icon / badge above unit
+            val badgeY = center.y - enemy.spec.radius - 14f
+            drawRoundRect(
+                color = Color(0xCC09090B),
+                topLeft = Offset(center.x - 22f, badgeY - 6f),
+                size = Size(44f, 12f),
+                cornerRadius = CornerRadius(3.5f, 3.5f)
+            )
+            drawRoundRect(
+                color = Color(0xFFA855F7),
+                topLeft = Offset(center.x - 22f, badgeY - 6f),
+                size = Size(44f, 12f),
+                cornerRadius = CornerRadius(3.5f, 3.5f),
+                style = Stroke(width = 1f)
+            )
+            // Ghostly eye slit inside badge
+            drawLine(
+                color = Color(0xFFC084FC),
+                start = Offset(center.x - 10f, badgeY),
+                end = Offset(center.x - 4f, badgeY),
+                strokeWidth = 2f,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = Color(0xFFC084FC),
+                start = Offset(center.x + 4f, badgeY),
+                end = Offset(center.x + 10f, badgeY),
+                strokeWidth = 2f,
+                cap = StrokeCap.Round
+            )
+        }
+
+        if (enemy.stealthWarningTimer > 0f) {
+            val warnFrac = (enemy.stealthWarningTimer / 0.45f).coerceIn(0f, 1f)
+            drawCircle(
+                color = Color(0x77A855F7),
+                radius = enemy.spec.radius * (1.1f + (1f - warnFrac) * 0.4f),
+                center = center,
+                style = Stroke(width = 2.2f)
+            )
+        }
+
         // 2b. Slow Status Aura & Orbiting Frost Crystals
         if (enemy.isSlowed) {
             val frostR = enemy.spec.radius * 1.18f
@@ -3826,71 +4001,8 @@ private fun DrawScope.drawEnemies(
 
         // 4. World-Space Health Bars (Drawn horizontally upright directly above the unit)
         if (enemy.spec.isBoss) {
-            // World-Space Boss Health Bar directly above the boss
-            val bossBarWidth = 64f
-            val bossBarHeight = 7.5f
-            val bossBarTop = center.y - enemy.spec.radius * 1.35f - 24f
-            val bossBarLeft = center.x - bossBarWidth / 2f
-
-            // Outer dark container
-            drawRoundRect(
-                color = Color(0xEE0F172A),
-                topLeft = Offset(bossBarLeft - 2f, bossBarTop - 2f),
-                size = Size(bossBarWidth + 4f, bossBarHeight + 4f),
-                cornerRadius = CornerRadius(3f, 3f)
-            )
-            // Golden boss frame
-            val frameColor = if (enemy.bossPhase == 3) Color(0xFFEF4444) else Color(0xFFF59E0B)
-            drawRoundRect(
-                color = frameColor,
-                topLeft = Offset(bossBarLeft - 2f, bossBarTop - 2f),
-                size = Size(bossBarWidth + 4f, bossBarHeight + 4f),
-                cornerRadius = CornerRadius(3f, 3f),
-                style = Stroke(width = 1.5f)
-            )
-            // Crimson track background
-            drawRoundRect(
-                color = Color(0xFF450A0A),
-                topLeft = Offset(bossBarLeft, bossBarTop),
-                size = Size(bossBarWidth, bossBarHeight),
-                cornerRadius = CornerRadius(2f, 2f)
-            )
-            // Health Fill
-            val hpColor = when {
-                enemy.bossPhase == 3 -> Color(0xFFDC2626)
-                enemy.healthPercentage > 0.5f -> Color(0xFFEF4444)
-                enemy.healthPercentage > 0.25f -> Color(0xFFF97316)
-                else -> Color(0xFFDC2626)
-            }
-            if (enemy.healthPercentage > 0f) {
-                drawRoundRect(
-                    color = hpColor,
-                    topLeft = Offset(bossBarLeft, bossBarTop),
-                    size = Size((bossBarWidth * enemy.healthPercentage).coerceAtLeast(1f), bossBarHeight),
-                    cornerRadius = CornerRadius(2f, 2f)
-                )
-                // Top highlight gloss
-                drawRoundRect(
-                    color = Color(0x55FFFFFF),
-                    topLeft = Offset(bossBarLeft, bossBarTop),
-                    size = Size(bossBarWidth * enemy.healthPercentage, bossBarHeight * 0.45f),
-                    cornerRadius = CornerRadius(1.5f, 1.5f)
-                )
-            }
-            // Boss Phase Indicator Dots (P1, P2, P3)
-            val dotSpacing = 8f
-            for (p in 1..3) {
-                val dotX = center.x + (p - 2) * dotSpacing
-                val dotColor = if (p <= enemy.bossPhase) {
-                    if (enemy.bossPhase == 3) Color(0xFFEF4444) else Color(0xFFFDE047)
-                } else Color(0xFF475569)
-                drawCircle(
-                    color = dotColor,
-                    radius = if (p == enemy.bossPhase) 3f else 2f,
-                    center = Offset(dotX, bossBarTop - 5f)
-                )
-            }
-        } else if (enemy.healthPercentage < 1.0f || enemy.isEnergyShieldActive || enemy.spec.armor > 0f || enemy.spec.maxArmorHp > 0f) {
+            // Boss health bar disabled per user request
+        } else if (!enemy.isStealthed && (enemy.healthPercentage < 1.0f || enemy.isEnergyShieldActive || enemy.spec.armor > 0f || enemy.spec.maxArmorHp > 0f)) {
             // Standard Enemy Health Bar
             val barWidth = (enemy.spec.radius * 2f).coerceAtLeast(32f)
             val barHeight = 4.5f
@@ -4534,6 +4646,31 @@ private fun DrawScope.drawBossEnemy(center: Offset, enemy: Enemy, time: Float) {
             val my = center.y + sin(angle) * dist
             drawCircle(Color(0xFFFF0080), radius = 2.8f, center = Offset(mx, my))
             drawCircle(Color.White, radius = 1.3f, center = Offset(mx, my))
+        }
+    }
+
+    val isEmeraldBoss = enemy.spec.name.contains("Verdant") || enemy.spec.name.contains("Emerald") || enemy.spec.name.contains("Canopy") || enemy.spec.name.contains("Sylvan")
+    if (isEmeraldBoss) {
+        val sylvanPulse = sin(time * 4f) * 0.12f + 0.88f
+        val auraR = enemy.spec.radius * 1.25f * sylvanPulse
+        drawCircle(
+            color = Color(0x44059669),
+            radius = auraR,
+            center = center
+        )
+        drawCircle(
+            color = Color(0x8834D399),
+            radius = auraR * 0.9f,
+            center = center,
+            style = Stroke(width = 2.0f)
+        )
+        for (m in 0..4) {
+            val angle = time * 2.0f + (m * 1.256f)
+            val dist = auraR * (0.65f + (m % 2) * 0.2f)
+            val mx = center.x + cos(angle) * dist
+            val my = center.y + sin(angle) * dist
+            drawCircle(Color(0xFF6EE7B7), radius = 2.5f, center = Offset(mx, my))
+            drawCircle(Color.White, radius = 1.0f, center = Offset(mx, my))
         }
     }
 

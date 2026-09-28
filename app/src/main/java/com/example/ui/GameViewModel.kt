@@ -28,9 +28,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     var lastVictoryReward: ProgressionReward? by mutableStateOf(null)
         private set
 
+    var isGameActive by mutableStateOf(false)
+        private set
+
+    fun updateGameSessionActive(active: Boolean) {
+        if (isGameActive == active) return
+        isGameActive = active
+        gameEngine.audioPlayer.isInBattlefield = active
+        if (active) {
+            gameEngine.resume()
+        } else {
+            gameEngine.pause()
+        }
+    }
+
     init {
         gameEngine.progressionManager = progressionManager
-        gameEngine.restart(isNewMission = true)
+        gameEngine.audioPlayer.isInBattlefield = false
+        gameEngine.pause()
 
         viewModelScope.launch {
             var lastTime = System.nanoTime()
@@ -38,10 +53,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val currentTime = System.nanoTime()
                 val dt = ((currentTime - lastTime) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
                 lastTime = currentTime
-                try {
-                    gameEngine.update(dt)
-                } catch (e: Throwable) {
-                    android.util.Log.e("GameViewModel", "Exception safely handled in game loop", e)
+                if (isGameActive) {
+                    try {
+                        gameEngine.update(dt)
+                    } catch (e: Throwable) {
+                        android.util.Log.e("GameViewModel", "Exception safely handled in game loop", e)
+                    }
                 }
                 delay(16L)
             }
@@ -99,15 +116,51 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resume() = gameEngine.resume()
     fun toggleSpeed() = gameEngine.toggleSpeed()
     fun setGameSpeed(speed: Float) = gameEngine.setGameSpeed(speed)
-    fun continueBattle() = gameEngine.continueBattle()
+    fun continueBattle(): Boolean = gameEngine.continueBattle(0.20f)
+
+    fun preloadRewardedAd(context: android.content.Context) {
+        com.example.ads.AdManager.getInstance().preloadRewardedAd(context)
+    }
+
+    fun showRewardedReviveAd(
+        activity: android.app.Activity,
+        onRewardGranted: () -> Unit = {},
+        onClosedWithoutReward: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
+        com.example.ads.AdManager.getInstance().showRewardedAd(
+            activity = activity,
+            onUserEarnedReward = {
+                val revived = continueBattle()
+                if (revived) {
+                    onRewardGranted()
+                }
+            },
+            onAdClosedWithoutReward = {
+                onClosedWithoutReward()
+            },
+            onAdFailedToShow = { error ->
+                onFailure(error)
+            }
+        )
+    }
+
     fun restart() {
         lastVictoryReward = null
         gameEngine.restart()
+        if (isGameActive) {
+            gameEngine.audioPlayer.isInBattlefield = true
+            gameEngine.resume()
+        }
     }
 
     fun loadMap(map: GameMap) {
         lastVictoryReward = null
         gameEngine.loadMap(map)
+        if (isGameActive) {
+            gameEngine.audioPlayer.isInBattlefield = true
+            gameEngine.resume()
+        }
     }
 
     fun handleVictoryProgression(): ProgressionReward? {
@@ -182,8 +235,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "storm_twin_bastion", "tempest_bastion" -> GameMap.createCloudyForestMap(isUnlocked = true, stars = progressionManager.getStarsForMap("cloudy_dense_forest"))
             "cloudy_dense_forest", "cloudy_forest" -> GameMap.createSnowSummitMap(isUnlocked = true, stars = progressionManager.getStarsForMap("snow_summit_descent"))
             "snow_summit_descent", "frostpeak_descent" -> GameMap.createDesertDuneBastionMap(isUnlocked = true, stars = progressionManager.getStarsForMap("desert_dune_bastion"))
+            "desert_dune_bastion", "dune_storm_stronghold" -> GameMap.createEmeraldTwinPassMap(isUnlocked = true, stars = progressionManager.getStarsForMap("emerald_twin_pass"))
+            "emerald_twin_pass", "emerald_serpent_pass" -> GameMap.createForestRingBastionMap(isUnlocked = true, stars = progressionManager.getStarsForMap("forest_ring_bastion"))
+            "forest_ring_bastion", "sylvan_ring_sanctuary" -> GameMap.createFrozenPassMap(isUnlocked = true, stars = progressionManager.getStarsForMap("frozen_pass"))
+            "frozen_pass" -> GameMap.createObsidianCrossfireMap(isUnlocked = true, stars = progressionManager.getStarsForMap("obsidian_crossfire"))
+            "obsidian_crossfire" -> GameMap.createTempestRavineMap(isUnlocked = true, stars = progressionManager.getStarsForMap("tempest_ravine"))
+            "tempest_ravine" -> GameMap.createEclipseCitadelMap(isUnlocked = true, stars = progressionManager.getStarsForMap("eclipse_citadel"))
+            "eclipse_citadel" -> GameMap.createApexDragonSanctumMap(isUnlocked = true, stars = progressionManager.getStarsForMap("apex_dragon_sanctum"))
             else -> null
         }
+    }
+
+    fun toggleWeatherRain() {
+        gameEngine.toggleWeatherRain()
     }
 
     fun loadNextMap() {

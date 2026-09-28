@@ -78,6 +78,13 @@ class WaveManager(
 
     private fun getRosterForWave(wave: Int): List<WaveSpawnItem> {
         return when {
+            mapId == "apex_dragon_sanctum" -> generateApexDragonSanctumWaveRoster(wave)
+            mapId == "eclipse_citadel" -> generateEclipseCitadelWaveRoster(wave)
+            mapId == "tempest_ravine" -> generateTempestRavineWaveRoster(wave)
+            mapId == "obsidian_crossfire" -> generateObsidianCrossfireWaveRoster(wave)
+            mapId == "frozen_pass" -> generateFrozenPassWaveRoster(wave)
+            mapId == "forest_ring_bastion" || mapId == "sylvan_ring_sanctuary" -> generateForestRingBastionWaveRoster(wave)
+            mapId == "emerald_twin_pass" || mapId == "emerald_serpent_pass" -> generateEmeraldTwinPassWaveRoster(wave)
             mapId == "desert_dune_bastion" || mapId == "dune_storm_stronghold" -> generateDesertDuneBastionWaveRoster(wave)
             mapId == "snow_summit_descent" || mapId == "frostpeak_descent" -> generateSnowSummitWaveRoster(wave)
             isCloudyForest || mapId == "cloudy_dense_forest" || mapId == "cloudy_forest" -> generateCloudyForestWaveRoster(wave)
@@ -1792,6 +1799,783 @@ class WaveManager(
                     list.add(WaveSpawnItem(EnemySpec.createDuneApexOverlord(), 2.2f))
                 }
             }
+        }
+
+        return list
+    }
+
+    /**
+     * Specialized Wave Generation for Emerald Serpent Pass (Level 19 - Hard • 15 Waves):
+     * - Two bosses appearing from wave 1 on two paths (1 on Path 0, 1 on Path 1)
+     * - Waves 1 to 5: ONLY bosses in range of 2 to 6, no other enemies
+     * - Waves 6 to 11: ONLY fastest enemies (Scouts/Runners) + boss
+     * - Waves 12 to 15: ONLY medium enemies (Soldiers) + bosses
+     */
+    private fun generateEmeraldTwinPassWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+
+        when (wave) {
+            // ==========================================
+            // WAVES 1 to 5: ONLY BOSSES IN RANGE OF 2 TO 6 (NO OTHER ENEMIES)
+            // ==========================================
+            1 -> {
+                // Wave 1: Exactly 2 Bosses appearing on two paths (1 on Path 0, 1 on Path 1)
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(1), 3.0f))
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(1), 3.0f))
+            }
+            2 -> {
+                // Wave 2: Exactly 3 Bosses
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(1), 2.8f))
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(1), 2.8f))
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(1), 3.0f))
+            }
+            3 -> {
+                // Wave 3: Exactly 4 Bosses (2 on Path 0, 2 on Path 1)
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(1), 2.6f))
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(1), 2.6f))
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(1), 2.6f))
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(1), 2.8f))
+            }
+            4 -> {
+                // Wave 4: Exactly 5 Bosses
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(1), 2.5f))
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(1), 2.5f))
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(1), 2.5f))
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.5f))
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.8f))
+            }
+            5 -> {
+                // Wave 5: Exactly 6 Bosses (3 on Path 0, 3 on Path 1)
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.4f))
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.4f))
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(1), 2.4f))
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.4f))
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.4f))
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 2.8f))
+            }
+
+            // ==========================================
+            // WAVES 6 to 11: ONLY FASTEST ENEMIES (SCOUT/RUNNER) + BOSS
+            // ==========================================
+            6 -> {
+                // Wave 6: 12 Fastest Enemies + 2 Bosses (14 total)
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.4f))
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.5f))
+            }
+            7 -> {
+                // Wave 7: 16 Fastest Enemies + 2 Bosses (18 total)
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.2f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 2.4f))
+            }
+            8 -> {
+                // Wave 8: 20 Fastest Enemies + 3 Bosses (23 total)
+                repeat(6) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.2f))
+                repeat(7) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.2f))
+                repeat(7) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 2.4f))
+            }
+            9 -> {
+                // Wave 9: 24 Fastest Enemies + 3 Bosses (27 total)
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.65f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 2.0f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.0f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.65f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.2f))
+            }
+            10 -> {
+                // Wave 10: 28 Fastest Enemies + 4 Bosses (32 total)
+                repeat(7) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.0f))
+                repeat(7) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.0f))
+                repeat(7) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 2.0f))
+                repeat(7) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.2f))
+            }
+            11 -> {
+                // Wave 11: 32 Fastest Enemies + 4 Bosses (36 total)
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.55f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 1.9f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.55f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(3), 1.9f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.55f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 1.9f))
+                repeat(8) { list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.55f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 2.2f))
+            }
+
+            // ==========================================
+            // WAVES 12 to 15: ONLY MEDIUM ENEMIES (SOLDIER) + BOSSES
+            // ==========================================
+            12 -> {
+                // Wave 12: 18 Medium Enemies + 4 Bosses (22 total)
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.9f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.0f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.9f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.0f))
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.9f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 2.0f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.9f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 2.2f))
+            }
+            13 -> {
+                // Wave 13: 24 Medium Enemies + 5 Bosses (29 total)
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.85f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 1.8f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.85f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(3), 1.8f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.85f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 1.8f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.85f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(3), 1.8f))
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.85f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(3), 2.2f))
+            }
+            14 -> {
+                // Wave 14: 30 Medium Enemies + 6 Bosses (36 total)
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 1.8f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(3), 1.8f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(3), 1.8f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 1.8f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(3), 1.8f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f)) }
+                list.add(WaveSpawnItem(EnemySpec.createSylvanApexOverlord(), 2.2f))
+            }
+            15 -> {
+                // Wave 15: 36 Medium Enemies + 8 Bosses (44 total) - The Grand Emerald Climax
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 1.6f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(3), 1.6f))
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(3), 1.6f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createSylvanApexOverlord(), 1.8f))
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 1.6f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(3), 1.6f))
+                repeat(4) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(3), 1.6f))
+                repeat(5) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+                list.add(WaveSpawnItem(EnemySpec.createSylvanApexOverlord(), 2.2f))
+            }
+        }
+
+        return list
+    }
+
+    /**
+     * Map 20: Sylvan Ring Bastion (Level 20 - 25 Waves)
+     * Precise wave schedule per player specification:
+     * - Waves 1 to 5: Mix small (Scouts) and fast (Runners)
+     * - Waves 6 to 11: Medium enemies (Soldiers) and fast enemies (Runners)
+     * - Waves 12 to 17: Medium enemies only (Soldiers)
+     * - Waves 18 to 20: Medium enemies (Soldiers) and bosses only
+     * - Waves 21 to 25: Bosses + fastest enemies (Runners) + medium (Soldiers) all attack at the same time
+     */
+    private fun generateForestRingBastionWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+
+        when (wave) {
+            // ==========================================
+            // WAVES 1 TO 5: MIX SMALL (SCOUTS) & FAST (RUNNERS)
+            // ==========================================
+            1 -> {
+                // Mix 8 Scouts + 6 Runners
+                repeat(4) {
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.9f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.8f))
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.9f))
+                }
+                list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.8f))
+                list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.8f))
+            }
+            2 -> {
+                // Mix 12 Scouts + 10 Runners
+                repeat(5) {
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.85f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.75f))
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.85f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.75f))
+                }
+                list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.85f))
+                list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.85f))
+            }
+            3 -> {
+                // Mix 16 Scouts + 14 Runners
+                repeat(7) {
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.8f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.7f))
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.8f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.7f))
+                }
+                list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.8f))
+                list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.8f))
+            }
+            4 -> {
+                // Mix 20 Scouts + 18 Runners
+                repeat(9) {
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.75f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f))
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.75f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f))
+                }
+                list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.75f))
+                list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.75f))
+            }
+            5 -> {
+                // Mix 24 Scouts + 24 Runners
+                repeat(12) {
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.7f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f))
+                    list.add(WaveSpawnItem(EnemySpec.SCOUT, 0.7f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f))
+                }
+            }
+
+            // ==========================================
+            // WAVES 6 TO 11: MEDIUM ENEMIES (SOLDIERS) + FAST ENEMIES (RUNNERS)
+            // ==========================================
+            6 -> {
+                // 12 Soldiers + 12 Runners
+                repeat(6) {
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.85f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.7f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.85f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.7f))
+                }
+            }
+            7 -> {
+                // 15 Soldiers + 15 Runners
+                repeat(7) {
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f))
+                }
+                list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f))
+                list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f))
+            }
+            8 -> {
+                // 18 Soldiers + 18 Runners
+                repeat(9) {
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.8f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.65f))
+                }
+            }
+            9 -> {
+                // 21 Soldiers + 21 Runners
+                repeat(10) {
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f))
+                }
+                list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f))
+                list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.6f))
+            }
+            10 -> {
+                // 25 Soldiers + 25 Runners
+                repeat(12) {
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.55f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.55f))
+                }
+                list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f))
+                list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.55f))
+            }
+            11 -> {
+                // 30 Soldiers + 30 Runners
+                repeat(15) {
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.55f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.55f))
+                }
+            }
+
+            // ==========================================
+            // WAVES 12 TO 17: MEDIUM ENEMIES ONLY (SOLDIERS)
+            // ==========================================
+            12 -> {
+                repeat(24) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.75f)) }
+            }
+            13 -> {
+                repeat(30) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
+            }
+            14 -> {
+                repeat(36) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.65f)) }
+            }
+            15 -> {
+                repeat(42) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.65f)) }
+            }
+            16 -> {
+                repeat(48) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
+            }
+            17 -> {
+                repeat(54) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
+            }
+
+            // ==========================================
+            // WAVES 18 TO 20: MEDIUM ENEMIES & BOSSES ONLY
+            // ==========================================
+            18 -> {
+                // 24 Soldiers + 2 Bosses (Verdant Colossus + Emerald Gorgon)
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.5f))
+                repeat(12) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.7f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.5f))
+            }
+            19 -> {
+                // 30 Soldiers + 3 Bosses (Colossus + Gorgon + Canopy Warden)
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.65f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.4f))
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.65f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.4f))
+                repeat(10) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.65f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 2.4f))
+            }
+            20 -> {
+                // 36 Soldiers + 4 Bosses
+                repeat(9) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 2.2f))
+                repeat(9) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 2.2f))
+                repeat(9) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createCanopyWarden(2), 2.2f))
+                repeat(9) { list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f)) }
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(3), 2.5f))
+            }
+
+            // ==========================================
+            // WAVES 21 TO 25: BOSSES + FASTEST ENEMIES (RUNNERS) + MEDIUM (SOLDIERS) ALL ATTACK AT SAME TIME
+            // Synchronized mixed battalions where Bosses, sprint Runners, and medium Soldiers storm together!
+            // ==========================================
+            21 -> {
+                // 2 Bosses + 16 Runners + 16 Soldiers in 2 simultaneous mixed assault squads
+                // Battalion 1:
+                list.add(WaveSpawnItem(EnemySpec.createVerdantColossus(2), 1.6f))
+                repeat(4) {
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f))
+                }
+                // Battalion 2:
+                list.add(WaveSpawnItem(EnemySpec.createEmeraldGorgon(2), 1.6f))
+                repeat(4) {
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f))
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.5f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.6f))
+                }
+            }
+            22 -> {
+                // 3 Bosses + 21 Runners + 21 Soldiers in 3 simultaneous mixed assault squads
+                val bosses = listOf(
+                    EnemySpec.createVerdantColossus(2),
+                    EnemySpec.createEmeraldGorgon(2),
+                    EnemySpec.createCanopyWarden(2)
+                )
+                for (b in bosses) {
+                    list.add(WaveSpawnItem(b, 1.5f))
+                    repeat(3) {
+                        list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f))
+                        list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.55f))
+                        list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f))
+                        list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.55f))
+                    }
+                    list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f))
+                    list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.55f))
+                }
+            }
+            23 -> {
+                // 4 Bosses + 24 Runners + 24 Soldiers in 4 simultaneous mixed assault squads
+                val bosses = listOf(
+                    EnemySpec.createVerdantColossus(3),
+                    EnemySpec.createEmeraldGorgon(2),
+                    EnemySpec.createCanopyWarden(2),
+                    EnemySpec.createEmeraldGorgon(3)
+                )
+                for (b in bosses) {
+                    list.add(WaveSpawnItem(b, 1.4f))
+                    repeat(3) {
+                        list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f))
+                        list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.55f))
+                        list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f))
+                        list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.55f))
+                    }
+                }
+            }
+            24 -> {
+                // 5 Bosses + 30 Runners + 30 Soldiers in 5 simultaneous mixed assault squads
+                val bosses = listOf(
+                    EnemySpec.createVerdantColossus(3),
+                    EnemySpec.createEmeraldGorgon(3),
+                    EnemySpec.createCanopyWarden(3),
+                    EnemySpec.createVerdantColossus(3),
+                    EnemySpec.createEmeraldGorgon(3)
+                )
+                for (b in bosses) {
+                    list.add(WaveSpawnItem(b, 1.3f))
+                    repeat(3) {
+                        list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f))
+                        list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.5f))
+                        list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f))
+                        list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.5f))
+                    }
+                }
+            }
+            else -> {
+                // Wave 25 (Grand Climax): 6 Apex Bosses + 36 Runners + 36 Soldiers in simultaneous synchronized onslaught!
+                val bosses = listOf(
+                    EnemySpec.createVerdantColossus(3),
+                    EnemySpec.createEmeraldGorgon(3),
+                    EnemySpec.createCanopyWarden(3),
+                    EnemySpec.createEmeraldGorgon(3),
+                    EnemySpec.createCanopyWarden(3),
+                    EnemySpec.createSylvanApexOverlord()
+                )
+                for (b in bosses) {
+                    list.add(WaveSpawnItem(b, 1.2f))
+                    repeat(3) {
+                        list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f))
+                        list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.45f))
+                        list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f))
+                        list.add(WaveSpawnItem(EnemySpec.SOLDIER, 0.45f))
+                    }
+                }
+            }
+        }
+
+        return list
+    }
+
+    // =========================================================================
+    // LEVEL 21 — FROZEN PASS (Hard / Endgame, 25 Waves)
+    // Fast enemies, Armored enemies, Shield enemies
+    // Waves 1-24: 3 to 6 bosses every wave
+    // Wave 25: 10 bosses
+    // =========================================================================
+    private fun generateFrozenPassWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+
+        // Scaled boss count: exactly 3 to 6 bosses for waves 1-24, and 10 bosses on wave 25
+        val bossCount = when {
+            wave >= 25 -> 10
+            wave >= 21 -> 6
+            wave >= 16 -> 5
+            wave >= 10 -> 5
+            wave >= 5 -> 4
+            wave >= 3 -> 4
+            else -> 3
+        }
+
+        // Available cryo & alpine boss archetypes
+        val bossPool = listOf(
+            EnemySpec.createIceGolem(if (wave >= 12) 2 else 1),
+            EnemySpec.createFrozenCommander(if (wave >= 15) 2 else 1),
+            EnemySpec.createIceBeast(if (wave >= 10) 2 else 1),
+            EnemySpec.createIceGolem(if (wave >= 18) 2 else 1),
+            EnemySpec.createFrozenCommander(if (wave >= 20) 2 else 1),
+            if (wave >= 20) EnemySpec.VOID_SOVEREIGN else EnemySpec.createIceBeast(2)
+        )
+
+        // Enemy composition: Fast runners, armored heavies, and shield vanguards
+        val runnerCount = (8 + wave * 2).coerceAtMost(36)
+        val heavyCount = (4 + (wave * 1.2f).toInt()).coerceAtMost(24)
+        val shieldCount = (4 + (wave * 1.2f).toInt()).coerceAtMost(24)
+
+        // Interleave bosses within the assault battalions
+        val waveBosses = if (wave >= 25) {
+            // Exactly 10 Bosses for the grand climax!
+            listOf(
+                EnemySpec.VOID_SOVEREIGN,
+                EnemySpec.createIceGolem(2),
+                EnemySpec.createFrozenCommander(2),
+                EnemySpec.createIceBeast(2),
+                EnemySpec.createIceGolem(2),
+                EnemySpec.createFrozenCommander(2),
+                EnemySpec.createIceBeast(2),
+                EnemySpec.createIceGolem(2),
+                EnemySpec.createFrozenCommander(2),
+                EnemySpec.VOID_SOVEREIGN
+            )
+        } else {
+            (0 until bossCount).map { bossPool[it % bossPool.size] }
+        }
+
+        val squadsCount = waveBosses.size
+        val runnersPerSquad = (runnerCount / squadsCount).coerceAtLeast(2)
+        val heaviesPerSquad = (heavyCount / squadsCount).coerceAtLeast(1)
+        val shieldsPerSquad = (shieldCount / squadsCount).coerceAtLeast(1)
+
+        for (i in 0 until squadsCount) {
+            // Squad leader: Boss
+            list.add(WaveSpawnItem(waveBosses[i], 1.6f))
+            // Fast vanguard rush
+            repeat(runnersPerSquad) {
+                list.add(WaveSpawnItem(if (i % 2 == 0) EnemySpec.RUNNER else EnemySpec.SHADOW_RUNNER, 0.45f))
+            }
+            // Armored frontline
+            repeat(heaviesPerSquad) {
+                list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.8f))
+            }
+            // Energy shield protection
+            repeat(shieldsPerSquad) {
+                list.add(WaveSpawnItem(EnemySpec.SHIELD, 0.7f))
+            }
+        }
+
+        return list
+    }
+
+    // =========================================================================
+    // LEVEL 22 — OBSIDIAN CROSSFIRE (Hard / Endgame, 25 Waves)
+    // Dual intersecting routes, stealth infiltrators, armored mechs, shield vanguards
+    // Waves 1-24: 3 to 6 bosses every wave
+    // Wave 25: 10 bosses
+    // =========================================================================
+    private fun generateObsidianCrossfireWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+
+        val bossCount = when {
+            wave >= 25 -> 10
+            wave >= 21 -> 6
+            wave >= 16 -> 5
+            wave >= 10 -> 5
+            wave >= 5 -> 4
+            wave >= 3 -> 4
+            else -> 3
+        }
+
+        val waveBosses = if (wave >= 25) {
+            listOf(
+                EnemySpec.createBoss(20),
+                EnemySpec.createBoss(18),
+                EnemySpec.createBoss(18),
+                EnemySpec.createBoss(15),
+                EnemySpec.createBoss(15),
+                EnemySpec.createBoss(18),
+                EnemySpec.createBoss(18),
+                EnemySpec.createBoss(15),
+                EnemySpec.createBoss(20),
+                EnemySpec.createBoss(20)
+            )
+        } else {
+            val tier = (wave.coerceIn(5, 20))
+            (0 until bossCount).map { EnemySpec.createBoss(tier) }
+        }
+
+        val runners = (10 + wave * 2).coerceAtMost(36)
+        val heavies = (4 + wave).coerceAtMost(22)
+        val stealth = (4 + wave).coerceAtMost(20)
+        val shields = (4 + wave).coerceAtMost(20)
+
+        val squads = waveBosses.size
+        for (i in 0 until squads) {
+            list.add(WaveSpawnItem(waveBosses[i], 1.5f))
+            repeat(runners / squads) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.45f)) }
+            repeat(stealth / squads) { list.add(WaveSpawnItem(EnemySpec.STEALTH, 0.65f)) }
+            repeat(heavies / squads) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.75f)) }
+            repeat(shields / squads) { list.add(WaveSpawnItem(EnemySpec.SHIELD, 0.65f)) }
+        }
+
+        return list
+    }
+
+    // =========================================================================
+    // LEVEL 23 — TEMPEST RAVINE (Extreme / Endgame, 25 Waves)
+    // Triple converging routes, torrential rain, Sky Drakes, Heavies, Medics, Shields
+    // Waves 1-24: 3 to 6 bosses every wave
+    // Wave 25: 10 bosses
+    // =========================================================================
+    private fun generateTempestRavineWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+
+        val bossCount = when {
+            wave >= 25 -> 10
+            wave >= 20 -> 6
+            wave >= 15 -> 5
+            wave >= 10 -> 5
+            wave >= 5 -> 4
+            else -> 3
+        }
+
+        val waveBosses = if (wave >= 25) {
+            listOf(
+                EnemySpec.createBoss(20),
+                EnemySpec.createIceGolem(2),
+                EnemySpec.createFrozenCommander(2),
+                EnemySpec.createBoss(18),
+                EnemySpec.createIceBeast(2),
+                EnemySpec.createBoss(18),
+                EnemySpec.createFrozenCommander(2),
+                EnemySpec.createIceGolem(2),
+                EnemySpec.createBoss(20),
+                EnemySpec.VOID_SOVEREIGN
+            )
+        } else {
+            val tier = (wave.coerceIn(5, 20))
+            (0 until bossCount).map { EnemySpec.createBoss(tier) }
+        }
+
+        val flyers = (6 + wave * 2).coerceAtMost(30)
+        val runners = (8 + wave * 2).coerceAtMost(32)
+        val heavies = (4 + wave).coerceAtMost(20)
+        val medics = (2 + wave / 4).coerceAtMost(10)
+        val shields = (4 + wave).coerceAtMost(20)
+
+        val squads = waveBosses.size
+        for (i in 0 until squads) {
+            list.add(WaveSpawnItem(waveBosses[i], 1.4f))
+            repeat(flyers / squads) { list.add(WaveSpawnItem(EnemySpec.FLYING, 0.55f)) }
+            repeat(runners / squads) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+            repeat(shields / squads) { list.add(WaveSpawnItem(EnemySpec.SHIELD, 0.6f)) }
+            repeat(heavies / squads) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+            if (medics / squads > 0) repeat(medics / squads) { list.add(WaveSpawnItem(EnemySpec.HEALER, 0.8f)) }
+        }
+
+        return list
+    }
+
+    // =========================================================================
+    // LEVEL 24 — SOLSTICE CITADEL (Master / Endgame, 25 Waves)
+    // Dual spiral siege lines, day-and-night cycles, Void Summoners, Stealth, Shields
+    // Waves 1-24: 3 to 6 bosses every wave
+    // Wave 25: 10 bosses
+    // =========================================================================
+    private fun generateEclipseCitadelWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+
+        val bossCount = when {
+            wave >= 25 -> 10
+            wave >= 20 -> 6
+            wave >= 15 -> 5
+            wave >= 10 -> 5
+            wave >= 5 -> 4
+            else -> 3
+        }
+
+        val waveBosses = if (wave >= 25) {
+            listOf(
+                EnemySpec.VOID_SOVEREIGN,
+                EnemySpec.createBoss(20),
+                EnemySpec.createCanopyWarden(3),
+                EnemySpec.createVerdantColossus(3),
+                EnemySpec.createEmeraldGorgon(3),
+                EnemySpec.createCanopyWarden(3),
+                EnemySpec.createVerdantColossus(3),
+                EnemySpec.createEmeraldGorgon(3),
+                EnemySpec.createBoss(20),
+                EnemySpec.VOID_SOVEREIGN
+            )
+        } else {
+            listOf(
+                EnemySpec.createVerdantColossus(if (wave >= 15) 3 else 2),
+                EnemySpec.createEmeraldGorgon(if (wave >= 15) 3 else 2),
+                EnemySpec.createCanopyWarden(if (wave >= 15) 3 else 2),
+                EnemySpec.createBoss(wave.coerceIn(8, 20)),
+                EnemySpec.createVerdantColossus(3),
+                EnemySpec.createBoss(20)
+            ).take(bossCount)
+        }
+
+        val summoners = (2 + wave / 3).coerceAtMost(10)
+        val stealth = (6 + wave * 2).coerceAtMost(30)
+        val runners = (8 + wave * 2).coerceAtMost(32)
+        val heavies = (4 + wave).coerceAtMost(22)
+        val shields = (4 + wave).coerceAtMost(20)
+
+        val squads = waveBosses.size
+        for (i in 0 until squads) {
+            list.add(WaveSpawnItem(waveBosses[i], 1.4f))
+            repeat(stealth / squads) { list.add(WaveSpawnItem(EnemySpec.STEALTH, 0.5f)) }
+            repeat(runners / squads) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.4f)) }
+            repeat(shields / squads) { list.add(WaveSpawnItem(EnemySpec.SHIELD, 0.6f)) }
+            repeat(heavies / squads) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.7f)) }
+            if (summoners / squads > 0) repeat(summoners / squads) { list.add(WaveSpawnItem(EnemySpec.SUMMONER, 1.1f)) }
+        }
+
+        return list
+    }
+
+    // =========================================================================
+    // LEVEL 25 — APEX DRAGON SANCTUM (Grandmaster / Climax, 25 Waves)
+    // Serpentine dragon ridges, subterranean tunnels, all enemy archetypes combined
+    // Waves 1-24: 4 to 6 colossal bosses every wave
+    // Wave 25: 10 colossal Apex Titans & Sovereigns!
+    // =========================================================================
+    private fun generateApexDragonSanctumWaveRoster(wave: Int): List<WaveSpawnItem> {
+        val list = mutableListOf<WaveSpawnItem>()
+
+        val bossCount = when {
+            wave >= 25 -> 10
+            wave >= 20 -> 6
+            wave >= 14 -> 6
+            wave >= 8 -> 5
+            else -> 4
+        }
+
+        val waveBosses = if (wave >= 25) {
+            // The Ultimate Climax: 10 Apex Bosses!
+            listOf(
+                EnemySpec.VOID_SOVEREIGN,
+                EnemySpec.createSylvanApexOverlord(),
+                EnemySpec.createBoss(20),
+                EnemySpec.createVerdantColossus(3),
+                EnemySpec.createEmeraldGorgon(3),
+                EnemySpec.createCanopyWarden(3),
+                EnemySpec.createIceGolem(2),
+                EnemySpec.createBoss(20),
+                EnemySpec.createSylvanApexOverlord(),
+                EnemySpec.VOID_SOVEREIGN
+            )
+        } else {
+            val pool = listOf(
+                EnemySpec.createBoss(wave.coerceIn(10, 20)),
+                EnemySpec.createVerdantColossus(if (wave >= 12) 3 else 2),
+                EnemySpec.createEmeraldGorgon(if (wave >= 12) 3 else 2),
+                EnemySpec.createCanopyWarden(if (wave >= 12) 3 else 2),
+                EnemySpec.createFrozenCommander(2),
+                if (wave >= 18) EnemySpec.createSylvanApexOverlord() else EnemySpec.createBoss(18)
+            )
+            (0 until bossCount).map { pool[it % pool.size] }
+        }
+
+        val runners = (10 + wave * 2).coerceAtMost(36)
+        val flyers = (6 + wave).coerceAtMost(24)
+        val heavies = (6 + wave).coerceAtMost(24)
+        val stealth = (6 + wave).coerceAtMost(24)
+        val shields = (6 + wave).coerceAtMost(24)
+        val medics = (2 + wave / 4).coerceAtMost(8)
+
+        val squads = waveBosses.size
+        for (i in 0 until squads) {
+            list.add(WaveSpawnItem(waveBosses[i], 1.3f))
+            repeat(runners / squads) { list.add(WaveSpawnItem(EnemySpec.RUNNER, 0.35f)) }
+            repeat(flyers / squads) { list.add(WaveSpawnItem(EnemySpec.FLYING, 0.45f)) }
+            repeat(shields / squads) { list.add(WaveSpawnItem(EnemySpec.SHIELD, 0.55f)) }
+            repeat(heavies / squads) { list.add(WaveSpawnItem(EnemySpec.HEAVY, 0.65f)) }
+            repeat(stealth / squads) { list.add(WaveSpawnItem(EnemySpec.STEALTH, 0.55f)) }
+            if (medics / squads > 0) repeat(medics / squads) { list.add(WaveSpawnItem(EnemySpec.HEALER, 0.8f)) }
         }
 
         return list

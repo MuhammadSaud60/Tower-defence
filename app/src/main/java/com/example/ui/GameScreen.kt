@@ -1,7 +1,10 @@
 package com.example.ui
 
 import android.app.Activity
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import com.example.ads.AdManager
+import com.example.ads.AdState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -95,6 +98,11 @@ fun GameScreen(
 ) {
     val gameState by viewModel.gameState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+
+    LaunchedEffect(gameState.currentMap.id) {
+        viewModel.preloadRewardedAd(context)
+    }
 
     var showExitConfirmation by remember { mutableStateOf(false) }
 
@@ -136,8 +144,6 @@ fun GameScreen(
             }
         }
     }
-
-    val context = LocalContext.current
 
     // Immersive Mode: hide navigation and status bar during game time
     DisposableEffect(Unit) {
@@ -327,7 +333,8 @@ fun GameScreen(
                 gameState = gameState,
                 onPauseClick = { viewModel.pause() },
                 onToggleSpeed = { viewModel.toggleSpeed() },
-                onSetSpeed = { speed -> viewModel.setGameSpeed(speed) }
+                onSetSpeed = { speed -> viewModel.setGameSpeed(speed) },
+                onToggleWeather = { viewModel.toggleWeatherRain() }
             )
 
             // Level 1 First Gun Tutorial (Only shown in Level 1 until completed or skipped)
@@ -345,36 +352,13 @@ fun GameScreen(
                     .padding(top = 48.dp)
             ) {
                 PreparationCountdownBanner(
-                    countdownSeconds = ceil(gameState.preparationCountdown).toInt().coerceAtLeast(1),
-                    isBossWave = gameState.isBossWave,
-                    upcomingBossName = gameState.upcomingBossName
+                    countdownSeconds = ceil(gameState.preparationCountdown).toInt().coerceAtLeast(1)
                 )
             }
         }
 
-        // 4. Boss Health Banner (when an active boss is engaged on the battlefield)
-        val activeBoss = gameState.activeBoss
-        if (activeBoss != null && activeBoss.isAlive) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 46.dp)
-            ) {
-                ActiveBossHealthBanner(boss = activeBoss)
-            }
-        } else if (gameState.isBossWave && gameState.gameStatus == GameStatus.PLAYING && gameState.enemiesRemaining > 0 && gameState.placementNotice == null) {
-            // Early Boss Wave Alert before the boss unit emerges
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 46.dp)
-            ) {
-                BossIncomingAlertBanner(bossName = gameState.upcomingBossName ?: "BOSS")
-            }
-        }
-
         // 5. Placement Notice / Wave Transition Alert Banner
-        if (gameState.placementNotice != null && gameState.gameStatus != GameStatus.PREPARATION && activeBoss == null) {
+        if (gameState.placementNotice != null && gameState.gameStatus != GameStatus.PREPARATION && gameState.activeBoss == null) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -426,15 +410,36 @@ fun GameScreen(
 
         // Defeat / Game Over Modal Dialog
         if (gameState.gameStatus == GameStatus.GAME_OVER) {
+            val activity = context as? Activity
+            val adState by AdManager.getInstance().adState.collectAsState()
+
             GameOverDialog(
                 gameStatus = gameState.gameStatus,
                 currentWave = gameState.currentWave,
                 totalWaves = gameState.maxWaves,
                 coinsEarned = gameState.totalCoinsEarned,
                 enemiesKilled = gameState.enemiesKilledTotal,
+                isAdLoading = adState is AdState.Loading,
+                isAdAvailable = AdManager.getInstance().isAdAvailable() || adState is AdState.Ready,
+                onWatchAdContinue = if (activity != null) {
+                    {
+                        viewModel.showRewardedReviveAd(
+                            activity = activity,
+                            onRewardGranted = {
+                                // Handled automatically in ViewModel & GameEngine
+                            },
+                            onClosedWithoutReward = {
+                                Toast.makeText(context, "Ad closed early. No revive granted.", Toast.LENGTH_SHORT).show()
+                            },
+                            onFailure = { error ->
+                                Toast.makeText(context, "Ad unavailable: $error", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                } else null,
+                onContinueBattle = { viewModel.continueBattle() },
                 onRestart = { viewModel.restart() },
                 onMainMenu = onNavigateToMapSelect,
-                onContinueBattle = { viewModel.continueBattle() },
                 onUpgradeTowers = onNavigateToResearch
             )
         }
@@ -474,20 +479,17 @@ fun GameScreen(
  */
 @Composable
 private fun PreparationCountdownBanner(
-    countdownSeconds: Int,
-    isBossWave: Boolean = false,
-    upcomingBossName: String? = null
+    countdownSeconds: Int
 ) {
-    val borderColor = if (isBossWave) Color(0xFFF43F5E) else Color(0xFF38BDF8)
-    val titleColor = if (isBossWave) Color(0xFFF43F5E) else Color(0xFF38BDF8)
-    val numberColor = if (isBossWave) Color(0xFFFF4D4D) else Color(0xFFFFD166)
+    val borderColor = Color(0xFF38BDF8)
+    val titleColor = Color(0xFF38BDF8)
+    val numberColor = Color(0xFFFFD166)
 
     Box(
         modifier = Modifier
             .background(
                 brush = Brush.verticalGradient(
-                    if (isBossWave) listOf(Color(0xF02A0812), Color(0xF0120307))
-                    else listOf(Color(0xF00F172A), Color(0xF0070B14))
+                    listOf(Color(0xF00F172A), Color(0xF0070B14))
                 ),
                 shape = RoundedCornerShape(10.dp)
             )
@@ -504,7 +506,7 @@ private fun PreparationCountdownBanner(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (isBossWave) "⚠️ BOSS WAVE INCOMING!" else "PREPARATION PHASE",
+                text = "PREPARATION PHASE",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.5.sp,
@@ -518,118 +520,10 @@ private fun PreparationCountdownBanner(
                 color = numberColor
             )
             Text(
-                text = if (isBossWave) "TARGET: ${(upcomingBossName ?: "APEX BOSS").uppercase()} • FORTIFY CHOKEPOINTS"
-                       else "DEPLOY DEFENSE TURRETS ON EMPTY GROUND",
+                text = "DEPLOY DEFENSE TURRETS ON EMPTY GROUND",
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isBossWave) Color(0xFFFDA4AF) else Color(0xFF94A3B8),
-                letterSpacing = 0.5.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun ActiveBossHealthBanner(
-    boss: com.example.entities.Enemy,
-    modifier: Modifier = Modifier
-) {
-    val hpPercent = (boss.currentHp.toFloat() / boss.maxHp.toFloat()).coerceIn(0f, 1f)
-    Box(
-        modifier = modifier
-            .background(
-                brush = Brush.verticalGradient(
-                    listOf(Color(0xF0240810), Color(0xF0120208))
-                ),
-                shape = RoundedCornerShape(10.dp)
-            )
-            .border(1.5.dp, Color(0xFFF43F5E), RoundedCornerShape(10.dp))
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .testTag("active_boss_health_banner")
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.widthIn(min = 220.dp, max = 340.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = "Boss Threat",
-                        tint = Color(0xFFF43F5E),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = boss.spec.name.uppercase(),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White,
-                        letterSpacing = 1.sp
-                    )
-                }
-                Text(
-                    text = "${boss.currentHp} / ${boss.maxHp} HP",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFDA4AF)
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            // Health Bar
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .background(Color(0xFF3B0B14), RoundedCornerShape(4.dp))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction = hpPercent)
-                        .height(8.dp)
-                        .background(
-                            brush = Brush.horizontalGradient(
-                                listOf(Color(0xFFF43F5E), Color(0xFFFB7185))
-                            ),
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun BossIncomingAlertBanner(
-    bossName: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0xF02A0812),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF43F5E)),
-        modifier = modifier.testTag("boss_incoming_alert")
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = "Boss Threat",
-                tint = Color(0xFFF43F5E),
-                modifier = Modifier.size(14.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "BOSS WAVE: ${bossName.uppercase()}",
-                color = Color(0xFFFFD166),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Black,
+                color = Color(0xFF94A3B8),
                 letterSpacing = 0.5.sp
             )
         }
@@ -641,7 +535,8 @@ private fun GameHudBar(
     gameState: GameState,
     onPauseClick: () -> Unit,
     onToggleSpeed: () -> Unit,
-    onSetSpeed: (Float) -> Unit = {}
+    onSetSpeed: (Float) -> Unit = {},
+    onToggleWeather: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -894,6 +789,41 @@ private fun GameHudBar(
                                 color = animatedText
                             )
                         }
+                    }
+                }
+
+                // Dynamic Rain Weather button (Live rain sound & visual weather streaks)
+                Box(
+                    modifier = Modifier
+                        .height(30.dp)
+                        .background(
+                            if (gameState.isRaining) Color(0xE60284C7) else Color(0xE60F172A),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .border(
+                            1.dp,
+                            if (gameState.isRaining) Color(0xFF38BDF8) else Color(0xFF334155),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .clickable { onToggleWeather() }
+                        .padding(horizontal = 7.dp)
+                        .testTag("weather_rain_toggle"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = if (gameState.isRaining) "🌧️" else "⛅",
+                            fontSize = 11.sp
+                        )
+                        Text(
+                            text = if (gameState.isRaining) "RAIN" else "CLEAR",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (gameState.isRaining) Color(0xFFE0F2FE) else Color(0xFF94A3B8)
+                        )
                     }
                 }
 

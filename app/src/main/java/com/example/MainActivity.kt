@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.example.ads.AdManager
 import com.example.audio.AndroidAudioPlayer
 import com.example.ui.AchievementsScreen
 import com.example.ui.GameScreen
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AndroidAudioPlayer.getInstance(applicationContext)
+        AdManager.getInstance().initialize(applicationContext)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         enableEdgeToEdge()
         setContent {
@@ -77,7 +79,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        AndroidAudioPlayer.getInstance().resumeAmbienceAndMusic()
+        if (isGameActive) {
+            AndroidAudioPlayer.getInstance().resumeAmbienceAndMusic()
+        }
     }
 
     override fun onDestroy() {
@@ -116,7 +120,9 @@ fun TowerDefenseApp(
     var lastBackPressTime by remember { mutableStateOf(0L) }
 
     LaunchedEffect(currentScreen) {
-        onGameActiveChanged(currentScreen == AppScreen.GAME)
+        val isGame = currentScreen == AppScreen.GAME
+        gameViewModel.updateGameSessionActive(isGame)
+        onGameActiveChanged(isGame)
     }
 
     // Single click on back button must NEVER close the game:

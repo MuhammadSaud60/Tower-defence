@@ -49,6 +49,13 @@ class ProgressionManager(context: Context) {
             "cloudy_dense_forest", "cloudy_forest" -> getStarsForMap("storm_twin_bastion") >= 1 || getStarsForMap("tempest_bastion") >= 1 || totalStars >= 27
             "snow_summit_descent", "frostpeak_descent" -> getStarsForMap("cloudy_dense_forest") >= 1 || getStarsForMap("cloudy_forest") >= 1 || totalStars >= 29
             "desert_dune_bastion", "dune_storm_stronghold" -> getStarsForMap("snow_summit_descent") >= 1 || getStarsForMap("frostpeak_descent") >= 1 || totalStars >= 31
+            "emerald_twin_pass", "emerald_serpent_pass" -> getStarsForMap("desert_dune_bastion") >= 1 || getStarsForMap("dune_storm_stronghold") >= 1 || totalStars >= 33
+            "forest_ring_bastion", "sylvan_ring_sanctuary" -> getStarsForMap("emerald_twin_pass") >= 1 || getStarsForMap("emerald_serpent_pass") >= 1 || totalStars >= 35
+            "frozen_pass" -> getStarsForMap("forest_ring_bastion") >= 1 || getStarsForMap("sylvan_ring_sanctuary") >= 1 || totalStars >= 37
+            "obsidian_crossfire" -> getStarsForMap("frozen_pass") >= 1 || totalStars >= 39
+            "tempest_ravine" -> getStarsForMap("obsidian_crossfire") >= 1 || totalStars >= 41
+            "eclipse_citadel" -> getStarsForMap("tempest_ravine") >= 1 || totalStars >= 43
+            "apex_dragon_sanctum" -> getStarsForMap("eclipse_citadel") >= 1 || totalStars >= 45
             else -> false
         }
     }
@@ -94,7 +101,14 @@ class ProgressionManager(context: Context) {
                 maxOf(getStarsForMap("storm_twin_bastion"), getStarsForMap("tempest_bastion")) +
                 maxOf(getStarsForMap("cloudy_dense_forest"), getStarsForMap("cloudy_forest")) +
                 maxOf(getStarsForMap("snow_summit_descent"), getStarsForMap("frostpeak_descent")) +
-                maxOf(getStarsForMap("desert_dune_bastion"), getStarsForMap("dune_storm_stronghold"))
+                maxOf(getStarsForMap("desert_dune_bastion"), getStarsForMap("dune_storm_stronghold")) +
+                maxOf(getStarsForMap("emerald_twin_pass"), getStarsForMap("emerald_serpent_pass")) +
+                maxOf(getStarsForMap("forest_ring_bastion"), getStarsForMap("sylvan_ring_sanctuary")) +
+                getStarsForMap("frozen_pass") +
+                getStarsForMap("obsidian_crossfire") +
+                getStarsForMap("tempest_ravine") +
+                getStarsForMap("eclipse_citadel") +
+                getStarsForMap("apex_dragon_sanctum")
     }
 
     // =========================================================================

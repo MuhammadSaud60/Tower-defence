@@ -333,8 +333,7 @@ fun GameScreen(
                 gameState = gameState,
                 onPauseClick = { viewModel.pause() },
                 onToggleSpeed = { viewModel.toggleSpeed() },
-                onSetSpeed = { speed -> viewModel.setGameSpeed(speed) },
-                onToggleWeather = { viewModel.toggleWeatherRain() }
+                onSetSpeed = { speed -> viewModel.setGameSpeed(speed) }
             )
 
             // Level 1 First Gun Tutorial (Only shown in Level 1 until completed or skipped)
@@ -419,9 +418,10 @@ fun GameScreen(
                 totalWaves = gameState.maxWaves,
                 coinsEarned = gameState.totalCoinsEarned,
                 enemiesKilled = gameState.enemiesKilledTotal,
+                isReviveUsed = gameState.reviveUsedThisAttempt,
                 isAdLoading = adState is AdState.Loading,
                 isAdAvailable = AdManager.getInstance().isAdAvailable() || adState is AdState.Ready,
-                onWatchAdContinue = if (activity != null) {
+                onWatchAdContinue = if (!gameState.reviveUsedThisAttempt && activity != null) {
                     {
                         viewModel.showRewardedReviveAd(
                             activity = activity,
@@ -437,7 +437,9 @@ fun GameScreen(
                         )
                     }
                 } else null,
-                onContinueBattle = { viewModel.continueBattle() },
+                onContinueBattle = if (!gameState.reviveUsedThisAttempt) {
+                    { viewModel.continueBattle() }
+                } else null,
                 onRestart = { viewModel.restart() },
                 onMainMenu = onNavigateToMapSelect,
                 onUpgradeTowers = onNavigateToResearch
@@ -535,8 +537,7 @@ private fun GameHudBar(
     gameState: GameState,
     onPauseClick: () -> Unit,
     onToggleSpeed: () -> Unit,
-    onSetSpeed: (Float) -> Unit = {},
-    onToggleWeather: () -> Unit = {}
+    onSetSpeed: (Float) -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -789,41 +790,6 @@ private fun GameHudBar(
                                 color = animatedText
                             )
                         }
-                    }
-                }
-
-                // Dynamic Rain Weather button (Live rain sound & visual weather streaks)
-                Box(
-                    modifier = Modifier
-                        .height(30.dp)
-                        .background(
-                            if (gameState.isRaining) Color(0xE60284C7) else Color(0xE60F172A),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .border(
-                            1.dp,
-                            if (gameState.isRaining) Color(0xFF38BDF8) else Color(0xFF334155),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .clickable { onToggleWeather() }
-                        .padding(horizontal = 7.dp)
-                        .testTag("weather_rain_toggle"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = if (gameState.isRaining) "🌧️" else "⛅",
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = if (gameState.isRaining) "RAIN" else "CLEAR",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Black,
-                            color = if (gameState.isRaining) Color(0xFFE0F2FE) else Color(0xFF94A3B8)
-                        )
                     }
                 }
 

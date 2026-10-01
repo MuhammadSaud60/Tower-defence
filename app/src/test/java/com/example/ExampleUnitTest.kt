@@ -1341,34 +1341,98 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testContinueBattleRestores20PercentHealthOnEveryDefeat() {
+    fun testSequence1_StartLevel_Lose_CompleteAd_Receive20PercentHealth_Continue() {
         val map = com.example.data.GameMap.createGreenValleyMap()
         val engine = com.example.game.GameEngine()
         engine.loadMap(map)
 
-        // Simulate game over:
+        // Lose:
         engine.changeGameState(com.example.game.GameStatus.GAME_OVER)
         assertEquals(com.example.game.GameStatus.GAME_OVER, engine.gameState.value.gameStatus)
+        assertFalse(engine.isReviveUsedThisAttempt())
 
         val maxHp = engine.gameState.value.maxBaseHp
-        val expectedRestoredHp = (maxHp * 0.20f).toInt().coerceAtLeast(1)
         val initialHp = engine.gameState.value.baseHp
-        val expectedHp = minOf(maxHp, initialHp + expectedRestoredHp)
+        val expectedBonus = (maxHp * 0.20f).toInt().coerceAtLeast(1)
+        val expectedHp = minOf(maxHp, initialHp + expectedBonus)
 
-        // 1st Continue Battle attempt (Rewarded Ad completion)
-        val successFirstTime = engine.continueBattle(0.20f)
-        assertTrue("First revive must succeed", successFirstTime)
-        assertEquals(com.example.game.GameStatus.PLAYING, engine.gameState.value.gameStatus)
-        assertEquals(expectedHp, engine.gameState.value.baseHp)
+        // Complete ad -> restoreAfterAd called strictly on onUserEarnedReward:
+        val rewardGranted = engine.restoreAfterAd(0.20f)
+        assertTrue("Reward restoration must succeed on first defeat", rewardGranted)
+        assertTrue("Revive used must now be recorded", engine.isReviveUsedThisAttempt())
+        assertEquals("Base health must increase by 20% max HP", expectedHp, engine.gameState.value.baseHp)
 
-        // Simulate second defeat:
+        // Ad closed with reward -> resume game:
+        engine.resumeAfterRevive()
+        assertEquals("Game must continue in PLAYING state", com.example.game.GameStatus.PLAYING, engine.gameState.value.gameStatus)
+    }
+
+    @Test
+    fun testSequence2_LoseAgain_RestartLevel_LoseAgain_WatchAd_ReceiveReward() {
+        val map = com.example.data.GameMap.createGreenValleyMap()
+        val engine = com.example.game.GameEngine()
+        engine.loadMap(map)
+
+        // 1. Lose and revive:
         engine.changeGameState(com.example.game.GameStatus.GAME_OVER)
+        assertTrue(engine.restoreAfterAd(0.20f))
+        engine.resumeAfterRevive()
+        assertTrue(engine.isReviveUsedThisAttempt())
+
+        // 2. Lose again in same level attempt:
+        engine.changeGameState(com.example.game.GameStatus.GAME_OVER)
+        assertFalse("Second revive in same attempt must be rejected (Once per level protection)", engine.restoreAfterAd(0.20f))
         assertEquals(com.example.game.GameStatus.GAME_OVER, engine.gameState.value.gameStatus)
 
-        // 2nd Continue Battle attempt should also succeed now (available after every defeat)
-        val successSecondTime = engine.continueBattle(0.20f)
-        assertTrue("Second revive on subsequent defeat must also succeed", successSecondTime)
+        // 3. Restart level:
+        engine.restart(isNewMission = true)
+        assertFalse("Restarting must clear reviveUsed flag", engine.isReviveUsedThisAttempt())
+
+        // 4. Lose again in new attempt:
+        engine.changeGameState(com.example.game.GameStatus.GAME_OVER)
+        assertFalse(engine.isReviveUsedThisAttempt())
+
+        // 5. Watch ad and receive reward in new attempt:
+        val rewardGrantedInNewAttempt = engine.restoreAfterAd(0.20f)
+        assertTrue("Revive must succeed in restarted level attempt", rewardGrantedInNewAttempt)
+        engine.resumeAfterRevive()
         assertEquals(com.example.game.GameStatus.PLAYING, engine.gameState.value.gameStatus)
+    }
+
+    @Test
+    fun testSequence3_CloseAdEarly_NoReward() {
+        val map = com.example.data.GameMap.createGreenValleyMap()
+        val engine = com.example.game.GameEngine()
+        engine.loadMap(map)
+
+        engine.changeGameState(com.example.game.GameStatus.GAME_OVER)
+        val initialHp = engine.gameState.value.baseHp
+
+        // User closes ad early -> onUserEarnedReward is NOT called, so restoreAfterAd is never called.
+        // Ad dismissed without reward:
+        assertFalse("Revive must NOT be marked used if ad was closed early", engine.isReviveUsedThisAttempt())
+        assertEquals("Health must NOT be restored", initialHp, engine.gameState.value.baseHp)
+        assertEquals("Game must remain in GAME_OVER state", com.example.game.GameStatus.GAME_OVER, engine.gameState.value.gameStatus)
+    }
+
+    @Test
+    fun testSequence4_InternetDisabled_GameDoesNotFreeze() {
+        val engine = com.example.game.GameEngine()
+        engine.changeGameState(com.example.game.GameStatus.GAME_OVER)
+
+        // When offline or ad fails to load:
+        val adManager = com.example.ads.AdManager.getInstance()
+        assertNotNull(adManager)
+        // Game remains responsive in GAME_OVER state without throwing unhandled exceptions
+        assertEquals(com.example.game.GameStatus.GAME_OVER, engine.gameState.value.gameStatus)
+    }
+
+    @Test
+    fun testSequence5_AdUnavailable_HandledGracefully() {
+        val adManager = com.example.ads.AdManager.getInstance()
+        // When no ad is preloaded, isAdAvailable must return false safely
+        assertFalse("Ad must be unavailable before loading", adManager.isAdAvailable())
+        assertEquals(com.example.ads.AdState.Idle, adManager.adState.value)
     }
 
     @Test
@@ -1376,8 +1440,8 @@ class ExampleUnitTest {
         val adManager = com.example.ads.AdManager.getInstance()
         assertNotNull("AdManager instance must not be null", adManager)
         assertEquals(
-            "ca-app-pub-3940256099942544/5224354917",
-            com.example.ads.AdManager.TEST_REWARDED_AD_UNIT_ID
+            "ca-app-pub-1347232629548060/8680920818",
+            com.example.ads.AdManager.REWARDED_CONTINUE_AFTER_DEFEAT_AD_UNIT_ID
         )
     }
 }

@@ -689,6 +689,7 @@ fun GameOverDialog(
     enemiesKilled: Int,
     onRestart: () -> Unit,
     onMainMenu: () -> Unit,
+    isReviveUsed: Boolean = false,
     isAdLoading: Boolean = false,
     isAdAvailable: Boolean = true,
     onWatchAdContinue: (() -> Unit)? = null,
@@ -840,7 +841,7 @@ fun GameOverDialog(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Tactical Revive Opportunity (Watch Ad / Continue Battle)
-                        if (onWatchAdContinue != null || onContinueBattle != null) {
+                        if (!isReviveUsed && (onWatchAdContinue != null || onContinueBattle != null)) {
                             RewardedReviveButton(
                                 isAdLoading = isAdLoading,
                                 isAdAvailable = isAdAvailable,

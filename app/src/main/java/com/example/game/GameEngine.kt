@@ -891,29 +891,63 @@ class GameEngine(
     }
 
     /**
-     * Emergency Field Reinforcements / Ad-continue recovery.
-     * Restores 20% base integrity (current health + 20% of maximum health, up to max health),
-     * clears immediate base breach hazards and resumes the ongoing battle.
-     * Available on every defeat.
+     * Pauses ambient music and sound effects while the full-screen rewarded ad is displayed.
      */
     @Synchronized
-    fun continueBattle(reviveHpPercent: Float = 0.20f): Boolean {
-        if (gameStatus == GameStatus.GAME_OVER) {
+    fun pauseForAd() {
+        audioPlayer.pauseAmbienceAndMusic()
+    }
+
+    /**
+     * Emergency Field Reinforcements step 1:
+     * Restores 20% base integrity (current health + 20% of maximum health, capped at max health),
+     * clears immediate base breach hazards, marks reviveUsedThisAttempt = true.
+     * Keeps wave, towers, upgrades, coins, and enemies alive.
+     * Invoked strictly from onUserEarnedReward().
+     */
+    @Synchronized
+    fun restoreAfterAd(reviveHpPercent: Float = 0.20f): Boolean {
+        if (gameStatus == GameStatus.GAME_OVER && !reviveUsedThisAttempt) {
+            reviveUsedThisAttempt = true
             val bonusHp = (base.maxHp * reviveHpPercent).toInt().coerceAtLeast(1)
             val restoredHp = (base.currentHp + bonusHp).coerceIn(1, base.maxHp)
             base = base.copy(currentHp = restoredHp)
-            
+
             // Push back or eliminate enemies that reached base or are immediately breaching it
             val survivors = enemies.filter { it.isAlive && !it.reachedBase }
             enemies.clear()
             enemies.addAll(survivors)
 
+            publishState()
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Emergency Field Reinforcements step 2:
+     * Resumes the battle and audio after the rewarded ad is dismissed.
+     */
+    @Synchronized
+    fun resumeAfterRevive() {
+        if (gameStatus == GameStatus.GAME_OVER && base.currentHp > 0) {
             gameStatus = GameStatus.PLAYING
             stateBeforePause = GameStatus.PLAYING
             showNotice("SECOND CHANCE! BATTLE CONTINUES (+20% HP)")
             audioPlayer.playSound(GameSound.TOWER_UPGRADED)
             audioPlayer.resumeAmbienceAndMusic()
             publishState()
+        }
+    }
+
+    /**
+     * Convenience method combining restoreAfterAd and resumeAfterRevive.
+     */
+    @Synchronized
+    fun continueBattle(reviveHpPercent: Float = 0.20f): Boolean {
+        val restored = restoreAfterAd(reviveHpPercent)
+        if (restored) {
+            resumeAfterRevive()
             return true
         }
         return false

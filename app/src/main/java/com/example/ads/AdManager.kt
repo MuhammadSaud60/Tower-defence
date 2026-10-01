@@ -2,6 +2,8 @@ package com.example.ads
 
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
@@ -14,6 +16,40 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+
+/**
+ * Single, unified listener for rewarded ad events.
+ * AdManager -> RewardAdListener -> GameEngine / GameController
+ */
+interface RewardAdListener {
+    /**
+     * Ad opened full screen. Pause game: enemy movement, tower firing, timers, animations, audio.
+     */
+    fun onAdOpened()
+
+    /**
+     * User completed watching the ad and earned the reward.
+     * Restores base health (+20% of max base HP) and marks reviveUsed = true.
+     */
+    fun onUserEarnedReward()
+
+    /**
+     * Ad dismissed by user after reward was earned.
+     * Resume game only after reward decision completed and game state restored.
+     */
+    fun onAdCompletedWithReward()
+
+    /**
+     * Ad dismissed without user completing / earning reward.
+     * Keep game paused on Defeat screen.
+     */
+    fun onAdClosedWithoutReward()
+
+    /**
+     * Ad failed to show.
+     */
+    fun onAdFailedToShow(errorMessage: String)
+}
 
 /**
  * AdState captures the lifecycle status of Rewarded Ads.
@@ -31,18 +67,20 @@ sealed class AdState {
  * presentation, and reward validation.
  *
  * Responsibilities:
- * - Initialize Mobile Ads SDK safely
- * - Preload test rewarded ads ahead of time
- * - Show rewarded ads and grant revive rewards only upon ad completion callback
- * - Never crash when offline or if Play Services are absent
+ * - Proper lifecycle: Never reuses expired or consumed ad instances.
+ * - Single reward callback strictly from onUserEarnedReward.
+ * - Prevents duplicate or missing rewards using rewardPending/rewardEarned state flags.
+ * - Manages pause/resume synchronization with fullScreenContentCallback.
+ * - Immediately loads fresh ad instances upon completion/dismissal for future defeats.
  */
 class AdManager private constructor() {
 
     companion object {
         private const val TAG = "AdManager"
 
-        // Official Google AdMob sample test ad unit ID for Rewarded Video
-        const val TEST_REWARDED_AD_UNIT_ID = "ca-app-pub-3940256099942544/5224354917"
+        // Rewarded Ad Unit: Rewarded_Continue_After_Defeat
+        const val REWARDED_CONTINUE_AFTER_DEFEAT_AD_UNIT_ID = "ca-app-pub-1347232629548060/8680920818"
+        const val TEST_REWARDED_AD_UNIT_ID = REWARDED_CONTINUE_AFTER_DEFEAT_AD_UNIT_ID
 
         @Volatile
         private var instance: AdManager? = null
@@ -54,9 +92,19 @@ class AdManager private constructor() {
         }
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private var isInitialized = false
+    @Volatile
     private var rewardedAd: RewardedAd? = null
+    @Volatile
     private var isCurrentlyLoading = false
+
+    // State tracking to prevent duplicate or missing rewards
+    @Volatile
+    private var rewardPending = false
+    @Volatile
+    private var rewardEarned = false
 
     private val _adState = MutableStateFlow<AdState>(AdState.Idle)
     val adState: StateFlow<AdState> = _adState.asStateFlow()
@@ -66,16 +114,18 @@ class AdManager private constructor() {
      */
     fun initialize(context: Context) {
         if (isInitialized) return
+        val appContext = context.applicationContext
         try {
+
             val config = RequestConfiguration.Builder()
                 .setTestDeviceIds(listOf(AdRequest.DEVICE_ID_EMULATOR))
                 .build()
             MobileAds.setRequestConfiguration(config)
 
-            MobileAds.initialize(context.applicationContext) { initStatus ->
+            MobileAds.initialize(appContext) { initStatus ->
                 Log.d(TAG, "MobileAds SDK initialized: $initStatus")
                 isInitialized = true
-                preloadRewardedAd(context.applicationContext)
+                preloadRewardedAd(appContext)
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Error initializing MobileAds SDK", e)
@@ -84,24 +134,38 @@ class AdManager private constructor() {
     }
 
     /**
-     * Preloads a rewarded ad before it is needed so it is ready on the defeat screen.
+     * Preloads a fresh rewarded ad instance for future use.
+     * Ensures we never reuse an expired or consumed ad object.
      */
     fun preloadRewardedAd(context: Context) {
-        if (rewardedAd != null || isCurrentlyLoading) {
-            if (rewardedAd != null) {
-                _adState.value = AdState.Ready
-            }
+        val appContext = context.applicationContext
+
+        // Ensure execution happens on main thread
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { preloadRewardedAd(appContext) }
+            return
+        }
+
+        if (rewardedAd != null) {
+            Log.d(TAG, "A rewarded ad is already ready and cached.")
+            _adState.value = AdState.Ready
+            return
+        }
+
+        if (isCurrentlyLoading) {
+            Log.d(TAG, "A rewarded ad is already currently loading.")
             return
         }
 
         isCurrentlyLoading = true
         _adState.value = AdState.Loading
+        Log.d(TAG, "Loading fresh RewardedAd from AdMob...")
 
         try {
             val adRequest = AdRequest.Builder().build()
             RewardedAd.load(
-                context.applicationContext,
-                TEST_REWARDED_AD_UNIT_ID,
+                appContext,
+                REWARDED_CONTINUE_AFTER_DEFEAT_AD_UNIT_ID,
                 adRequest,
                 object : RewardedAdLoadCallback() {
                     override fun onAdLoaded(ad: RewardedAd) {
@@ -133,68 +197,112 @@ class AdManager private constructor() {
     fun isAdAvailable(): Boolean = rewardedAd != null
 
     /**
-     * Shows the rewarded ad to the player.
-     *
-     * @param activity The hosting Activity
-     * @param onUserEarnedReward Invoked ONLY when the user completely watches the ad and earns the reward
-     * @param onAdClosedWithoutReward Invoked if the user dismisses the ad early without earning reward
-     * @param onAdFailedToShow Invoked if the ad fails to display
+     * Shows the rewarded ad to the player following the exact lifecycle requirements:
+     * - Checks if rewardedAd != null (never shows empty reference)
+     * - Destroys the reference immediately before showing so it cannot be reused
+     * - Manages rewardPending / rewardEarned state flags
+     * - Calls listener.onAdOpened() when full-screen content shows to pause game
+     * - Calls listener.onUserEarnedReward() strictly from onUserEarnedReward callback
+     * - Calls listener.onAdCompletedWithReward() or onAdClosedWithoutReward() on dismissal
+     * - Immediately loads a fresh rewarded ad for future defeats
      */
     fun showRewardedAd(
         activity: Activity,
-        onUserEarnedReward: () -> Unit,
-        onAdClosedWithoutReward: () -> Unit = {},
-        onAdFailedToShow: (String) -> Unit = {}
+        listener: RewardAdListener
     ) {
-        val currentAd = rewardedAd
-        if (currentAd == null) {
-            Log.w(TAG, "showRewardedAd requested but no ad is loaded.")
-            onAdFailedToShow("Ad not ready")
-            preloadRewardedAd(activity)
+        val appContext = activity.applicationContext
+
+        // Ensure execution happens on main thread
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { showRewardedAd(activity, listener) }
             return
         }
 
-        var rewardGranted = false
+        // 4. Handle Ad Loading Correctly: Check if rewardedAd != null
+        val adToShow = rewardedAd
+        if (adToShow == null) {
+            Log.w(TAG, "showRewardedAd requested but no ad is loaded. Triggering load.")
+            listener.onAdFailedToShow("Ad not ready yet. Please try again.")
+            preloadRewardedAd(appContext)
+            return
+        }
+
+        // 1. Lifecycle: Clear current ad reference immediately! Destroy old ad instance reference
+        rewardedAd = null
+        isCurrentlyLoading = false
+
+        // 3. Prevent duplicate and missing rewards: Reward state tracking
+        rewardPending = true
+        rewardEarned = false
         _adState.value = AdState.Showing
 
-        currentAd.fullScreenContentCallback = object : FullScreenContentCallback() {
+        // 6. Handle All Ad Callbacks
+        adToShow.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdShowedFullScreenContent() {
-                Log.d(TAG, "Rewarded ad showed fullscreen content.")
+                Log.d(TAG, "onAdShowedFullScreenContent: Pausing game systems.")
+                // 5. Game Pause: Pause enemy movement, tower firing, timers, animations, wave system, audio
+                listener.onAdOpened()
             }
 
             override fun onAdDismissedFullScreenContent() {
-                Log.d(TAG, "Rewarded ad dismissed fullscreen content. Reward granted: $rewardGranted")
-                rewardedAd = null
+                Log.d(TAG, "onAdDismissedFullScreenContent: rewardEarned=$rewardEarned, rewardPending=$rewardPending")
                 _adState.value = AdState.Idle
-                // Preload the next rewarded ad for future attempts
-                preloadRewardedAd(activity)
 
-                if (!rewardGranted) {
-                    onAdClosedWithoutReward()
+                // Crucial: Clean fullScreenContentCallback to avoid any leak
+                adToShow.fullScreenContentCallback = null
+
+                val wasRewardEarned = rewardEarned
+                // Reset state
+                rewardPending = false
+                rewardEarned = false
+
+                // 5. Resume only after reward decision completed and game state restored
+                if (wasRewardEarned) {
+                    listener.onAdCompletedWithReward()
+                } else {
+                    listener.onAdClosedWithoutReward()
                 }
+
+                // 1. Immediately prepare/load a new rewarded ad for future use
+                preloadRewardedAd(appContext)
             }
 
             override fun onAdFailedToShowFullScreenContent(adError: AdError) {
-                Log.e(TAG, "Rewarded ad failed to show: ${adError.message}")
-                rewardedAd = null
+                Log.e(TAG, "onAdFailedToShowFullScreenContent: ${adError.message}")
+                adToShow.fullScreenContentCallback = null
+
+                // Reset state correctly
+                rewardPending = false
+                rewardEarned = false
                 _adState.value = AdState.Error(adError.message)
-                preloadRewardedAd(activity)
-                onAdFailedToShow(adError.message)
+
+                listener.onAdFailedToShow(adError.message)
+
+                // Reload ad
+                preloadRewardedAd(appContext)
             }
         }
 
         try {
-            currentAd.show(activity) { rewardItem ->
-                Log.d(TAG, "User earned reward: ${rewardItem.type}, amount: ${rewardItem.amount}")
-                rewardGranted = true
-                onUserEarnedReward()
+            // 2. The reward should only happen inside onUserEarnedReward()
+            adToShow.show(activity) { rewardItem ->
+                Log.d(TAG, "AdMob onUserEarnedReward: type=${rewardItem.type}, amount=${rewardItem.amount}, rewardPending=$rewardPending")
+                if (rewardPending) {
+                    rewardEarned = true
+                    rewardPending = false
+                    listener.onUserEarnedReward()
+                } else {
+                    Log.w(TAG, "Reward callback ignored: rewardPending was false (duplicate prevented).")
+                }
             }
         } catch (e: Throwable) {
-            Log.e(TAG, "Exception during RewardedAd.show", e)
-            rewardedAd = null
+            Log.e(TAG, "Exception during adToShow.show", e)
+            adToShow.fullScreenContentCallback = null
+            rewardPending = false
+            rewardEarned = false
             _adState.value = AdState.Error(e.message ?: "Failed to display ad")
-            preloadRewardedAd(activity)
-            onAdFailedToShow(e.message ?: "Failed to display ad")
+            listener.onAdFailedToShow(e.message ?: "Failed to display ad")
+            preloadRewardedAd(appContext)
         }
     }
 }

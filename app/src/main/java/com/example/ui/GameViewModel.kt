@@ -130,17 +130,32 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         com.example.ads.AdManager.getInstance().showRewardedAd(
             activity = activity,
-            onUserEarnedReward = {
-                val revived = continueBattle()
-                if (revived) {
-                    onRewardGranted()
+            listener = object : com.example.ads.RewardAdListener {
+                override fun onAdOpened() {
+                    // Pause sound and ensure game is paused while ad plays
+                    gameEngine.pauseForAd()
                 }
-            },
-            onAdClosedWithoutReward = {
-                onClosedWithoutReward()
-            },
-            onAdFailedToShow = { error ->
-                onFailure(error)
+
+                override fun onUserEarnedReward() {
+                    // Step 1: Restore 20% base integrity and mark reviveUsed strictly upon reward
+                    val restored = gameEngine.restoreAfterAd(0.20f)
+                    if (restored) {
+                        onRewardGranted()
+                    }
+                }
+
+                override fun onAdCompletedWithReward() {
+                    // Step 2: Resume gameplay only after ad has closed and reward was granted
+                    gameEngine.resumeAfterRevive()
+                }
+
+                override fun onAdClosedWithoutReward() {
+                    onClosedWithoutReward()
+                }
+
+                override fun onAdFailedToShow(errorMessage: String) {
+                    onFailure(errorMessage)
+                }
             }
         )
     }
